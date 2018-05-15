@@ -15,7 +15,7 @@ from sq_Cells import sq_Cells
 
 #################Global Variables#######################
 dtype=np.float64            #data type of any numpy array created
-sq_cells_filename='/home/abhinav/Desktop/HAhRD/GSOC18/sq_cells_data/sq_cells_dict.pkl'
+sq_cells_basepath='/home/abhinav/Desktop/HAhRD/GSOC18/sq_cells_data/'
 
 #################Function Definition####################
 def linear_interpolate_hex_to_square(filename,layer,resolution=(1000,1000)):
@@ -74,7 +74,7 @@ def linear_interpolate_hex_to_square(filename,layer,resolution=(1000,1000)):
 
     #Getting the square cells mesh (dict) for overlap calculation
     print '>>> Generating the square mesh grid'
-    sq_cells_dict=get_square_cells(resolution,min_x,min_y,max_x,max_y)
+    sq_cells_dict=get_square_cells(layer,resolution,min_x,min_y,max_x,max_y)
     t4=datetime.datetime.now()
     print 'Generating Mesh Grid completed in: ',t4-t3,' sec\n'
 
@@ -92,7 +92,7 @@ def linear_interpolate_hex_to_square(filename,layer,resolution=(1000,1000)):
     return coef
 
 
-def get_square_cells(resolution,min_x,min_y,max_x,max_y):
+def get_square_cells(layer,resolution,min_x,min_y,max_x,max_y):
     ''' This function will generate square mesh grid by Creating
     the square polygon
 
@@ -114,6 +114,7 @@ def get_square_cells(resolution,min_x,min_y,max_x,max_y):
             sq_cells[id]=sq_Cells(id,center,x_length,y_length)
 
     #Saving the sq_cell sq_cell_data in given folder
+    sq_cells_filename=sq_cells_basepath+'sq_cells_dict_layer_%s_res_%s.pkl'%(layer,resolution[0])
     fhandle=open(sq_cells_filename,'wb')
     pickle.dump(sq_cells,fhandle,protocol=pickle.HIGHEST_PROTOCOL)
     fhandle.close()

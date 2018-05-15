@@ -1,6 +1,5 @@
 from hexCells_to_squareCell_interpolation import linear_interpolate_hex_to_square
 import sys
-sys.path.append('/home/abhinav/Desktop/HAhRD/GSOC18/hex_cells_data/cells_out.pkl')
 import cPickle as pickle
 import matplotlib.pyplot as plt
 from shapely.geometry import LineString,Polygon
@@ -24,8 +23,8 @@ def plot_sq_cells(cell_d):
 
 def plot_hex_to_square_map(coef,hex_cells_dict,sq_cells_dict):
     t0=datetime.datetime.now()
-    fig=plt.figure()
-    ax1=fig.add_subplot(111)
+    # fig=plt.figure()
+    # ax1=fig.add_subplot(111)
 
     for hex_id,sq_overlaps in coef.items():
         fig=plt.figure()
@@ -60,21 +59,29 @@ def plot_hex_to_square_map(coef,hex_cells_dict,sq_cells_dict):
 
 if __name__=='__main__':
 
+    base_path='/home/abhinav/Desktop/HAhRD/GSOC18/'
     ## Generating the overlapping coefficient
-    hex_filename='/home/abhinav/Desktop/HAhRD/GSOC18/hex_cells_data/hex_cells_dict.pkl'
+    hex_filename=base_path+'hex_cells_data/hex_cells_dict.pkl'
     fhandle=open(hex_filename,'rb')
     hex_cells_dict=pickle.load(fhandle)
     fhandle.close()
-    resolution=(100,100)
+    resolution=(1000,1000)
     layer=1
     sq_coef=linear_interpolate_hex_to_square(hex_filename,
                                                 layer,resolution)
+    coef_filename=base_path+'sq_cells_data/coef_dict_layer_%s_res_%s.pkl'%(layer,
+                                                            resolution[0])
+    fhandle=open(coef_filename,'wb')
+    pickle.dump(sq_coef,fhandle,protocol=pickle.HIGHEST_PROTOCOL)
+    fhandle.close()
+
 
     ## Plotting the sq cell for verification
-    sq_filename='/home/abhinav/Desktop/HAhRD/GSOC18/sq_cells_data/sq_cells_dict.pkl'
+    sq_filename=base_path+'sq_cells_data/sq_cells_dict_layer_%s_res_%s.pkl'%(layer,
+                                                            resolution[0])
     fhandle=open(sq_filename,'rb')
     sq_cells_dict=pickle.load(fhandle)
     fhandle.close()
 
-    plot_sq_cells(sq_cells_dict)
+    #plot_sq_cells(sq_cells_dict)
     plot_hex_to_square_map(sq_coef,hex_cells_dict,sq_cells_dict)
