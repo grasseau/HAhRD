@@ -6,7 +6,7 @@ import os
 import cPickle as pickle
 #import pandas as pd
 #Linear Algebra library
-#import numpy as np
+import numpy as np
 from scipy.spatial import  cKDTree
 #Plotting Imports and configuration
 import matplotlib.pyplot as plt
