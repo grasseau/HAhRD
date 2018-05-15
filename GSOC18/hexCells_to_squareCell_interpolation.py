@@ -1,7 +1,9 @@
 ##########################IMPORTS########################
+#For timing script
+import datetime
 #For file IO/data Handling
 from six.moves import cPickle as pickle
-import pandas as pd
+#import pandas as pd
 #Linear Algebra library
 import numpy as np
 from scipy.spatial import  cKDTree
@@ -16,7 +18,7 @@ dtype=np.float64            #data type of any numpy array created
 
 
 #################Function Definition####################
-def liner_interpolate_hex_to_square(filename,layer,resolution=(1000,1000)):
+def linear_interpolate_hex_to_square(filename,layer,resolution=(1000,1000)):
     '''
     This function will interpolate the energy deposit in hexagonal cells
     from the input file to a energy deposit in the equivalent square grid
@@ -33,23 +35,30 @@ def liner_interpolate_hex_to_square(filename,layer,resolution=(1000,1000)):
                 stored as:
                 coef[hexid,[(i,j,cf),(i,j,cf)....]]
     '''
-
+    t0=datetime.datetime.now()
+    print '>>> Reading the HexCell File'
     infile=open(filename,'rb')
     cells_dict=pickle.load(infile)
+    t1=datetime.datetime.now()
+    print 'Reading completed in: ',t1-t0,' sec\n'
 
     #Creating the empty energy map (initialized with zeros)
     #coef=np.zeros(resolution,dtype=dtype)
 
     #Iterating over all the cells to get the bounds of the detector
+    print '>>> Calculating Bounds'
     center_x=map(lambda c:c.center.x,cells_dict.values())
     max_x=max(center_x)
     min_x=min(center_x)
     center_y=map(lambda c:c.center.y,cells_dict.values())
     max_y=max(center_y)
     min_y=min(center_y)
+    t2=datetime.datetime.now()
+    print 'Bounding completed in: ',t2-t1,' sec\n'
 
     #Calculating the maximum length of any cells
         #(will to used to specify search radius in KD tree)
+    print '>>> Calculating the search radius'
     max_length_hex=max(map(
                     lambda c: max([
                     c.vertices.bounds[2]-c.vertices.bounds[0],
@@ -60,17 +69,26 @@ def liner_interpolate_hex_to_square(filename,layer,resolution=(1000,1000)):
                            ((max_y-min_y)/(resolution[1]-1))**2 )
     #Any overlapping cells will be in this search radius
     search_radius=(max_length_hex/2)+(max_length_sq/2)
+    t3=datetime.datetime.now()
+    print 'Search Radius finding completed in: ',t3-t2,' sec\n'
 
     #Getting the square cells mesh (dict) for overlap calculation
+    print '>>> Generating the square mesh grid'
     sq_cells_dict=get_square_cells(resolution,min_x,min_y,max_x,max_y)
+    t4=datetime.datetime.now()
+    print 'Generating Mesh Grid completed in: ',t4-t3,' sec\n'
 
     #Calculating the coefficient of overlap
     #(currently in for of ditionary)
+    print '>>> Calculating the overlap coefficient'
     coef=calculate_overlap(cells_dict.values(),sq_cells_dict.values(),
                             search_radius,min_overlap_area=0.0)
+    t5=datetime.datetime.now()
+    print 'Overlap Coef Finding completed in: ',t5-t4,' sec\n'
 
     #Now change it if we want the overlap with sq cells
     #in form of array
+    #print coef
     return coef
 
 
@@ -90,7 +108,7 @@ def get_square_cells(resolution,min_x,min_y,max_x,max_y):
 
     #Time Comlexity = O(res[0]*res[1])
     for i in range(resolution[0]):
-        for j in range(resolution[1])
+        for j in range(resolution[1]):
             #Center of the square polygon
             center=(min_x+i*x_length,min_y+j*y_length)
             id=(i,j)    #given in usual matrix notation
