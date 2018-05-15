@@ -1,10 +1,17 @@
+#Helper function from this script
 from hexCells_to_squareCell_interpolation import linear_interpolate_hex_to_square
+
+#General Imports
 import sys
+import datetime
 import cPickle as pickle
 import matplotlib.pyplot as plt
+
+#Shapely and Geometry File imports
 from shapely.geometry import LineString,Polygon
 from descartes.patch import PolygonPatch
-import datetime
+from geometry.cmssw import read_geometry
+input_default_file = '/data_CMS/cms/grasseau/HAhRD/test_triggergeom.root'
 
 def plot_sq_cells(cell_d):
     t0=datetime.datetime.now()
@@ -67,25 +74,20 @@ def plot_hex_to_square_map(coef,hex_cells_dict,sq_cells_dict):
         #ax1.set_aspect(1)
         plt.show()
 
-if __name__=='__main__':
-
-    base_path='/home/abhinav/Desktop/HAhRD/GSOC18/'
+def generate_interpolation(hex_cell_dict_root):
+    base_path=''
     ## Generating the overlapping coefficient
-    print '>>> Reading the Hexagonal Cells File'
-    hex_filename=base_path+'hex_cells_data/hex_cells_dict.pkl'
-    fhandle=open(hex_filename,'rb')
-    hex_cells_dict=pickle.load(fhandle)
-    fhandle.close()
+    hex_cells_dict=hex_cell_dict_root
     resolution=(500,500)
     layer=1
-    # sq_coef=linear_interpolate_hex_to_square(hex_filename,
-    #                                             layer,resolution)
+    sq_coef=linear_interpolate_hex_to_square(hex_cells_dict,
+                                                layer,resolution)
     #Saving the generated coefficient as pickle file
     coef_filename=base_path+'sq_cells_data/coef_dict_layer_%s_res_%s.pkl'%(layer,
                                                             resolution[0])
-    # fhandle=open(coef_filename,'wb')
-    # pickle.dump(sq_coef,fhandle,protocol=pickle.HIGHEST_PROTOCOL)
-    # fhandle.close()
+    fhandle=open(coef_filename,'wb')
+    pickle.dump(sq_coef,fhandle,protocol=pickle.HIGHEST_PROTOCOL)
+    fhandle.close()
     #Reading the pickle file of saved coefficient
     print '>>> Reading the Overlap Coefficient File'
     fhandle=open(coef_filename,'rb')
@@ -103,3 +105,31 @@ if __name__=='__main__':
 
     #plot_sq_cells(sq_cells_dict)
     plot_hex_to_square_map(sq_coef,hex_cells_dict,sq_cells_dict)
+
+def readGeometry( input_file,  layer, subdet ):
+    t0 = datetime.datetime.now()
+    treename = 'hgcaltriggergeomtester/TreeCells'
+    cells = read_geometry(filename=input_file, treename=treename,
+              subdet=subdet, layer=layer, wafer=-1)
+    cells_d = dict([(c.id, c) for c in cells])
+    t1 = datetime.datetime.now()
+    print 'Cells read: number=', len(cells), ', time=', t1-t0
+    return cells_d
+
+if __name__=='__main__':
+    import sys
+    import optparse
+    usage = 'usage: %prog [options]'
+    parser = optparse.OptionParser(usage)
+    parser.add_option('--input_geometry', dest='input_file', help='Input geometry file', default=input_default_file)
+    # Not used
+    # parser.add_option('--output', dest='output_file', help='Output pickle file', default='mapping.pkl')
+    parser.add_option('--layer', dest='layer', help='Layer to be mapped', type='int', default=1)
+    parser.add_option('--subdet', dest='subdet', help='Subdet', type='int', default=3)
+    (opt, args) = parser.parse_args()
+    if not opt.input_file:
+      parser.print_help()
+      print 'Error: Missing input geometry file name'
+      sys.exit(1)
+    cells_d = readGeometry( opt.input_file, opt.layer, opt.subdet )
+    generate_interpolation(cells_d)

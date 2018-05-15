@@ -2,7 +2,8 @@
 #For timing script
 import datetime
 #For file IO/data Handling
-from six.moves import cPickle as pickle
+import os
+import cPickle as pickle
 #import pandas as pd
 #Linear Algebra library
 import numpy as np
@@ -15,10 +16,12 @@ from sq_Cells import sq_Cells
 
 #################Global Variables#######################
 dtype=np.float64            #data type of any numpy array created
-sq_cells_basepath='/home/abhinav/Desktop/HAhRD/GSOC18/sq_cells_data/'
+sq_cells_basepath='sq_cells_data/'
+if not os.path.exists(sq_cells_basepath):
+    os.makedirs(sq_cells_basepath)
 
 #################Function Definition####################
-def linear_interpolate_hex_to_square(filename,layer,resolution=(1000,1000)):
+def linear_interpolate_hex_to_square(hex_cells_dict,layer,resolution=(1000,1000)):
     '''
     This function will interpolate the energy deposit in hexagonal cells
     from the input file to a energy deposit in the equivalent square grid
@@ -26,7 +29,7 @@ def linear_interpolate_hex_to_square(filename,layer,resolution=(1000,1000)):
     the cells of square grid.
 
     INPUT:
-        filename    :the pickled filename containing the input cell dict
+        hex_cells_dict: the dictionary of input geometry read from root file
         resolution  :(int,int) the resolution of the square grid (TUPLE)
         layer       :(int) the layer id
     OUTPUT:
@@ -35,12 +38,8 @@ def linear_interpolate_hex_to_square(filename,layer,resolution=(1000,1000)):
                 stored as:
                 coef[hexid,[(i,j,cf),(i,j,cf)....]]
     '''
-    t0=datetime.datetime.now()
-    print '>>> Reading the HexCell File'
-    infile=open(filename,'rb')
-    cells_dict=pickle.load(infile)
+    cells_dict=hex_cells_dict
     t1=datetime.datetime.now()
-    print 'Reading completed in: ',t1-t0,' sec\n'
 
     #Creating the empty energy map (initialized with zeros)
     #coef=np.zeros(resolution,dtype=dtype)
