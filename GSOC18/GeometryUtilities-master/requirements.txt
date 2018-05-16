@@ -1,0 +1,5 @@
+attrs==16.3.0
+scipy==0.19.0
+numpy==1.13.1
+root-numpy==4.7.2
+Shapely==1.5.17.post1
