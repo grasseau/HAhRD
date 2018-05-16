@@ -10,10 +10,17 @@ import matplotlib.pyplot as plt
 #Geometry File imports
 from geometry.cmssw import read_geometry
 input_default_file = '/data_CMS/cms/grasseau/HAhRD/test_triggergeom.root'
+data_default_file = 'detector_data/hgcalNtuple_electrons_15GeV_n100.root'
 
+#Data File imports
+import uproot
+import pandas as pd
+import concurrent.futures,multiprocessing
+ncpu=multiprocessing.cpu_count()
+executor=concurrent.futures.ThreadPoolExecutor(ncpu*4)
 
 ############## DRIVER FUNCTION DEFINITION#############
-def generate_interpolation(hex_cell_dict_root,resolution=(500,500)):
+def generate_interpolation(hex_cell_dict_root,dataframe,resolution=(500,500)):
     '''
     AUTHOR: Abhinav Kumar
     DESCRIPTION:
@@ -31,6 +38,7 @@ def generate_interpolation(hex_cell_dict_root,resolution=(500,500)):
         INPUT:
             hex_cell_dict_root : the hex cell dictionary read from the
                                     root file.
+            dataframe          : the dataframe with recorded energy deposits
             resolution         : the resolution of square grid to be generated
                                     a tuple of form (res_x,res_y)
         OUTPUT:
@@ -65,10 +73,14 @@ def generate_interpolation(hex_cell_dict_root,resolution=(500,500)):
     fhandle.close()
 
     #plot_sq_cells(sq_cells_dict)
-    plot_hex_to_square_map(sq_coef,hex_cells_dict,sq_cells_dict)
+    #plot_hex_to_square_map(sq_coef,hex_cells_dict,sq_cells_dict)
+
+    #Calculating the ENERGY DEPOSIT map in the square grid from recorded hits
+    #present in the dataframe
+    compute_energy_map(hex_cells_dict,sq_coef,resolution,dataframe,1,1)
 
 
-################ DRIVER FUNCTION DEFINITION ###################
+################ MAIN FUNCTION DEFINITION ###################
 def readGeometry( input_file,  layer, subdet ):
     '''
     AUTHOR: Grasseau Gilles
@@ -95,20 +107,64 @@ def readGeometry( input_file,  layer, subdet ):
     print 'Cells read: number=', len(cells), ', time=', t1-t0
     return cells_d
 
+def readDataFile(filename):
+    '''
+    DESCRIPTION:
+        This function will read the root file which contains the simulated
+        data of particles and the corresponding recorded hits in the detector.
+        The recorded hits in detertor will be later used for energy interpolation
+        to the square cells.
+        This code is similar to starting code in repo.
+    USAGE:
+        INPUT:
+            filename    : the name of root file
+        OUTPUT:
+            df          : the pandas dataframe of the data in root file
+    '''
+    tree=uproot.open(filename)['ana/hgc']
+    branches=[]
+    branches += ["genpart_gen","genpart_reachedEE","genpart_energy",
+                "genpart_eta","genpart_phi", "genpart_pid","genpart_posx",
+                "genpart_posy","genpart_posz"]
+    branches += ["rechit_x", "rechit_y", "rechit_z", "rechit_energy",
+                "rechit_layer", 'rechit_flags','rechit_cluster2d',
+                'cluster2d_multicluster']
+    cache={}
+    df=tree.pandas.df(branches,cache=cache,executor=executor)
+
+    return df
+
+
 if __name__=='__main__':
     import sys
+
+    #Setting up the command line option parser
     import optparse
     usage = 'usage: %prog [options]'
     parser = optparse.OptionParser(usage)
-    parser.add_option('--input_geometry', dest='input_file', help='Input geometry file', default=input_default_file)
-    # Not used
-    # parser.add_option('--output', dest='output_file', help='Output pickle file', default='mapping.pkl')
-    parser.add_option('--layer', dest='layer', help='Layer to be mapped', type='int', default=1)
-    parser.add_option('--subdet', dest='subdet', help='Subdet', type='int', default=3)
+    parser.add_option('--input_geometry', dest='input_file',
+                help='Input geometry file', default=input_default_file)
+    parser.add_option('--layer', dest='layer',
+                help='Layer to be mapped', type='int', default=1)
+    parser.add_option('--subdet', dest='subdet',
+                help='Subdet', type='int', default=3)
+    parser.add_option('--data_file',dest='data_file',
+                help='Graound Truth and Recorded Hits',default=data_default_file)
     (opt, args) = parser.parse_args()
+
+    #Checking if the required options are given or not
     if not opt.input_file:
-      parser.print_help()
-      print 'Error: Missing input geometry file name'
-      sys.exit(1)
+        parser.print_help()
+        print 'Error: Missing input geometry file name'
+        sys.exit(1)
+    if not opt.data_file:
+        parser.print_help()
+        print 'Error: Missing input data file name'
+        sys.exit(1)
+
+    #Generating the required files ans calling the driver function
     cells_d = readGeometry( opt.input_file, opt.layer, opt.subdet )
-    generate_interpolation(cells_d,resolution=(500,500))
+    data_df= readDataFile(opt.data_file)
+
+    #Calling the driver function
+    generate_interpolation(cells_d,data_df,resolution=(100,100))

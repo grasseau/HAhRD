@@ -3,8 +3,9 @@
 import datetime
 #For file IO/data Handling
 import os
+import sys
 import cPickle as pickle
-#import pandas as pd
+import pandas as pd
 #Linear Algebra library
 import numpy as np
 from scipy.spatial import  cKDTree
@@ -23,7 +24,7 @@ if not os.path.exists(sq_cells_basepath):
     os.makedirs(sq_cells_basepath)
 
 #################Function Definition####################
-def linear_interpolate_hex_to_square(hex_cells_dict,layer,resolution=(500,500)):
+def linear_interpolate_hex_to_square(hex_cells_dict,layer,resolution):
     '''
     DESCRIPTION:
         This function will interpolate the energy deposit in hexagonal cells
@@ -304,3 +305,90 @@ def plot_hex_to_square_map(coef,hex_cells_dict,sq_cells_dict):
         #ax1.set_ylim(-160, 160)
         #ax1.set_aspect(1)
         plt.show()
+
+def compute_energy_map(hex_cells_dict,coef,resolution,event_dataframe,event_id,layer):
+    '''
+    DESCRIPTION:
+        This function will finally map the energy deposit recorded in the
+        hexagonal cell to the corresponding mapped square cells
+        proportional to the coefficient of overlap calculated earlier
+        using the function linear_interpolate_hex_to_square.
+
+        The output will then serve as an image to the CNN for futhur learning
+        energy->particles mapping.
+    CODE COMPLEXITY:
+        O(number of hits*log(number of hex cells))
+    USAGE:
+        INPUT:
+            hex_cells_dict  : the dictionary of hexagonal cells from the
+                                input detector geometry.
+            coef            : the mapping coefficient for cells in the required
+                                layer specified by layer number
+            resolution      : the square grid resolution for generating "image"
+            event_dataframe : the pandas event dataframe read from root file
+                                using the uproot library
+            event_id        : could be a list of events for which to interpolate
+                                (currently will support one event)
+            layer           : the layer of which we are mapping the cells
+        OUTPUT:
+
+    '''
+    #Projecting the dataframe for the required attributes
+    print '>>> Projecting required attributes'
+    rechits_attributes=["rechit_x", "rechit_y", "rechit_z",
+                    "rechit_energy","rechit_layer", 'rechit_flags']
+    project_dict={name.replace('rechit_',''):
+                event_dataframe.loc[event_id,name] for name in rechits_attributes}
+    all_hits=pd.DataFrame(project_dict)
+
+    #Selection of rows which belong to the required layer
+    print '>>> Selecting the rows belonging to layer: %s'%(layer)
+    all_hits_layer=all_hits[all_hits['layer']==layer]
+    print all_hits_layer.head()
+    print all_hits_layer.dtypes
+
+    #Getting the center of cells which have hots in that layer
+    center_arr=all_hits_layer[['x','y']].values
+    energy_arr=all_hits_layer['energy'].values
+    print 'The datatype of center array is %s'%(center_arr.dtype)
+
+    #Making the id center of each cell as tuple
+    print '>>> Tuplizing the center of hits to make KD-Tree'
+    hit_centers=[(center_arr[i,0],center_arr[i,1])
+                    for i in range(center_arr.shape[0])]
+
+    print '>>> Tuplizing the hexagonal cells center for efficient search'
+    #order matters here since our result of query will be indices
+    hex_cells_list=hex_cells_dict.values()
+    hex_centers=[np.float32(cell.center.coords[0]).tolist()
+                        for cell in hex_cells_list]
+    hex_tree=cKDTree(hex_centers,balanced_tree=True)
+
+    #Now querying the tree to get the corresponding cell to the
+    #hit, search for the exact same point so r/distance=0
+    #This will speed up the searching from N^2 to NlogN
+    print '>>> querying the hex_cell_center_tree with the hit_centers'
+    indices=hex_tree.query_ball_point(hit_centers,r=1e-2) #O(hits*log(#hex_cells))
+    #print indices
+
+    #FINALLY INTERPOLATING!!
+    print '>>> Interpolating the hit Energy finally to square mesh'
+    #Initializing the energy map array
+    energy_map=np.zeros(resolution,dtype=dtype)
+    for hit_id in range(energy_arr.shape[0]): #Complexity: O(#hits)
+        hex_cell_index=indices[hit_id]
+        if not len(hex_cell_index)==1:
+            print 'Multiple Hex Cell Matching with hit cell '#,hit_centers[hit_id]
+            sys.exit(1)
+            continue
+        hex_cell=hex_cells_list[hex_cell_index[0]]
+        #print np.float32(hex_cell.center.coords[0]).tolist(),hit_centers[hit_id]
+        overlaps=coef[hex_cell.id]  #O(1) retreival
+        for overlap in overlaps:    #O(1) constant due to our choice of grid res
+            i,j=overlap[0]  #getting the sq_cell indices/id
+            #now distributing the energy according to fraction of overlap
+            energy_map[i,j]+=overlap[1]*energy_arr[hit_id]
+
+    plt.imshow(energy_map)
+    plt.show()
+    return energy_map
