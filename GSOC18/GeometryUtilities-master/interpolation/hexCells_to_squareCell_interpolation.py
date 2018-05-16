@@ -212,7 +212,7 @@ def calculate_overlap(hex_cells_list,sq_cells_list,search_radius,min_overlap_are
 
     return coef_dict
 
-def plot_sq_cells(cell_d):
+def plot_sq_cells(sq_cells_dict):
     '''
     DESCRIPTION:
         This function is to visualize the correctness of the
@@ -306,7 +306,8 @@ def plot_hex_to_square_map(coef,hex_cells_dict,sq_cells_dict):
         #ax1.set_aspect(1)
         plt.show()
 
-def compute_energy_map(hex_cells_dict,coef,resolution,event_dataframe,event_id,layer):
+def compute_energy_map(hex_cells_dict,coef,resolution,event_dataframe,
+                        event_id,layer,precision_adjust=1e-5):
     '''
     DESCRIPTION:
         This function will finally map the energy deposit recorded in the
@@ -330,8 +331,15 @@ def compute_energy_map(hex_cells_dict,coef,resolution,event_dataframe,event_id,l
             event_id        : could be a list of events for which to interpolate
                                 (currently will support one event)
             layer           : the layer of which we are mapping the cells
+            precision_adjust: to take into account that the data file of hgcal
+                                hits are haveing rounded/low precision
+                                position values. So searching the exact point
+                                will not be possible.
         OUTPUT:
-
+            energy_map      : a numpy array containing the map/interpolation
+                                of a particular layer of a particular event.
+                                (we should implement it for all the layers here
+                                itself.and may be for all the event here later)
     '''
     #Projecting the dataframe for the required attributes
     print '>>> Projecting required attributes'
@@ -368,7 +376,8 @@ def compute_energy_map(hex_cells_dict,coef,resolution,event_dataframe,event_id,l
     #hit, search for the exact same point so r/distance=0
     #This will speed up the searching from N^2 to NlogN
     print '>>> querying the hex_cell_center_tree with the hit_centers'
-    indices=hex_tree.query_ball_point(hit_centers,r=1e-2) #O(hits*log(#hex_cells))
+    #O(hits*log(#hex_cells))
+    indices=hex_tree.query_ball_point(hit_centers,r=precision_adjust)
     #print indices
 
     #FINALLY INTERPOLATING!!
@@ -378,7 +387,7 @@ def compute_energy_map(hex_cells_dict,coef,resolution,event_dataframe,event_id,l
     for hit_id in range(energy_arr.shape[0]): #Complexity: O(#hits)
         hex_cell_index=indices[hit_id]
         if not len(hex_cell_index)==1:
-            print 'Multiple Hex Cell Matching with hit cell '#,hit_centers[hit_id]
+            print 'Multiple/No Hex Cell Matching with hit cell'
             sys.exit(1)
             continue
         hex_cell=hex_cells_list[hex_cell_index[0]]
@@ -390,5 +399,6 @@ def compute_energy_map(hex_cells_dict,coef,resolution,event_dataframe,event_id,l
             energy_map[i,j]+=overlap[1]*energy_arr[hit_id]
 
     plt.imshow(energy_map)
+    plt.colorbar()
     plt.show()
     return energy_map

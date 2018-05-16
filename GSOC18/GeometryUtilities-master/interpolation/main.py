@@ -20,7 +20,7 @@ ncpu=multiprocessing.cpu_count()
 executor=concurrent.futures.ThreadPoolExecutor(ncpu*4)
 
 ############## DRIVER FUNCTION DEFINITION#############
-def generate_interpolation(hex_cell_dict_root,dataframe,resolution=(500,500)):
+def generate_interpolation(hex_cell_dict_root,dataframe,layer,resolution=(500,500)):
     '''
     AUTHOR: Abhinav Kumar
     DESCRIPTION:
@@ -39,6 +39,8 @@ def generate_interpolation(hex_cell_dict_root,dataframe,resolution=(500,500)):
             hex_cell_dict_root : the hex cell dictionary read from the
                                     root file.
             dataframe          : the dataframe with recorded energy deposits
+            layer              : the layer for which interpolation coefficient
+                                    need to be calculated
             resolution         : the resolution of square grid to be generated
                                     a tuple of form (res_x,res_y)
         OUTPUT:
@@ -48,7 +50,7 @@ def generate_interpolation(hex_cell_dict_root,dataframe,resolution=(500,500)):
     ## Generating the overlapping coefficient
     hex_cells_dict=hex_cell_dict_root
     #resolution=(500,500)
-    layer=1
+    #layer=1
     sq_coef=linear_interpolate_hex_to_square(hex_cells_dict,
                                                 layer,resolution)
     #Saving the generated coefficient as pickle file
@@ -77,7 +79,8 @@ def generate_interpolation(hex_cell_dict_root,dataframe,resolution=(500,500)):
 
     #Calculating the ENERGY DEPOSIT map in the square grid from recorded hits
     #present in the dataframe
-    compute_energy_map(hex_cells_dict,sq_coef,resolution,dataframe,1,1)
+    event_id=1
+    compute_energy_map(hex_cells_dict,sq_coef,resolution,dataframe,event_id,layer)
 
 
 ################ MAIN FUNCTION DEFINITION ###################
@@ -149,7 +152,7 @@ if __name__=='__main__':
     parser.add_option('--subdet', dest='subdet',
                 help='Subdet', type='int', default=3)
     parser.add_option('--data_file',dest='data_file',
-                help='Graound Truth and Recorded Hits',default=data_default_file)
+                help='Ground Truth and Recorded Hits',default=data_default_file)
     (opt, args) = parser.parse_args()
 
     #Checking if the required options are given or not
@@ -161,10 +164,14 @@ if __name__=='__main__':
         parser.print_help()
         print 'Error: Missing input data file name'
         sys.exit(1)
+    if not opt.layer:
+        parser.print_help()
+        print 'Error: Please specify the layer to do interpolation'
+        sys.exit(1)
 
     #Generating the required files ans calling the driver function
     cells_d = readGeometry( opt.input_file, opt.layer, opt.subdet )
     data_df= readDataFile(opt.data_file)
 
     #Calling the driver function
-    generate_interpolation(cells_d,data_df,resolution=(100,100))
+    generate_interpolation(cells_d,data_df,opt.layer,resolution=(500,500))
