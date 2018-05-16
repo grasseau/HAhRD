@@ -1,5 +1,5 @@
 #Helper function from this script
-from hexCells_to_squareCell_interpolation import linear_interpolate_hex_to_square
+from hexCells_to_squareCell_interpolation import *
 
 #General Imports
 import sys
@@ -7,78 +7,39 @@ import datetime
 import cPickle as pickle
 import matplotlib.pyplot as plt
 
-#Shapely and Geometry File imports
-from shapely.geometry import LineString,Polygon
-from descartes.patch import PolygonPatch
+#Geometry File imports
 from geometry.cmssw import read_geometry
 input_default_file = '/data_CMS/cms/grasseau/HAhRD/test_triggergeom.root'
 
-def plot_sq_cells(cell_d):
-    t0=datetime.datetime.now()
-    fig=plt.figure()
-    ax1=fig.add_subplot(111)
-    for id,cell in sq_cells_dict.items():
-        poly=cell.polygon
-        patch=PolygonPatch(poly,alpha=0.5,zorder=2,edgecolor='blue')
-        ax1.add_patch(patch)
-    t1=datetime.datetime.now()
-    print '>>> Plot Completed in: ',t1-t0,' sec'
-    ax1.set_xlim(-160, 160)
-    ax1.set_ylim(-160, 160)
-    ax1.set_aspect(1)
-    plt.show()
 
-def plot_hex_to_square_map(coef,hex_cells_dict,sq_cells_dict):
-    t0=datetime.datetime.now()
-    # fig=plt.figure()
-    # ax1=fig.add_subplot(111)
-    print '>>> Calculating the area of smallar cell for filtering'
-    filter_hex_cells=([c.vertices.area for c in hex_cells_dict.values()
-                        if len(list(c.vertices.exterior.coords))==7])
-    small_wafer_area=min(filter_hex_cells)
-    t1=datetime.datetime.now()
-    print '>>> Area calculated %s in time: %s sec'%(
-                                    small_wafer_area,t1-t0)
-    t0=t1
-
-    for hex_id,sq_overlaps in coef.items():
-        hex_cell=hex_cells_dict[hex_id]
-        poly=hex_cell.vertices
-        #Filtering the cells in smaller region
-        if poly.area!=small_wafer_area:
-            continue
-
-        fig=plt.figure()
-        ax1=fig.add_subplot(111)
-        x,y=poly.exterior.xy
-        ax1.plot(x,y,'o',zorder=1)
-        patch=PolygonPatch(poly,alpha=0.5,zorder=2,edgecolor='blue')
-        ax1.add_patch(patch)
-        print '>>> Plotting hex cell: ',hex_id
-        for sq_cell_data in sq_overlaps:
-            sq_cell_id=sq_cell_data[0]
-            overlap_coef=sq_cell_data[1]
-            sq_cell=sq_cells_dict[sq_cell_id]
-            print ('overlapping with sq_cell: ',sq_cell_id,
-                                    'with overlap coef: ',overlap_coef)
-            poly=sq_cell.polygon
-            x,y=poly.exterior.xy
-            ax1.plot(x,y,'o',zorder=1)
-            patch=PolygonPatch(poly,alpha=0.5,zorder=2,edgecolor='red')
-            ax1.add_patch(patch)
-        t1=datetime.datetime.now()
-        print 'one hex cell overlap complete in: ',t1-t0,' sec\n'
-        t0=t1
-        #ax1.set_xlim(-160, 160)
-        #ax1.set_ylim(-160, 160)
-        #ax1.set_aspect(1)
-        plt.show()
-
-def generate_interpolation(hex_cell_dict_root):
+############## DRIVER FUNCTION DEFINITION#############
+def generate_interpolation(hex_cell_dict_root,resolution=(500,500)):
+    '''
+    AUTHOR: Abhinav Kumar
+    DESCRIPTION:
+        This function is the main control point of generation of
+        hexgonal cell to square cell interpolation. It is heavily
+        dependent on functions of hexCell_to_sqyuareCell_interpolation.py
+        STEPS:
+            1.It calls the linear interpolation function to generate the
+            coefficient of interpolation as dictionary.
+            2.Then it saves the coefficient in form of pickle file in a
+            separate folder in same directory named as 'sq_cells_data'.
+            3.It plots the hexagon to square maps for few of sampled
+            Hexagon cells.
+    USAGE:
+        INPUT:
+            hex_cell_dict_root : the hex cell dictionary read from the
+                                    root file.
+            resolution         : the resolution of square grid to be generated
+                                    a tuple of form (res_x,res_y)
+        OUTPUT:
+            energy_map          : not currently added
+    '''
     base_path=''
     ## Generating the overlapping coefficient
     hex_cells_dict=hex_cell_dict_root
-    resolution=(500,500)
+    #resolution=(500,500)
     layer=1
     sq_coef=linear_interpolate_hex_to_square(hex_cells_dict,
                                                 layer,resolution)
@@ -106,7 +67,25 @@ def generate_interpolation(hex_cell_dict_root):
     #plot_sq_cells(sq_cells_dict)
     plot_hex_to_square_map(sq_coef,hex_cells_dict,sq_cells_dict)
 
+
+################ DRIVER FUNCTION DEFINITION ###################
 def readGeometry( input_file,  layer, subdet ):
+    '''
+    AUTHOR: Grasseau Gilles
+    DESCRIPTION:
+        This function reads the root file which contain the Geometry
+    of the detector and create a dictionary of "Cell" object assiciated
+    with every hexagonal cell in the detector.
+    USAGE:
+        INPUT:
+            input_file  : the name of input geometry file (root file)
+            Layer       : which layer's cell we are interested in
+            Subdet      : which part of subdetector it is
+                            (EE,...)
+        OUTPUT:
+            cells_d     : the hexagonal cell-dictionary with id of
+                          cell as the key and Cell object as value
+    '''
     t0 = datetime.datetime.now()
     treename = 'hgcaltriggergeomtester/TreeCells'
     cells = read_geometry(filename=input_file, treename=treename,
@@ -132,4 +111,4 @@ if __name__=='__main__':
       print 'Error: Missing input geometry file name'
       sys.exit(1)
     cells_d = readGeometry( opt.input_file, opt.layer, opt.subdet )
-    generate_interpolation(cells_d)
+    generate_interpolation(cells_d,resolution=(500,500))
