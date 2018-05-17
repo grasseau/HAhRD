@@ -24,7 +24,7 @@ if not os.path.exists(sq_cells_basepath):
     os.makedirs(sq_cells_basepath)
 
 #################Function Definition####################
-def linear_interpolate_hex_to_square(hex_cells_dict,layer,resolution):
+def linear_interpolate_hex_to_square(hex_cells_dict,layer,exp_edge_length):
     '''
     DESCRIPTION:
         This function will interpolate the energy deposit in hexagonal cells
@@ -33,16 +33,20 @@ def linear_interpolate_hex_to_square(hex_cells_dict,layer,resolution):
     the cells of square grid.
 
     INPUT:
-        hex_cells_dict: the dictionary of input geometry read from root file
-        resolution  :(int,int) the resolution of the square grid (TUPLE)
-        layer       :(int) the layer id
+        hex_cells_dict  : the dictionary of input geometry read from root file
+        layer           :(int) the layer id
+        exp_edge_length : the approximate required edge length of sq cells
     OUTPUT:
-        coef    : a dictionary which contains the coefficient of overlap for
-                each cells with corresponding sqare cell and fraction
-                stored as:
-                {
-                    hexid :[((i,j),cf),((i,j),cf)....]
-                }
+        coef            : a dictionary which contains the coefficient of overlap
+                           for each cells with corresponding sqare cell and
+                           fraction stored as:
+                           {
+                                hexid :[((i,j),cf),((i,j),cf)....]
+                            }
+        resolution      : the resoultion of the square mesh grid calculated from
+                            expected edge length
+        act_edge_length : the actual edge length to make the resolution a whole
+                            number
     '''
     cells_dict=hex_cells_dict
     t1=datetime.datetime.now()
@@ -60,6 +64,12 @@ def linear_interpolate_hex_to_square(hex_cells_dict,layer,resolution):
     min_y=min(center_y)
     t2=datetime.datetime.now()
     print 'Bounding completed in: ',t2-t1,' sec\n'
+
+    #Calculating the Resolution (based on exp_edge_length)
+    res_x=int(np.ceil((max_x-min_x)/exp_edge_length))+1  #+1 cuz the bound used are center
+    res_y=int(np.ceil((max_y-min_y)/exp_edge_length))+1  #so, for last two cell only one uinit
+                                                    #area was counnted
+    resolution=(res_x,res_y)
 
     #Calculating the maximum length of any cells
         #(will to used to specify search radius in KD tree)
@@ -80,7 +90,8 @@ def linear_interpolate_hex_to_square(hex_cells_dict,layer,resolution):
 
     #Getting the square cells mesh (dict) for overlap calculation
     print '>>> Generating the square mesh grid'
-    sq_cells_dict=get_square_cells(layer,resolution,min_x,min_y,max_x,max_y)
+    sq_cells_dict,act_edge_length=get_square_cells(layer,resolution,
+                                                min_x,min_y,max_x,max_y)
     t4=datetime.datetime.now()
     print 'Generating Mesh Grid completed in: ',t4-t3,' sec\n'
 
@@ -95,7 +106,7 @@ def linear_interpolate_hex_to_square(hex_cells_dict,layer,resolution):
     #Now change it if we want the overlap with sq cells
     #in form of array
     #print coef
-    return coef
+    return coef,resolution,act_edge_length
 
 def get_square_cells(layer,resolution,min_x,min_y,max_x,max_y):
     '''
@@ -130,6 +141,8 @@ def get_square_cells(layer,resolution,min_x,min_y,max_x,max_y):
     x_length=(max_x-min_x)/(resolution[0]-1) #n-1 is used like in linear density
     y_length=(max_y-min_y)/(resolution[1]-1)
 
+    print 'This must be equal and around exp_edge_length:',x_length,y_length
+
     #Creating empty array to store
     #sq_cells=np.empty(resolution,dtype=np.object)
     sq_cells={}
@@ -147,7 +160,7 @@ def get_square_cells(layer,resolution,min_x,min_y,max_x,max_y):
     fhandle=open(sq_cells_filename,'wb')
     pickle.dump(sq_cells,fhandle,protocol=pickle.HIGHEST_PROTOCOL)
     fhandle.close()
-    return sq_cells
+    return sq_cells,x_length
 
 def calculate_overlap(hex_cells_list,sq_cells_list,search_radius,min_overlap_area=0.0):
     '''

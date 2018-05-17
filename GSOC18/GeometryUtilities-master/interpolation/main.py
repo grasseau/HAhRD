@@ -20,7 +20,7 @@ ncpu=multiprocessing.cpu_count()
 executor=concurrent.futures.ThreadPoolExecutor(ncpu*4)
 
 ############## DRIVER FUNCTION DEFINITION#############
-def generate_interpolation(hex_cell_dict_root,dataframe,layer,resolution=(500,500)):
+def generate_interpolation(hex_cell_dict_root,dataframe,layer,exp_edge_length=0.7):
     '''
     AUTHOR: Abhinav Kumar
     DESCRIPTION:
@@ -41,18 +41,21 @@ def generate_interpolation(hex_cell_dict_root,dataframe,layer,resolution=(500,50
             dataframe          : the dataframe with recorded energy deposits
             layer              : the layer for which interpolation coefficient
                                     need to be calculated
-            resolution         : the resolution of square grid to be generated
-                                    a tuple of form (res_x,res_y)
+            exp_edge_length    : expected edge length of the square cell, from
+                                    which the resolution will be calculated which
+                                    fits with the layer bounds.
+                                    This length will be aprroximate and actual
+                                    length will be around it to have resolution
+                                    as whole number
         OUTPUT:
             energy_map          : not currently added
     '''
     base_path=''
     ## Generating the overlapping coefficient
     hex_cells_dict=hex_cell_dict_root
-    #resolution=(500,500)
-    #layer=1
-    sq_coef=linear_interpolate_hex_to_square(hex_cells_dict,
-                                                layer,resolution)
+    sq_coef,resolution,act_edge_length=linear_interpolate_hex_to_square(
+                                            hex_cells_dict,layer,exp_edge_length)
+    print '>>> Acual Edge Length %s,Resoultion %s'%(act_edge_length,resolution)
     #Saving the generated coefficient as pickle file
     coef_filename=base_path+'sq_cells_data/coef_dict_layer_%s_res_%s.pkl'%(layer,
                                                             resolution[0])
@@ -75,12 +78,12 @@ def generate_interpolation(hex_cell_dict_root,dataframe,layer,resolution=(500,50
     fhandle.close()
 
     #plot_sq_cells(sq_cells_dict)
-    #plot_hex_to_square_map(sq_coef,hex_cells_dict,sq_cells_dict)
+    plot_hex_to_square_map(sq_coef,hex_cells_dict,sq_cells_dict)
 
     #Calculating the ENERGY DEPOSIT map in the square grid from recorded hits
     #present in the dataframe
-    event_id=1
-    compute_energy_map(hex_cells_dict,sq_coef,resolution,dataframe,event_id,layer)
+    #event_id=1
+    #compute_energy_map(hex_cells_dict,sq_coef,resolution,dataframe,event_id,layer)
 
 
 ################ MAIN FUNCTION DEFINITION ###################
@@ -174,4 +177,4 @@ if __name__=='__main__':
     data_df= readDataFile(opt.data_file)
 
     #Calling the driver function
-    generate_interpolation(cells_d,data_df,opt.layer,resolution=(500,500))
+    generate_interpolation(cells_d,data_df,opt.layer,exp_edge_length=0.7)
