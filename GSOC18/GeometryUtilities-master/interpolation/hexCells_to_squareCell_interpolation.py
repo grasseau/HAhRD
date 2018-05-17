@@ -56,18 +56,20 @@ def linear_interpolate_hex_to_square(hex_cells_dict,layer,exp_edge_length):
 
     #Iterating over all the cells to get the bounds of the detector
     print '>>> Calculating Bounds'
-    center_x=map(lambda c:c.center.x,cells_dict.values())
-    max_x=max(center_x)
-    min_x=min(center_x)
-    center_y=map(lambda c:c.center.y,cells_dict.values())
-    max_y=max(center_y)
-    min_y=min(center_y)
+    bounds_cords=map(lambda c:c.vertices.bounds,cells_dict.values())
+    max_x=max(cords[2] for cords in bounds_cords)
+    min_x=min(cords[0] for cords in bounds_cords)
+    max_y=max(cords[3] for cords in bounds_cords)
+    min_y=min(cords[1] for cords in bounds_cords)
     t2=datetime.datetime.now()
+    print 'Bounds: xmin %s ,xmax %s ,ymin %s ,ymax %s '%(min_x,max_x,
+                                                        min_y,max_y)
     print 'Bounding completed in: ',t2-t1,' sec\n'
 
     #Calculating the Resolution (based on exp_edge_length)
-    res_x=int(np.ceil((max_x-min_x)/exp_edge_length))+1  #+1 cuz the bound used are center
-    res_y=int(np.ceil((max_y-min_y)/exp_edge_length))+1  #so, for last two cell only one uinit
+    #Removing the +1 since now distributing by whole bound not the centers
+    res_x=int(np.ceil((max_x-min_x)/exp_edge_length))  #+1 cuz the bound used are center
+    res_y=int(np.ceil((max_y-min_y)/exp_edge_length))  #so, for last two cell only one uinit
                                                     #area was counnted
     resolution=(res_x,res_y)
 
@@ -81,8 +83,10 @@ def linear_interpolate_hex_to_square(hex_cells_dict,layer,exp_edge_length):
                     ]),cells_dict.values())
                     )
     #DISCUSS and CONFIRM THIS LINE
-    max_length_sq=np.sqrt( ((max_x-min_x)/(resolution[0]-1))**2+
-                           ((max_y-min_y)/(resolution[1]-1))**2 )
+    #removed -1 due to same reason (cuz edge length is defined in diff way)
+    #but -1 could give stability to our search radius(THINK)
+    max_length_sq=np.sqrt( ((max_x-min_x)/(resolution[0])-1)**2+
+                           ((max_y-min_y)/(resolution[1])-1)**2 )
     #Any overlapping cells will be in this search radius
     search_radius=(max_length_hex/2)+(max_length_sq/2)
     t3=datetime.datetime.now()
@@ -91,7 +95,7 @@ def linear_interpolate_hex_to_square(hex_cells_dict,layer,exp_edge_length):
     #Getting the square cells mesh (dict) for overlap calculation
     print '>>> Generating the square mesh grid'
     sq_cells_dict,act_edge_length=get_square_cells(layer,resolution,
-                                                min_x,min_y,max_x,max_y)
+                                    min_x,min_y,max_x,max_y,exp_edge_length)
     t4=datetime.datetime.now()
     print 'Generating Mesh Grid completed in: ',t4-t3,' sec\n'
 
@@ -108,7 +112,7 @@ def linear_interpolate_hex_to_square(hex_cells_dict,layer,exp_edge_length):
     #print coef
     return coef,resolution,act_edge_length
 
-def get_square_cells(layer,resolution,min_x,min_y,max_x,max_y):
+def get_square_cells(layer,resolution,min_x,min_y,max_x,max_y,exp_edge_length):
     '''
     DESCRIPTION:
         This function will generate square mesh grid by Creating
@@ -138,6 +142,8 @@ def get_square_cells(layer,resolution,min_x,min_y,max_x,max_y):
             automatically in current directory named as 'sq_cells_data'
     '''
     #Finding the dimension of each cells
+    #now n-1 is not used since we are doing on whole area not centers
+    #-1 could give more stability (THINK)
     x_length=(max_x-min_x)/(resolution[0]-1) #n-1 is used like in linear density
     y_length=(max_y-min_y)/(resolution[1]-1)
 
@@ -151,12 +157,19 @@ def get_square_cells(layer,resolution,min_x,min_y,max_x,max_y):
     for i in range(resolution[0]):
         for j in range(resolution[1]):
             #Center of the square polygon
+            #Now they wont coincide with actual center of polygon
+            #Now bounding 2D grid box will also be slightly more on
+            #right side
             center=(min_x+i*x_length,min_y+j*y_length)
             id=(i,j)    #given in usual matrix notation
             sq_cells[id]=sq_Cells(id,center,x_length,y_length)
 
+    print '>>> First Cell',(sq_cells[(0,0)].polygon.bounds)
+    print '>>> Last Cell',(sq_cells[(0,resolution[1]-1)].polygon.bounds)
+    print '>>> Third Cell',(sq_cells[(resolution[0]-1,0)].polygon.bounds)
     #Saving the sq_cell sq_cell_data in given folder
-    sq_cells_filename=sq_cells_basepath+'sq_cells_dict_layer_%s_res_%s.pkl'%(layer,resolution[0])
+    sq_cells_filename=sq_cells_basepath+'sq_cells_dict_layer_%s_len_%s.pkl'%(
+                                                    layer,exp_edge_length)
     fhandle=open(sq_cells_filename,'wb')
     pickle.dump(sq_cells,fhandle,protocol=pickle.HIGHEST_PROTOCOL)
     fhandle.close()

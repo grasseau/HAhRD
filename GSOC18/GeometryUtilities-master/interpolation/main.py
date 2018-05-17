@@ -57,8 +57,8 @@ def generate_interpolation(hex_cell_dict_root,dataframe,layer,exp_edge_length=0.
                                             hex_cells_dict,layer,exp_edge_length)
     print '>>> Acual Edge Length %s,Resoultion %s'%(act_edge_length,resolution)
     #Saving the generated coefficient as pickle file
-    coef_filename=base_path+'sq_cells_data/coef_dict_layer_%s_res_%s.pkl'%(layer,
-                                                            resolution[0])
+    coef_filename=base_path+'sq_cells_data/coef_dict_layer_%s_len_%s.pkl'%(layer,
+                                                            exp_edge_length)
     fhandle=open(coef_filename,'wb')
     pickle.dump(sq_coef,fhandle,protocol=pickle.HIGHEST_PROTOCOL)
     fhandle.close()
@@ -71,8 +71,8 @@ def generate_interpolation(hex_cell_dict_root,dataframe,layer,exp_edge_length=0.
 
     ## Plotting the sq cell for verification
     print '>>> Reading the Square Cells File'
-    sq_filename=base_path+'sq_cells_data/sq_cells_dict_layer_%s_res_%s.pkl'%(layer,
-                                                            resolution[0])
+    sq_filename=base_path+'sq_cells_data/sq_cells_dict_layer_%s_len_%s.pkl'%(layer,
+                                                            exp_edge_length)
     fhandle=open(sq_filename,'rb')
     sq_cells_dict=pickle.load(fhandle)
     fhandle.close()

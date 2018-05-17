@@ -21,8 +21,8 @@ from scipy import misc
 # Parameters ... to fix later
 #input_default_file = '/data_CMS/cms/grasseau/HAhRD/test_triggergeom.root'
 input_default_file='geometry_data/test_triggergeom.root'
-coef_filename='sq_cells_data/coef_dict_layer_1_res_500.pkl'
-resolution = 500
+coef_filename='sq_cells_data/coef_dict_layer_1_len_0.7.pkl'
+resolution = (443,442)
 
 ################ DRIVER FUNCTION DEFINITION ###################
 def readGeometry( input_file,  layer, subdet ):
@@ -78,7 +78,7 @@ def compareAreas( cells_d, sq_coef):
 def mappingOnMatrix( cells_d, sq_coef, resolution ):
 
     # Spread the coeficient in the squared grid
-    sCells = np.zeros((resolution, resolution) )
+    sCells = np.zeros((resolution[0], resolution[1]) )
     for cell_id in sq_coef.keys():
         area = cells_d[ cell_id].vertices.area
         for sq in sq_coef[ cell_id ]:
@@ -93,17 +93,21 @@ def plotImage( sCells ):
 
     iSize, jSize = sCells.shape
     sMax = sCells.max()
+    print 'The maximum value is: ',sMax
 
     ima = np.zeros( (iSize, jSize, 3), dtype=np.uint8)
     for i in range(iSize):
         for j in range(jSize):
             val = int( sCells[i][j] / sMax * 255)
-            # if(val>200):
-            #     print i,j,val
-            if ((val >= 249) or (val == 0)):
+            if(val>200):
+                print i,j,sCells[i][j],sMax
+            if ((val >= 230) or (val == 0)):
                 ima[i][j][0] = 255
             else:
                 ima[i][j] = val
+            # if sCells[i][j]==sMax:
+            #     print i,j
+            # ima[i][j]=val
 
     f = misc.face(gray=True)
     plt.imshow(f)
