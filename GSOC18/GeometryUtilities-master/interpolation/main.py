@@ -78,7 +78,7 @@ def generate_interpolation(hex_cell_dict_root,dataframe,layer,exp_edge_length=0.
     fhandle.close()
 
     #plot_sq_cells(sq_cells_dict)
-    plot_hex_to_square_map(sq_coef,hex_cells_dict,sq_cells_dict)
+    #plot_hex_to_square_map(sq_coef,hex_cells_dict,sq_cells_dict)
 
     #Calculating the ENERGY DEPOSIT map in the square grid from recorded hits
     #present in the dataframe
@@ -163,10 +163,10 @@ if __name__=='__main__':
         parser.print_help()
         print 'Error: Missing input geometry file name'
         sys.exit(1)
-    if not opt.data_file:
-        parser.print_help()
-        print 'Error: Missing input data file name'
-        sys.exit(1)
+    # if not opt.data_file:
+    #     parser.print_help()
+    #     print 'Error: Missing input data file name'
+    #     sys.exit(1)
     if not opt.layer:
         parser.print_help()
         print 'Error: Please specify the layer to do interpolation'
@@ -174,7 +174,7 @@ if __name__=='__main__':
 
     #Generating the required files ans calling the driver function
     cells_d = readGeometry( opt.input_file, opt.layer, opt.subdet )
-    data_df= readDataFile(opt.data_file)
+    #data_df= readDataFile(opt.data_file)
 
     #Calling the driver function
-    generate_interpolation(cells_d,data_df,opt.layer,exp_edge_length=0.7)
+    generate_interpolation(cells_d,None,opt.layer,exp_edge_length=0.7)

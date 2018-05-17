@@ -22,7 +22,8 @@ from scipy import misc
 #input_default_file = '/data_CMS/cms/grasseau/HAhRD/test_triggergeom.root'
 input_default_file='geometry_data/test_triggergeom.root'
 coef_filename='sq_cells_data/coef_dict_layer_1_len_0.7.pkl'
-resolution = (443,442)
+#This need to be manually entered now from the screen output in main script
+resolution = (442,442)
 
 ################ DRIVER FUNCTION DEFINITION ###################
 def readGeometry( input_file,  layer, subdet ):
@@ -99,15 +100,12 @@ def plotImage( sCells ):
     for i in range(iSize):
         for j in range(jSize):
             val = int( sCells[i][j] / sMax * 255)
-            if(val>200):
-                print i,j,sCells[i][j],sMax
-            if ((val >= 230) or (val == 0)):
+            if ((val >= 254) or (val == 0)):
                 ima[i][j][0] = 255
             else:
                 ima[i][j] = val
             # if sCells[i][j]==sMax:
             #     print i,j
-            # ima[i][j]=val
 
     f = misc.face(gray=True)
     plt.imshow(f)

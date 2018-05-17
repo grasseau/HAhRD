@@ -85,8 +85,8 @@ def linear_interpolate_hex_to_square(hex_cells_dict,layer,exp_edge_length):
     #DISCUSS and CONFIRM THIS LINE
     #removed -1 due to same reason (cuz edge length is defined in diff way)
     #but -1 could give stability to our search radius(THINK)
-    max_length_sq=np.sqrt( ((max_x-min_x)/(resolution[0])-1)**2+
-                           ((max_y-min_y)/(resolution[1])-1)**2 )
+    max_length_sq=np.sqrt( ((max_x-min_x)/(resolution[0]-1))**2+
+                           ((max_y-min_y)/(resolution[1]-1))**2 )
     #Any overlapping cells will be in this search radius
     search_radius=(max_length_hex/2)+(max_length_sq/2)
     t3=datetime.datetime.now()
@@ -164,9 +164,9 @@ def get_square_cells(layer,resolution,min_x,min_y,max_x,max_y,exp_edge_length):
             id=(i,j)    #given in usual matrix notation
             sq_cells[id]=sq_Cells(id,center,x_length,y_length)
 
-    print '>>> First Cell',(sq_cells[(0,0)].polygon.bounds)
-    print '>>> Last Cell',(sq_cells[(0,resolution[1]-1)].polygon.bounds)
-    print '>>> Third Cell',(sq_cells[(resolution[0]-1,0)].polygon.bounds)
+    #print '>>> First Cell',(sq_cells[(0,0)].polygon.bounds)
+    #print '>>> Last Cell',(sq_cells[(0,resolution[1]-1)].polygon.bounds)
+    #print '>>> Third Cell',(sq_cells[(resolution[0]-1,0)].polygon.bounds)
     #Saving the sq_cell sq_cell_data in given folder
     sq_cells_filename=sq_cells_basepath+'sq_cells_dict_layer_%s_len_%s.pkl'%(
                                                     layer,exp_edge_length)
