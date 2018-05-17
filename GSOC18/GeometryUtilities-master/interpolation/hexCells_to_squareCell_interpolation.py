@@ -3,8 +3,9 @@
 import datetime
 #For file IO/data Handling
 import os
+import sys
 import cPickle as pickle
-#import pandas as pd
+import pandas as pd
 #Linear Algebra library
 import numpy as np
 from scipy.spatial import  cKDTree
@@ -23,7 +24,7 @@ if not os.path.exists(sq_cells_basepath):
     os.makedirs(sq_cells_basepath)
 
 #################Function Definition####################
-def linear_interpolate_hex_to_square(hex_cells_dict,layer,resolution=(500,500)):
+def linear_interpolate_hex_to_square(hex_cells_dict,layer,exp_edge_length):
     '''
     DESCRIPTION:
         This function will interpolate the energy deposit in hexagonal cells
@@ -32,16 +33,20 @@ def linear_interpolate_hex_to_square(hex_cells_dict,layer,resolution=(500,500)):
     the cells of square grid.
 
     INPUT:
-        hex_cells_dict: the dictionary of input geometry read from root file
-        resolution  :(int,int) the resolution of the square grid (TUPLE)
-        layer       :(int) the layer id
+        hex_cells_dict  : the dictionary of input geometry read from root file
+        layer           :(int) the layer id
+        exp_edge_length : the approximate required edge length of sq cells
     OUTPUT:
-        coef    : a dictionary which contains the coefficient of overlap for
-                each cells with corresponding sqare cell and fraction
-                stored as:
-                {
-                    hexid :[((i,j),cf),((i,j),cf)....]
-                }
+        coef            : a dictionary which contains the coefficient of overlap
+                           for each cells with corresponding sqare cell and
+                           fraction stored as:
+                           {
+                                hexid :[((i,j),cf),((i,j),cf)....]
+                            }
+        resolution      : the resoultion of the square mesh grid calculated from
+                            expected edge length
+        act_edge_length : the actual edge length to make the resolution a whole
+                            number
     '''
     cells_dict=hex_cells_dict
     t1=datetime.datetime.now()
@@ -51,14 +56,22 @@ def linear_interpolate_hex_to_square(hex_cells_dict,layer,resolution=(500,500)):
 
     #Iterating over all the cells to get the bounds of the detector
     print '>>> Calculating Bounds'
-    center_x=map(lambda c:c.center.x,cells_dict.values())
-    max_x=max(center_x)
-    min_x=min(center_x)
-    center_y=map(lambda c:c.center.y,cells_dict.values())
-    max_y=max(center_y)
-    min_y=min(center_y)
+    bounds_cords=map(lambda c:c.vertices.bounds,cells_dict.values())
+    max_x=max(cords[2] for cords in bounds_cords)
+    min_x=min(cords[0] for cords in bounds_cords)
+    max_y=max(cords[3] for cords in bounds_cords)
+    min_y=min(cords[1] for cords in bounds_cords)
     t2=datetime.datetime.now()
+    print 'Bounds: xmin %s ,xmax %s ,ymin %s ,ymax %s '%(min_x,max_x,
+                                                        min_y,max_y)
     print 'Bounding completed in: ',t2-t1,' sec\n'
+
+    #Calculating the Resolution (based on exp_edge_length)
+    #Removing the +1 since now distributing by whole bound not the centers
+    res_x=int(np.ceil((max_x-min_x)/exp_edge_length))  #+1 cuz the bound used are center
+    res_y=int(np.ceil((max_y-min_y)/exp_edge_length))  #so, for last two cell only one uinit
+                                                    #area was counnted
+    resolution=(res_x,res_y)
 
     #Calculating the maximum length of any cells
         #(will to used to specify search radius in KD tree)
@@ -70,6 +83,8 @@ def linear_interpolate_hex_to_square(hex_cells_dict,layer,resolution=(500,500)):
                     ]),cells_dict.values())
                     )
     #DISCUSS and CONFIRM THIS LINE
+    #removed -1 due to same reason (cuz edge length is defined in diff way)
+    #but -1 could give stability to our search radius(THINK)
     max_length_sq=np.sqrt( ((max_x-min_x)/(resolution[0]-1))**2+
                            ((max_y-min_y)/(resolution[1]-1))**2 )
     #Any overlapping cells will be in this search radius
@@ -79,7 +94,8 @@ def linear_interpolate_hex_to_square(hex_cells_dict,layer,resolution=(500,500)):
 
     #Getting the square cells mesh (dict) for overlap calculation
     print '>>> Generating the square mesh grid'
-    sq_cells_dict=get_square_cells(layer,resolution,min_x,min_y,max_x,max_y)
+    sq_cells_dict,act_edge_length=get_square_cells(layer,resolution,
+                                    min_x,min_y,max_x,max_y,exp_edge_length)
     t4=datetime.datetime.now()
     print 'Generating Mesh Grid completed in: ',t4-t3,' sec\n'
 
@@ -94,9 +110,9 @@ def linear_interpolate_hex_to_square(hex_cells_dict,layer,resolution=(500,500)):
     #Now change it if we want the overlap with sq cells
     #in form of array
     #print coef
-    return coef
+    return coef,resolution,act_edge_length
 
-def get_square_cells(layer,resolution,min_x,min_y,max_x,max_y):
+def get_square_cells(layer,resolution,min_x,min_y,max_x,max_y,exp_edge_length):
     '''
     DESCRIPTION:
         This function will generate square mesh grid by Creating
@@ -126,8 +142,12 @@ def get_square_cells(layer,resolution,min_x,min_y,max_x,max_y):
             automatically in current directory named as 'sq_cells_data'
     '''
     #Finding the dimension of each cells
+    #now n-1 is not used since we are doing on whole area not centers
+    #-1 could give more stability (THINK)
     x_length=(max_x-min_x)/(resolution[0]-1) #n-1 is used like in linear density
     y_length=(max_y-min_y)/(resolution[1]-1)
+
+    print 'This must be equal and around exp_edge_length:',x_length,y_length
 
     #Creating empty array to store
     #sq_cells=np.empty(resolution,dtype=np.object)
@@ -137,16 +157,23 @@ def get_square_cells(layer,resolution,min_x,min_y,max_x,max_y):
     for i in range(resolution[0]):
         for j in range(resolution[1]):
             #Center of the square polygon
+            #Now they wont coincide with actual center of polygon
+            #Now bounding 2D grid box will also be slightly more on
+            #right side
             center=(min_x+i*x_length,min_y+j*y_length)
             id=(i,j)    #given in usual matrix notation
             sq_cells[id]=sq_Cells(id,center,x_length,y_length)
 
+    #print '>>> First Cell',(sq_cells[(0,0)].polygon.bounds)
+    #print '>>> Last Cell',(sq_cells[(0,resolution[1]-1)].polygon.bounds)
+    #print '>>> Third Cell',(sq_cells[(resolution[0]-1,0)].polygon.bounds)
     #Saving the sq_cell sq_cell_data in given folder
-    sq_cells_filename=sq_cells_basepath+'sq_cells_dict_layer_%s_res_%s.pkl'%(layer,resolution[0])
+    sq_cells_filename=sq_cells_basepath+'sq_cells_dict_layer_%s_len_%s.pkl'%(
+                                                    layer,exp_edge_length)
     fhandle=open(sq_cells_filename,'wb')
     pickle.dump(sq_cells,fhandle,protocol=pickle.HIGHEST_PROTOCOL)
     fhandle.close()
-    return sq_cells
+    return sq_cells,x_length
 
 def calculate_overlap(hex_cells_list,sq_cells_list,search_radius,min_overlap_area=0.0):
     '''
@@ -211,7 +238,7 @@ def calculate_overlap(hex_cells_list,sq_cells_list,search_radius,min_overlap_are
 
     return coef_dict
 
-def plot_sq_cells(cell_d):
+def plot_sq_cells(sq_cells_dict):
     '''
     DESCRIPTION:
         This function is to visualize the correctness of the
@@ -304,3 +331,100 @@ def plot_hex_to_square_map(coef,hex_cells_dict,sq_cells_dict):
         #ax1.set_ylim(-160, 160)
         #ax1.set_aspect(1)
         plt.show()
+
+def compute_energy_map(hex_cells_dict,coef,resolution,event_dataframe,
+                        event_id,layer,precision_adjust=1e-5):
+    '''
+    DESCRIPTION:
+        This function will finally map the energy deposit recorded in the
+        hexagonal cell to the corresponding mapped square cells
+        proportional to the coefficient of overlap calculated earlier
+        using the function linear_interpolate_hex_to_square.
+
+        The output will then serve as an image to the CNN for futhur learning
+        energy->particles mapping.
+    CODE COMPLEXITY:
+        O(number of hits*log(number of hex cells))
+    USAGE:
+        INPUT:
+            hex_cells_dict  : the dictionary of hexagonal cells from the
+                                input detector geometry.
+            coef            : the mapping coefficient for cells in the required
+                                layer specified by layer number
+            resolution      : the square grid resolution for generating "image"
+            event_dataframe : the pandas event dataframe read from root file
+                                using the uproot library
+            event_id        : could be a list of events for which to interpolate
+                                (currently will support one event)
+            layer           : the layer of which we are mapping the cells
+            precision_adjust: to take into account that the data file of hgcal
+                                hits are haveing rounded/low precision
+                                position values. So searching the exact point
+                                will not be possible.
+        OUTPUT:
+            energy_map      : a numpy array containing the map/interpolation
+                                of a particular layer of a particular event.
+                                (we should implement it for all the layers here
+                                itself.and may be for all the event here later)
+    '''
+    #Projecting the dataframe for the required attributes
+    print '>>> Projecting required attributes'
+    rechits_attributes=["rechit_x", "rechit_y", "rechit_z",
+                    "rechit_energy","rechit_layer", 'rechit_flags']
+    project_dict={name.replace('rechit_',''):
+                event_dataframe.loc[event_id,name] for name in rechits_attributes}
+    all_hits=pd.DataFrame(project_dict)
+
+    #Selection of rows which belong to the required layer
+    print '>>> Selecting the rows belonging to layer: %s'%(layer)
+    all_hits_layer=all_hits[all_hits['layer']==layer]
+    print all_hits_layer.head()
+    print all_hits_layer.dtypes
+
+    #Getting the center of cells which have hots in that layer
+    center_arr=all_hits_layer[['x','y']].values
+    energy_arr=all_hits_layer['energy'].values
+    print 'The datatype of center array is %s'%(center_arr.dtype)
+
+    #Making the id center of each cell as tuple
+    print '>>> Tuplizing the center of hits to make KD-Tree'
+    hit_centers=[(center_arr[i,0],center_arr[i,1])
+                    for i in range(center_arr.shape[0])]
+
+    print '>>> Tuplizing the hexagonal cells center for efficient search'
+    #order matters here since our result of query will be indices
+    hex_cells_list=hex_cells_dict.values()
+    hex_centers=[np.float32(cell.center.coords[0]).tolist()
+                        for cell in hex_cells_list]
+    hex_tree=cKDTree(hex_centers,balanced_tree=True)
+
+    #Now querying the tree to get the corresponding cell to the
+    #hit, search for the exact same point so r/distance=0
+    #This will speed up the searching from N^2 to NlogN
+    print '>>> querying the hex_cell_center_tree with the hit_centers'
+    #O(hits*log(#hex_cells))
+    indices=hex_tree.query_ball_point(hit_centers,r=precision_adjust)
+    #print indices
+
+    #FINALLY INTERPOLATING!!
+    print '>>> Interpolating the hit Energy finally to square mesh'
+    #Initializing the energy map array
+    energy_map=np.zeros(resolution,dtype=dtype)
+    for hit_id in range(energy_arr.shape[0]): #Complexity: O(#hits)
+        hex_cell_index=indices[hit_id]
+        if not len(hex_cell_index)==1:
+            print 'Multiple/No Hex Cell Matching with hit cell'
+            sys.exit(1)
+            continue
+        hex_cell=hex_cells_list[hex_cell_index[0]]
+        #print np.float32(hex_cell.center.coords[0]).tolist(),hit_centers[hit_id]
+        overlaps=coef[hex_cell.id]  #O(1) retreival
+        for overlap in overlaps:    #O(1) constant due to our choice of grid res
+            i,j=overlap[0]  #getting the sq_cell indices/id
+            #now distributing the energy according to fraction of overlap
+            energy_map[i,j]+=overlap[1]*energy_arr[hit_id]
+
+    plt.imshow(energy_map)
+    plt.colorbar()
+    plt.show()
+    return energy_map
