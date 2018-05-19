@@ -62,7 +62,7 @@ def generate_interpolation(geometry_fname,edge_length=0.7):
     print '>>> Generating Overlapping Coefficient'
     coef_dict_array=np.array((no_layers,),dtype=np.object)
 
-    for layer in range(1,2):
+    for layer in range(1,no_layers+1):
 
         #Reading the geometry file
         subdet=get_subdet(layer)
@@ -186,8 +186,17 @@ def readDataFile(filename):
     cache={}
     df=tree.pandas.df(branches,cache=cache,executor=executor)
 
-    return df
-
+    #Testings
+    # event_id=12
+    # cluster=df.loc[event_id,'rechit_cluster2d']
+    # mcluster=df.loc[event_id,'cluster2d_multicluster']
+    # layer=df.loc[event_id,'rechit_layer']
+    #
+    # print cluster.shape,mcluster.shape,layer.shape
+    # for i in range(layer.shape[0]):
+    #     print layer[i],cluster[i]
+    # for i in range(mcluster.shape[0]):
+    #     print mcluster[i]
 
 if __name__=='__main__':
     import sys
@@ -221,7 +230,6 @@ if __name__=='__main__':
     #     sys.exit(1)
 
     #Calling the driver function
-    generate_interpolation(opt.input_file,edge_length=0.7)
+    #generate_interpolation(opt.input_file,edge_length=0.7)
 
-
-    #data_df= readDataFile(opt.data_file)
+    data_df= readDataFile(opt.data_file)
