@@ -21,9 +21,9 @@ from scipy import misc
 # Parameters ... to fix later
 #input_default_file = '/data_CMS/cms/grasseau/HAhRD/test_triggergeom.root'
 input_default_file='geometry_data/test_triggergeom.root'
-coef_filename='sq_cells_data/coef_dict_layer_1_len_0.7.pkl'
-#This need to be manually entered now from the screen output in main script
-resolution = (442,442)
+coef_filename='sq_cells_data/coef_dict_res_473,473_len_0.7.pkl'
+#This need to be manually entered
+resolution = (473,473)
 
 ################ DRIVER FUNCTION DEFINITION ###################
 def readGeometry( input_file,  layer, subdet ):
@@ -61,9 +61,9 @@ def compareAreas( cells_d, sq_coef):
 
     squareArea = float( 0.0 )
     for cell_id in sq_coef.keys():
-        area = cells_d[ cell_id ].vertices.area
+        #area = cells_d[ cell_id ].vertices.area
         for sq in sq_coef[ cell_id ]:
-            squareArea = squareArea + sq[1]*area
+            squareArea = squareArea + sq[1]#*area
 
     print "Layer  Area :", layerArea
     print "Square Area :", squareArea
@@ -81,10 +81,10 @@ def mappingOnMatrix( cells_d, sq_coef, resolution ):
     # Spread the coeficient in the squared grid
     sCells = np.zeros((resolution[0], resolution[1]) )
     for cell_id in sq_coef.keys():
-        area = cells_d[ cell_id].vertices.area
+        #area = cells_d[ cell_id].vertices.area
         for sq in sq_coef[ cell_id ]:
             i,j =  sq[0]
-            sCells[i][j] = sCells[i][j] + sq[1]*area
+            sCells[i][j] = sCells[i][j] + sq[1]#*area
 
     return sCells
 
@@ -128,8 +128,9 @@ if __name__=='__main__':
 
     # Read coef
     fhandle=open(coef_filename,'rb')
-    sq_coef=pickle.load(fhandle)
+    coef_dict_array=pickle.load(fhandle)
     fhandle.close()
+    sq_coef=coef_dict_array[0]  #for layer 1
 
     compareAreas( cells_d, sq_coef )
 
