@@ -24,7 +24,7 @@ if not os.path.exists(sq_cells_basepath):
     os.makedirs(sq_cells_basepath)
 
 #################Function Definition####################
-def linear_interpolate_hex_to_square(hex_cells_dict,resolution,bounds,layer,exp_edge_length):
+def linear_interpolate_hex_to_square(hex_cells_dict,sq_cells_dict,edge_length):
     '''
     DESCRIPTION:
         This function will interpolate the energy deposit in hexagonal cells
@@ -34,114 +34,98 @@ def linear_interpolate_hex_to_square(hex_cells_dict,resolution,bounds,layer,exp_
 
     INPUT:
         hex_cells_dict  : the dictionary of input geometry read from root file
-        resolution      : the accepted resolution among all the layers
-        bounds          : the bounds of the current layer calculated in
-                            calculate_resolution function
-        layer           :(int) the layer id (will be removed in later commits)
-        exp_edge_length : the approximate required edge length of sq cells
+        sq_cells_dict   : the common square cell mesh for interpolation
+        edge_length     : the edge length of the square cells
     OUTPUT:
-        coef            : a dictionary which contains the coefficient of overlap
+        coef(unnormalized) : a dictionary which contains the coefficient of overlap
                            for each cells with corresponding sqare cell and
                            fraction stored as:
-                           {
-                                hexid :[((i,j),cf),((i,j),cf)....]
+                            { hexid :[((i,j),cf),((i,j),cf)....]
                             }
-        act_edge_length : the actual edge length to make the resolution a whole
-                            number
     '''
-    cells_dict=hex_cells_dict
-    t1=datetime.datetime.now()
-
-    #Iterating over all the cells to get the bounds of the detector
-    print '>>> Reading Bounds'
-    min_x,min_y,max_x,max_y=bounds
-    t2=datetime.datetime.now()
-
-    #Calculating the Resolution (based on exp_edge_length)
-    #Removing the +1 since now distributing by whole bound not the centers
-    # res_x=int(np.ceil((max_x-min_x)/exp_edge_length))  #+1 cuz the bound used are center
-    # res_y=int(np.ceil((max_y-min_y)/exp_edge_length))  #so, for last two cell only one uinit
-    #                                                 #area was counnted
-    # resolution=(res_x,res_y)
 
     #Calculating the maximum length of any cells
         #(will to used to specify search radius in KD tree)
-    print '>>> Calculating the search radius'
+    print '>>> Calculating the Search Radius'
+    t0=datetime.datetime.now()
     max_length_hex=max(map(
                     lambda c: max([
                     c.vertices.bounds[2]-c.vertices.bounds[0],
                     c.vertices.bounds[3]-c.vertices.bounds[1]
-                    ]),cells_dict.values())
+                    ]),hex_cells_dict.values())
                     )
     #DISCUSS and CONFIRM THIS LINE
-    #removed -1 due to same reason (cuz edge length is defined in diff way)
-    #but -1 could give stability to our search radius(THINK)
-    max_length_sq=np.sqrt( ((max_x-min_x)/(resolution[0]-1))**2+
-                           ((max_y-min_y)/(resolution[1]-1))**2 )
+    max_length_sq=np.sqrt(edge_length**2+edge_length**2 )
     #Any overlapping cells will be in this search radius
     search_radius=(max_length_hex/2)+(max_length_sq/2)
-    t3=datetime.datetime.now()
-    print 'Search Radius finding completed in: ',t3-t2,' sec'
-
-    #Getting the square cells mesh (dict) for overlap calculation
-    print '>>> Generating the square mesh grid'
-    sq_cells_dict,act_edge_length=get_square_cells(layer,resolution,
-                                    min_x,min_y,max_x,max_y,exp_edge_length)
-    t4=datetime.datetime.now()
-    print 'Generating Mesh Grid completed in: ',t4-t3,' sec'
+    t1=datetime.datetime.now()
+    print 'Search Radius finding completed in: ',t1-t0,' sec'
 
     #Calculating the coefficient of overlap
-    #(currently in for of ditionary)
-    print '>>> Calculating the overlap coefficient'
-    coef=calculate_overlap(cells_dict.values(),sq_cells_dict.values(),
+    print '>>> Calculating the Overlap Coefficient'
+    coef_dict=calculate_overlap(hex_cells_dict.values(),sq_cells_dict.values(),
                             search_radius,min_overlap_area=0.0)
-    t5=datetime.datetime.now()
-    print 'Overlap Coef Finding completed in: ',t5-t4,' sec'
+    t2=datetime.datetime.now()
+    print 'Overlap Coef Finding completed in: ',t2-t1,' sec'
 
     #Returning the coef_dict,resolution and the edge length
-    return coef,act_edge_length
+    return coef_dict
 
-def calculate_resolution(hex_cells_dict,exp_edge_length):
+def generate_mesh(hex_cells_dict,edge_length,save_sq_cells=False):
     '''
     DESCRIPTION:
             This function will calculate the resolution based on the expected
-        edge length.
-        (Outside This)Later select the the highest one among others and to suit
-        the need of all the layers.
-        Should we take the median resolution.
+        edge length. Then generate a common square mesh to be used by all the
+        layers. Hence the layer with maximum dimension is taken to generate the
+        mesh grid.
     USAGE:
         INPUT:
             hex_cells_dict  : the dictionary containing the hexagonal cells
-            exp_edge_length : the expected edge length of each square cells
+            edge_length     : the edge length of each square cells
         OUTPUT:
             resolution      : the resolution of mesh grid for the given detector
-                                layers at the current  exp_edge_length
+                                layers at the current edge_length
+            sq_cells_dict   : the square mesh dictionary for furthur interpolation
     '''
     #Iterating over all the cells to get the bounds of the detector
     print '>>> Calculating Bounds'
     t1=datetime.datetime.now()
-    bounds_cords=map(lambda c:c.vertices.bounds,hex_cells_dict.values())
-    max_x=max(cords[2] for cords in bounds_cords)
-    min_x=min(cords[0] for cords in bounds_cords)
-    max_y=max(cords[3] for cords in bounds_cords)
-    min_y=min(cords[1] for cords in bounds_cords)
+    cell_bounds=map(lambda c:c.vertices.bounds,hex_cells_dict.values())
+    max_x=max(bound[2] for bound in cell_bounds)
+    min_x=min(bound[0] for bound in cell_bounds)
+    max_y=max(bound[3] for bound in cell_bounds)
+    min_y=min(bound[1] for bound in cell_bounds)
     t2=datetime.datetime.now()
-    bounds=(min_x,min_y,max_x,max_y)
-    # print 'Bounds: xmin %s ,xmax %s ,ymin %s ,ymax %s '%(min_x,max_x,
-    #                                                     min_y,max_y)
+    layer_bounds=(min_x,min_y,max_x,max_y)
+    print 'Bounds: xmin:%s ,xmax:%s '%(min_x,max_x)
+    print 'Bounds: ymin:%s ,ymax:%s '%(min_y,max_y)
     print 'Bounding completed in: ',t2-t1,' sec'
 
-    #Calculating the Resolution (based on exp_edge_length)
-    #Removing the +1 since now distributing by whole bound not the centers
-    res_x=int(np.ceil((max_x-min_x)/exp_edge_length))  #+1 cuz the bound used are center
-    res_y=int(np.ceil((max_y-min_y)/exp_edge_length))  #so, for last two cell only one uinit
-                                                    #area was counnted
+    #Padding the bounds to accomodate the cell with required edgelength
+    print '>>> Calculating Resolution for the Meash Grid'
+    pad_x=((max_x-min_x)%edge_length)/2
+    pad_y=((max_y-min_y)%edge_length)/2
+    #Padding with the offset (balancing both side)
+    max_x=max_x+pad_x
+    min_x=min_x-pad_x
+    max_y=max_y+pad_y
+    min_y=min_y-pad_y
+
+    #Calculating the Resolution (based on edge_length)
+    res_x=int(np.ceil((max_x-min_x)/edge_length))+1
+    res_y=int(np.ceil((max_y-min_y)/edge_length))+1
     resolution=(res_x,res_y)
+    print 'Calculated Resolution for edge_length:%s is: (%s %s)'%(edge_length,
+                                                                res_x,res_y)
 
-    return resolution,bounds
+    #Creating the Square Mesh Grid
+    print '>>> Generating the Square Mesh'
+    sq_cells_dict=_get_square_cells(resolution,layer_bounds,edge_length,save_sq_cells)
+    t3=datetime.datetime.now()
+    print 'Generation Complete in: ',t3-t2,' sec'
+    return resolution,sq_cells_dict
 
-
-def get_square_cells(layer,resolution,min_x,min_y,max_x,max_y,exp_edge_length):
+def _get_square_cells(resolution,layer_bounds,edge_length,save_sq_cells):
     '''
     DESCRIPTION:
         This function will generate square mesh grid by Creating
@@ -151,58 +135,55 @@ def get_square_cells(layer,resolution,min_x,min_y,max_x,max_y,exp_edge_length):
     cells in each direction and distance available.
     USAGE:
         INPUT:
-            layer   : layer number will be used to save the square grid for
-                        that layer in the folder automatically created with
-                        name 'sq_cells_data' in current working directory.
-            resolution: the number of cells in both x and y direction in form of
-                        tuple (res_x,res_y)
-            min_x   : the lower bound of x in whole detector geometry to start
-                        creation of square cells from there.
-            min_y   : the minimum bound of y in whole detector geometry.
-            max_x   : the max bound of x coordinate in whole detector.
-            max_y   : the maximum bound of y in whole detector.
+            resolution      : the number of cells in both x and y direction in
+                                form of tuple (res_x,res_y)
+            layer_bounds    : (min_x,min_y,max_x,max_y) of the layer geometry
+            edge_length     : the edge length of the sq cell in the grid
+            save_sq_cells   : a boolean whether to save the square cell geometry
+                                default: False
         OUPUT:
-            sq_cells: a dictionary with the key as id of cell and
-                        value as the square cell object.
-                        {
-                        key:(i,j) : value:(sqCell object)
-                        }
+            sq_cells        : a dictionary with the key as id of cell and
+                                value as the square cell object.
+                                {
+                                key:(i,j) : value:(sqCell object)
+                                }
             This dictionary is saved as pickle file in a new directory created
             automatically in current directory named as 'sq_cells_data'
     '''
-    #Finding the dimension of each cells
-    #now n-1 is not used since we are doing on whole area not centers
-    #-1 could give more stability (THINK)
-    x_length=(max_x-min_x)/(resolution[0]-1) #n-1 is used like in linear density
-    y_length=(max_y-min_y)/(resolution[1]-1)
-
-    print 'This must be equal and around exp_edge_length:',x_length,y_length
+    #Remove during cleanup
+    # #Finding the dimension of each cells
+    # #now n-1 is not used since we are doing on whole area not centers
+    # #-1 could give more stability (THINK)
+    # x_length=(max_x-min_x)/(resolution[0]-1) #n-1 is used like in linear density
+    # y_length=(max_y-min_y)/(resolution[1]-1)
 
     #Creating empty array to store
     #sq_cells=np.empty(resolution,dtype=np.object)
     sq_cells={}
+
+    min_x,min_y,max_x,max_y=layer_bounds
+    #Length in each dimension (Square box)
+    x_length=edge_length
+    y_length=edge_length
 
     #Time Comlexity = O(res[0]*res[1])
     for i in range(resolution[0]):
         for j in range(resolution[1]):
             #Center of the square polygon
             #Now they wont coincide with actual center of polygon
-            #Now bounding 2D grid box will also be slightly more on
-            #right side
             center=(min_x+i*x_length,min_y+j*y_length)
             id=(i,j)    #given in usual matrix notation
             sq_cells[id]=sq_Cells(id,center,x_length,y_length)
 
-    #print '>>> First Cell',(sq_cells[(0,0)].polygon.bounds)
-    #print '>>> Last Cell',(sq_cells[(0,resolution[1]-1)].polygon.bounds)
-    #print '>>> Third Cell',(sq_cells[(resolution[0]-1,0)].polygon.bounds)
-    #Saving the sq_cell sq_cell_data in given folder
-    sq_cells_filename=sq_cells_basepath+'sq_cells_dict_layer_%s_len_%s.pkl'%(
-                                                    layer,exp_edge_length)
-    fhandle=open(sq_cells_filename,'wb')
-    pickle.dump(sq_cells,fhandle,protocol=pickle.HIGHEST_PROTOCOL)
-    fhandle.close()
-    return sq_cells,x_length
+    #Saving the sq_cell sq_cell_data in given folder (Optional)
+    if save_sq_cells==True:
+        sq_cells_filename=sq_cells_basepath+'sq_cells_dict_res_%s,%s_len_%s.pkl'%(
+                                    resolution[0],resolution[1],edge_length)
+        fhandle=open(sq_cells_filename,'wb')
+        pickle.dump(sq_cells,fhandle,protocol=pickle.HIGHEST_PROTOCOL)
+        fhandle.close()
+
+    return sq_cells
 
 def calculate_overlap(hex_cells_list,sq_cells_list,search_radius,min_overlap_area=0.0):
     '''
@@ -259,7 +240,8 @@ def calculate_overlap(hex_cells_list,sq_cells_list,search_radius,min_overlap_are
         #Final accumulation of selected cell and their overlap area
         sq_cell_id_final=sq_cell_id[selected_indices]
         overlap_area_final=overlap_area[selected_indices]
-        overlap_coef_final=overlap_area_final/np.sum(overlap_area_final)
+        #Storing the overlap area directly. Normalize later when using O(1)
+        overlap_coef_final=overlap_area_final#/np.sum(overlap_area_final)
 
         coef_dict[hex_cell.id]=[]
         for fid,coef in zip(sq_cell_id_final,overlap_coef_final):

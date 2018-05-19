@@ -20,7 +20,7 @@ ncpu=multiprocessing.cpu_count()
 executor=concurrent.futures.ThreadPoolExecutor(ncpu*4)
 
 ############## DRIVER FUNCTION DEFINITION#############
-def generate_interpolation(geometry_fname,exp_edge_length=0.7):
+def generate_interpolation(geometry_fname,edge_length=0.7):
     '''
     AUTHOR: Abhinav Kumar
     DESCRIPTION:
@@ -37,112 +37,64 @@ def generate_interpolation(geometry_fname,exp_edge_length=0.7):
     USAGE:
         INPUT:
             geometry_fname     : geometry root file of the detector
-            exp_edge_length    : expected edge length of the square cell, from
+            edge_length        : edge length of the square cell, from
                                     which the resolution will be calculated which
                                     fits with the layer bounds.
-                                    This length will be aprroximate and actual
-                                    length will be around it to have resolution
-                                    as whole number
         OUTPUT:(optional)
             coef_dict_array    : an array of size 52 have the interpolation
                                     coef of each layer in form:
                                     [coef_layer1,coef_layer2......]
     '''
-    no_layers=1                  #[28:EE + 12:FH + 12:BH]
+    no_layers=28                  #[28:EE + 12:FH + 12:BH]
 
-    #Getting the minimal resolution suited all the cells with the expected edge length
-    print '>>>>> TASK 1: Calculating Common Resolution for all the layers'
+    #Generating the Common Mesh Grid to be used for all the layers
+    print '>>> Generating Common Mesh Grid for All Layers'
     t0=datetime.datetime.now()
-    hex_cells_dict_all=[]
-    resolution_all=[]
-    bounds_all=[]
-    for layer in range(1,no_layers+1):
-        #Reading and generating the hexa_cells_dict
-        subdet=get_subdet(layer)
-
-        #Reading the layer Geometry
-        print 'Reading Cell Geometry for layer ',layer
-        hex_cells_dict=readGeometry(geometry_fname,layer,subdet)
-        hex_cells_dict_all.append(hex_cells_dict)
-
-        #Calculating the bounds and the resolution
-        res,bound=calculate_resolution(hex_cells_dict,exp_edge_length)
-        resolution_all.append(res)
-        bounds_all.append(bound)
-        print 'Resolution ',res,' for layer ',layer,'\n'
-
+    #Reading Input Geometry
+    subdet=get_subdet(no_layers)
+    hex_cells_dict=readGeometry(geometry_fname,no_layers,subdet)
+    #Generating the Mesh Grid
+    resolution,sq_cells_dict=generate_mesh(hex_cells_dict,edge_length,save_sq_cells=False)
     t1=datetime.datetime.now()
-    print 'Calculation of Resolution Completed in: ',t1-t0,' time\n'
+    print 'Generation of Mesh Grid Completed in: ',t1-t0,' time\n'
 
-    #Selecting the required resolution common to all layers (MAX taken now)
-    res_x=max([res[0] for res in resolution_all])
-    res_y=max([res[1] for res in resolution_all])
-    resolution=(res_x,res_y)
-    print '>>>>>TASK 2: Selected Common Resolution: ',resolution,'\n'
-
-    #Generating the overlapping coefficient
-    print '>>>>> TASK 3: Generating Overlapping Coefficient'
+    #Generating the Overlapping Coefficient
+    print '>>> Generating Overlapping Coefficient'
     coef_dict_array=np.array((no_layers,),dtype=np.object)
-    for layer in range(1,no_layers+1):
-        #Fetching the hexagonal cell dict and their bounds from list saved
-        hex_cells_dict=hex_cells_dict_all[layer-1]
-        bounds=bounds_all[layer-1]
 
-        #Calculating the sq_coef and actual edge length for this layer
-        sq_coef,act_edge_length=linear_interpolate_hex_to_square(hex_cells_dict,
-                                            resolution,bounds,layer,exp_edge_length)
-        print '>>> Acual Edge Length %s,Resoultion %s\n'%(act_edge_length,
-                                                    resolution)
+    for layer in range(1,2):
+
+        #Reading the geometry file
+        subdet=get_subdet(layer)
+        hex_cells_dict=readGeometry(geometry_fname,layer,subdet)
+
+        #Calculating the sq_coef (unnormalized)
+        sq_coef_dict=linear_interpolate_hex_to_square(hex_cells_dict,
+                                                sq_cells_dict,edge_length)
 
         #Saving the sq_coef for this layer in array
-        coef_dict_array[layer-1]=sq_coef
+        coef_dict_array[layer-1]=sq_coef_dict
 
         #Visual Consistency Check
-        print 'Checking for Consistency:'
-        sq_filename='sq_cells_data/sq_cells_dict_layer_%s_len_%s.pkl'%(layer,
-                                                        exp_edge_length)
-        fhandle=open(sq_filename,'rb')
-        sq_cells_dict=pickle.load(fhandle)
-        fhandle.close()
-        #plot_hex_to_square_map(sq_coef,hex_cells_dict,sq_cells_dict)
+        # print 'Checking for Consistency:'
+        # sq_filename='sq_cells_data/sq_cells_dict_res_%s,%s_len_%s.pkl'%(
+        #                             resolution[0],resolution[1],edge_length)
+        # fhandle=open(sq_filename,'rb')
+        # sq_cells_dict=pickle.load(fhandle)
+        # fhandle.close()
+        # plot_hex_to_square_map(sq_coef_dict,hex_cells_dict,sq_cells_dict)
 
     #Saving the coef_dict_array as a pickle
     #(h5 formats are more memory efficient)
     print '>>> Pickling the coef_dict_array'
     coef_filename='sq_cells_data/coef_dict_res_%s,%s_len_%s.pkl'%(
-                                    resolution[0],resolution[1],exp_edge_length)
+                                    resolution[0],resolution[1],edge_length)
     t0=datetime.datetime.now()
     fhandle=open(coef_filename,'wb')
     pickle.dump(coef_dict_array,fhandle,protocol=pickle.HIGHEST_PROTOCOL)
     fhandle.close()
     t1=datetime.datetime.now()
     print 'Pickling completed in: ',t1-t0,' sec'
-
-    ################## For Sanity Checks #################
-    #Saving the generated coefficient as pickle file
-    # coef_filename=base_path+'sq_cells_data/coef_dict_layer_%s_len_%s.pkl'%(layer,
-    #                                                         exp_edge_length)
-    # fhandle=open(coef_filename,'wb')
-    # pickle.dump(sq_coef,fhandle,protocol=pickle.HIGHEST_PROTOCOL)
-    # fhandle.close()
-    # #Reading the pickle file of saved coefficient
-    # print '>>> Reading the Overlap Coefficient File'
-    # fhandle=open(coef_filename,'rb')
-    # sq_coef=pickle.load(fhandle)
-    # fhandle.close()
-    #
-    #
-    # ## Plotting the sq cell for verification
-    # print '>>> Reading the Square Cells File'
-
-
-    #plot_sq_cells(sq_cells_dict)
-    #plot_hex_to_square_map(sq_coef,hex_cells_dict,sq_cells_dict)
-
-    #Calculating the ENERGY DEPOSIT map in the square grid from recorded hits
-    #present in the dataframe
-    #event_id=1
-    #compute_energy_map(hex_cells_dict,sq_coef,resolution,dataframe,event_id,layer)
 
     return coef_dict_array
 
@@ -269,7 +221,7 @@ if __name__=='__main__':
     #     sys.exit(1)
 
     #Calling the driver function
-    generate_interpolation(opt.input_file,exp_edge_length=0.7)
+    generate_interpolation(opt.input_file,edge_length=0.7)
 
 
     #data_df= readDataFile(opt.data_file)
