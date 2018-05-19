@@ -62,7 +62,7 @@ def generate_interpolation(geometry_fname,edge_length=0.7):
     print '>>> Generating Overlapping Coefficient'
     coef_dict_array=np.array((no_layers,),dtype=np.object)
 
-    for layer in range(1,no_layers+1):
+    for layer in range(1,1+1):
 
         #Reading the geometry file
         subdet=get_subdet(layer)
@@ -230,6 +230,6 @@ if __name__=='__main__':
     #     sys.exit(1)
 
     #Calling the driver function
-    #generate_interpolation(opt.input_file,edge_length=0.7)
+    generate_interpolation(opt.input_file,edge_length=0.7)
 
-    data_df= readDataFile(opt.data_file)
+    #data_df= readDataFile(opt.data_file)
