@@ -21,9 +21,8 @@ from scipy import misc
 # Parameters ... to fix later
 #input_default_file = '/data_CMS/cms/grasseau/HAhRD/test_triggergeom.root'
 input_default_file='geometry_data/test_triggergeom.root'
-coef_filename='sq_cells_data/coef_dict_res_473,473_len_0.7.pkl'
 #This need to be manually entered
-resolution = (473,473)
+resolution = (444,443)
 
 ################ DRIVER FUNCTION DEFINITION ###################
 def readGeometry( input_file,  layer, subdet ):
@@ -123,14 +122,16 @@ def plotImage( sCells ):
 
 if __name__=='__main__':
 
-    layer=3
+    layer=1
     # Read cells (hexagons)
     cells_d = readGeometry( input_default_file, layer, 3 )
 
     # Read coef
-    fhandle=open(coef_filename,'rb')
-    coef_dict_array=pickle.load(fhandle)
-    fhandle.close()
+    coef_filename='sq_cells_data/coef_dict_array_res_444,443_len_0.7.pkl.npy'
+    # fhandle=open(coef_filename,'rb')
+    # sq_coef=pickle.load(fhandle)
+    # fhandle.close()
+    coef_dict_array=np.load(coef_filename)
     sq_coef=coef_dict_array[layer-1]  #for layer 1
 
     compareAreas( cells_d, sq_coef )

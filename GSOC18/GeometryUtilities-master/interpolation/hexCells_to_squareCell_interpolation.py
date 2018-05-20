@@ -346,7 +346,7 @@ def plot_hex_to_square_map(coef,hex_cells_dict,sq_cells_dict):
         #ax1.set_aspect(1)
         plt.show()
 
-def _compute_energy_map(hex_cells_dict,coef,resolution,event_dataframe,
+def compute_energy_map(hex_cells_dict,coef,resolution,event_dataframe,
                         event_id,layer,precision_adjust=1e-5):
     '''
     DESCRIPTION:

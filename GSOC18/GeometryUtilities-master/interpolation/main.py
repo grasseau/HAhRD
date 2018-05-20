@@ -62,6 +62,7 @@ def generate_interpolation(geometry_fname,edge_length=0.7):
     print '>>> Generating Overlapping Coefficient'
     coef_dict_array=np.empty((no_layers,),dtype=np.object)
 
+    talpha=datetime.datetime.now()
     for layer in range(1,no_layers+1):
 
         #Reading the geometry file
@@ -85,18 +86,25 @@ def generate_interpolation(geometry_fname,edge_length=0.7):
         # fhandle.close()
         # plot_hex_to_square_map(sq_coef_dict,hex_cells_dict,sq_cells_dict)
 
-    #Saving the coef_dict_array as a pickle
-    #(h5 formats are more memory efficient)
-    print '>>> Pickling the coef_dict_array'
-    coef_filename='sq_cells_data/coef_dict_res_%s,%s_len_%s.pkl'%(
-                                    resolution[0],resolution[1],edge_length)
-    t0=datetime.datetime.now()
-    fhandle=open(coef_filename,'wb')
-    pickle.dump(coef_dict_array,fhandle,protocol=pickle.HIGHEST_PROTOCOL)
-    fhandle.close()
-    t1=datetime.datetime.now()
-    print 'Pickling completed in: ',t1-t0,' sec'
+        #Saving the coef_dict_array as a pickle
+        #(h5 formats are more memory efficient)
+        print '>>> Pickling the coef_dict'
+        coef_filename='sq_cells_data/coef_dict_layer_%s_res_%s,%s_len_%s.pkl'%(
+                                    layer,resolution[0],resolution[1],edge_length)
+        t0=datetime.datetime.now()
+        fhandle=open(coef_filename,'wb')
+        pickle.dump(sq_coef_dict,fhandle,protocol=pickle.HIGHEST_PROTOCOL)
+        fhandle.close()
+        t1=datetime.datetime.now()
+        print 'Pickling completed in: ',t1-t0,' sec'
 
+    #Saving the numpy array
+    print '>>> Saving the Numpy array of dict'
+    coef_filename='sq_cells_data/coef_dict_array_res_%s,%s_len_%s.pkl'%(
+                                resolution[0],resolution[1],edge_length)
+    np.save(coef_filename,coef_dict_array)
+    tbeta=datetime.datetime.now()
+    print '>>>>> TASK COMPLETED in: ',tbeta-talpha
     return coef_dict_array
 
 def generate_image(hits_data_fname,coef_dict_array_fname):

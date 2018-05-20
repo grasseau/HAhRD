@@ -10,23 +10,23 @@ executor=concurrent.futures.ThreadPoolExecutor(ncpu*4)
 
 #Location of the root data file
 dfname='detector_data/hgcalNtuple_electrons_15GeV_n100.root'
-cfname='sq_cells_data/coef_dict_res_473,473_len_0.7.pkl'
+#cfname='sq_cells_data/coef_dict_res_473,473_len_0.7.pkl'
 sfname='sq_cells_data/sq_cells_dict_res_473,473_len_0.7.pkl'
 
 ############# HELPER FUNCTION ###############
 def readCoefFile(filename):
     fhandle=open(filename,'rb')
-    coef_dict_array=pickle.load(fhandle)
+    coef_dict=pickle.load(fhandle)
     fhandle.close()
 
-    return fhandle
+    return coef_dict
 
 def readSqCellsDict(filename):
     fhandle=open(filename,'rb')
     sq_cells_dict=pickle.load(fhandle)
     fhandle.close()
 
-    return fhandle
+    return sq_cells_dict
 
 def readDataFile(filename):
     '''
@@ -87,6 +87,8 @@ def interpolation_check(all_hits_df,coef_dict_array,sq_cells_dict,precision_adju
     #Iteratting layer by layer
     for layer,layer_hits in all_hits_df.groupby(['layer']):
         print '>>> Interpolating for Layer: %s',%(layer)
+        #Reading the coef_dict for this layer
+        fname
 
         #Getting the center of the cells which have hits
         layer_z_value=layer_hits[0,'z'] #will be same for all the cells in this layer
