@@ -54,15 +54,15 @@ def generate_interpolation(geometry_fname,edge_length=0.7):
     subdet=get_subdet(no_layers)
     hex_cells_dict=readGeometry(geometry_fname,no_layers,subdet)
     #Generating the Mesh Grid
-    resolution,sq_cells_dict=generate_mesh(hex_cells_dict,edge_length,save_sq_cells=False)
+    resolution,sq_cells_dict=generate_mesh(hex_cells_dict,edge_length,save_sq_cells=True)
     t1=datetime.datetime.now()
     print 'Generation of Mesh Grid Completed in: ',t1-t0,' time\n'
 
     #Generating the Overlapping Coefficient
     print '>>> Generating Overlapping Coefficient'
-    coef_dict_array=np.array((no_layers,),dtype=np.object)
+    coef_dict_array=np.empty((no_layers,),dtype=np.object)
 
-    for layer in range(1,1+1):
+    for layer in range(1,no_layers+1):
 
         #Reading the geometry file
         subdet=get_subdet(layer)
@@ -74,6 +74,7 @@ def generate_interpolation(geometry_fname,edge_length=0.7):
 
         #Saving the sq_coef for this layer in array
         coef_dict_array[layer-1]=sq_coef_dict
+        print 'Done for Layer:%s \n'%(layer)
 
         #Visual Consistency Check
         # print 'Checking for Consistency:'
@@ -223,10 +224,6 @@ if __name__=='__main__':
     # if not opt.data_file:
     #     parser.print_help()
     #     print 'Error: Missing input data file name'
-    #     sys.exit(1)
-    # if not opt.layer:
-    #     parser.print_help()
-    #     print 'Error: Please specify the layer to do interpolation'
     #     sys.exit(1)
 
     #Calling the driver function

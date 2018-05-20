@@ -11,11 +11,19 @@ executor=concurrent.futures.ThreadPoolExecutor(ncpu*4)
 #Location of the root data file
 dfname='detector_data/hgcalNtuple_electrons_15GeV_n100.root'
 cfname='sq_cells_data/coef_dict_res_473,473_len_0.7.pkl'
+sfname='sq_cells_data/sq_cells_dict_res_473,473_len_0.7.pkl'
 
 ############# HELPER FUNCTION ###############
 def readCoefFile(filename):
     fhandle=open(filename,'rb')
     coef_dict_array=pickle.load(fhandle)
+    fhandle.close()
+
+    return fhandle
+
+def readSqCellsDict(filename):
+    fhandle=open(filename,'rb')
+    sq_cells_dict=pickle.load(fhandle)
     fhandle.close()
 
     return fhandle
@@ -64,7 +72,7 @@ def readDataFile(filename):
     return all_hits,max_mcl_idx
 
 ############ MAIN FUNCTION ##################
-def interpolation_check(all_hits_df,coef_dict_array,precision_adjust=1e-5):
+def interpolation_check(all_hits_df,coef_dict_array,sq_cells_dict,precision_adjust=1e-5):
     '''
     DESCRIPTION:
         This function will
@@ -81,7 +89,7 @@ def interpolation_check(all_hits_df,coef_dict_array,precision_adjust=1e-5):
         print '>>> Interpolating for Layer: %s',%(layer)
 
         #Getting the center of the cells which have hits
-        layer_z_value=layer_hits[0,'z'] #will be same for all
+        layer_z_value=layer_hits[0,'z'] #will be same for all the cells in this layer
         center_arr=layer_hits[['x','y']].values
         energy_arr=layer_hits[['energy']].values
         cluster3d_arr=layer_hits[['cluster3d']].values
@@ -101,24 +109,53 @@ def interpolation_check(all_hits_df,coef_dict_array,precision_adjust=1e-5):
         #Finally Calculating the Interpolation check values
         print '>>> Calculating the Multi-Cluster Properties'
         for hit_id in range(energy_arr.shape[0]):
+            #Identifying the corresponding hexagonal cell for this hit
             hex_cell_index=indices[hit_id]
             if not len(hex_cell_index)==1:
                 print 'Multiple/No Hex Cell Matching with hit cell'
                 sys.exit(1)
             hex_cell_center=hex_centers[hex_cell_index[0]]
             overlaps=coef_dict_array[layer][hex_cell_center]
-            norm_coef=np.sum([overlap[1] for overlap in overlaps])
 
-            #now filling the initial hex properties
+            #Adding the cluster field to dictionary
             cluster3d=clusterd_arr[hit_id]
             if cluster3d not in cluster_properties.keys():
                 init_list=np.array([0,0,0,0],dtype=np.float64)
                 mesh_list=np.array([0,0,0,0],dtype=np.float64)
                 cluster_properties[cluster3d]=(init_list,mesh_list)
 
-            init_list=[energy_arr[hit_id],hex_cell_center[0],
-                        hex_cell_center[1],layer_z_value]
-            mesh_list=[energy]
+            #Adding the hexagonal contribution to initial properties
+            hit_energy=energy_arr[hit_id]
+            hit_Wx=hex_cell_center[0]*hit_energy
+            hit_Wy=hex_cell_center[1]*hit_energy
+            hit_Wz=layer_z_value*hit_energy
+            init_list=[hit_energy,hit_Wx,hit_Wy,hit_Wz]
+            cluster_properties[cluster3d][0]+=init_list
+
+            #Adding mesh contribution to mesh properties
+            norm_coef=np.sum([overlap[1] for overlap in overlaps])
+            for overlap in overlaps:
+                i,j=overlap[0]
+                center=sq_cells_dict[(i,j)]
+                weight=(overlap[1]/norm_coef)
+
+                mesh_energy=hit_energy*weight
+                mesh_Wx=mesh_energy*center.coords[0][0]
+                mesh_Wy=mesh_energy*center.coords[0][1]
+                mesh_Wz=mesh_energy*layer_z_value
+                mesh_list=[mesh_energy,mesh_Wx,mesh_Wy,mesh_Wz]
+                cluster_properties[cluster3d][1]+=mesh_list
+
+
+    for key,value in cluster_properties.iteritems():
+        print 'cluster3d: ',key
+        #Finding the barycenter by dividing with total energy
+        value[0][1:]=value[0][1:]/value[0][0]
+        value[1][1:]=value[1][1:]/value[1][0]
+        #Printing the hex-cell values
+        print 'initial val:',value[0][0],value[0][1],value[0][2],value[0][3]
+        #Printing the mesh-cells value
+        print 'sq_mesh val:',value[1][0],value[1][1],value[1][2],value[1][3]
 
 
 
@@ -131,7 +168,4 @@ if __name__=='__main__':
     coef_dict_array=readCoefFile(cfname)
 
     #Now checking all the multicluster
-    for i in range(max_mcl_idx+1):
-        subset=all_hits[all_hits['cluster3d']==i][['layer','energy','x','y','z']]
-        data_array=subset.values
-        interpolation_check(i,data_array)
+    interpolation_check(i,data_array)

@@ -123,14 +123,15 @@ def plotImage( sCells ):
 
 if __name__=='__main__':
 
+    layer=3
     # Read cells (hexagons)
-    cells_d = readGeometry( input_default_file, 1, 3 )
+    cells_d = readGeometry( input_default_file, layer, 3 )
 
     # Read coef
     fhandle=open(coef_filename,'rb')
     coef_dict_array=pickle.load(fhandle)
     fhandle.close()
-    sq_coef=coef_dict_array[0]  #for layer 1
+    sq_coef=coef_dict_array[layer-1]  #for layer 1
 
     compareAreas( cells_d, sq_coef )
 
