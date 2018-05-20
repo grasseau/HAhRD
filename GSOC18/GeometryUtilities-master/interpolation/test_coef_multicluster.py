@@ -1,5 +1,6 @@
 import sys
 import cPickle as pickle
+import numpy as np
 from scipy.spatial import cKDTree
 
 import uproot
@@ -12,7 +13,8 @@ executor=concurrent.futures.ThreadPoolExecutor(ncpu*4)
 dfname='detector_data/hgcalNtuple_electrons_15GeV_n100.root'
 #cfname='sq_cells_data/coef_dict_res_473,473_len_0.7.pkl'
 sfname='sq_cells_data/sq_cells_dict_res_473,473_len_0.7.pkl'
-
+resolution=(473,473)
+edge_length=0.7
 ############# HELPER FUNCTION ###############
 def readCoefFile(filename):
     fhandle=open(filename,'rb')
@@ -54,7 +56,7 @@ def readDataFile(filename):
     df=tree.pandas.df(branches,cache=cache,executor=executor)
 
     #Selecting hits from a particular event
-    event_id=12
+    event_id=13
     all_hits = pd.DataFrame({name.replace('rechit_',''):df.loc[event_id,name]
                             for name in branches if 'rechit_' in name })
 
@@ -68,11 +70,13 @@ def readDataFile(filename):
 
     print all_hits.head()
     print all_hits.dtypes
+    print 'Printing layers greater than 28'
+    print all_hits[all_hits['layer']>28]
 
     return all_hits,max_mcl_idx
 
 ############ MAIN FUNCTION ##################
-def interpolation_check(all_hits_df,coef_dict_array,sq_cells_dict,precision_adjust=1e-5):
+def interpolation_check(all_hits_df,sq_cells_dict,precision_adjust=1e-3):
     '''
     DESCRIPTION:
         This function will
@@ -86,21 +90,25 @@ def interpolation_check(all_hits_df,coef_dict_array,sq_cells_dict,precision_adju
 
     #Iteratting layer by layer
     for layer,layer_hits in all_hits_df.groupby(['layer']):
-        print '>>> Interpolating for Layer: %s',%(layer)
+        if layer>=29:
+            continue
+        print '\n>>> Interpolating for Layer: %s'%(layer)
         #Reading the coef_dict for this layer
-        fname
+        fname='sq_cells_data/coef_dict_layer_%s_res_%s,%s_len_%s.pkl'%(
+                                layer,resolution[0],resolution[1],edge_length)
+        coef_dict=readCoefFile(fname)
 
         #Getting the center of the cells which have hits
-        layer_z_value=layer_hits[0,'z'] #will be same for all the cells in this layer
-        center_arr=layer_hits[['x','y']].values
-        energy_arr=layer_hits[['energy']].values
-        cluster3d_arr=layer_hits[['cluster3d']].values
+        layer_z_value=layer_hits.iloc[0]['z'] #will be same for all the cells in this layer
+        center_arr=np.squeeze(layer_hits[['x','y']].values)
+        energy_arr=np.squeeze(layer_hits[['energy']].values)
+        cluster3d_arr=np.squeeze(layer_hits[['cluster3d']].values)
 
         #Making the center as tuple for searching keys in coef_dict
         print '>>> Tuplizing the center of hits '
         hit_centers=[(center_arr[i,0],center_arr[i,1])
                         for i in range(center_arr.shape[0])]
-        hex_centers=coef_dict_array[layer-1].keys()
+        hex_centers=coef_dict.keys()
         print '>>> Building the KDTree of Hex-Cells Center'
         hex_tree=cKDTree(hex_centers,balanced_tree=True)
 
@@ -117,14 +125,14 @@ def interpolation_check(all_hits_df,coef_dict_array,sq_cells_dict,precision_adju
                 print 'Multiple/No Hex Cell Matching with hit cell'
                 sys.exit(1)
             hex_cell_center=hex_centers[hex_cell_index[0]]
-            overlaps=coef_dict_array[layer][hex_cell_center]
+            overlaps=coef_dict[hex_cell_center]
 
             #Adding the cluster field to dictionary
-            cluster3d=clusterd_arr[hit_id]
+            cluster3d=cluster3d_arr[hit_id]
             if cluster3d not in cluster_properties.keys():
                 init_list=np.array([0,0,0,0],dtype=np.float64)
                 mesh_list=np.array([0,0,0,0],dtype=np.float64)
-                cluster_properties[cluster3d]=(init_list,mesh_list)
+                cluster_properties[cluster3d]=[init_list,mesh_list]
 
             #Adding the hexagonal contribution to initial properties
             hit_energy=energy_arr[hit_id]
@@ -138,7 +146,7 @@ def interpolation_check(all_hits_df,coef_dict_array,sq_cells_dict,precision_adju
             norm_coef=np.sum([overlap[1] for overlap in overlaps])
             for overlap in overlaps:
                 i,j=overlap[0]
-                center=sq_cells_dict[(i,j)]
+                center=sq_cells_dict[(i,j)].center
                 weight=(overlap[1]/norm_coef)
 
                 mesh_energy=hit_energy*weight
@@ -150,7 +158,7 @@ def interpolation_check(all_hits_df,coef_dict_array,sq_cells_dict,precision_adju
 
 
     for key,value in cluster_properties.iteritems():
-        print 'cluster3d: ',key
+        print '\ncluster3d: ',key
         #Finding the barycenter by dividing with total energy
         value[0][1:]=value[0][1:]/value[0][0]
         value[1][1:]=value[1][1:]/value[1][0]
@@ -160,14 +168,10 @@ def interpolation_check(all_hits_df,coef_dict_array,sq_cells_dict,precision_adju
         print 'sq_mesh val:',value[1][0],value[1][1],value[1][2],value[1][3]
 
 
-
-
-
-
 if __name__=='__main__':
     #Reading the datafile and coef_file
     all_hits,max_mcl_idx=readDataFile(dfname)
-    coef_dict_array=readCoefFile(cfname)
+    sq_cells_dict=readSqCellsDict(sfname)
 
     #Now checking all the multicluster
-    interpolation_check(i,data_array)
+    interpolation_check(all_hits,sq_cells_dict)
