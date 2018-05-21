@@ -128,7 +128,7 @@ def generate_image(hits_data_fname,coef_dict_array_fname):
 
     #Initializing the numpy array to hold 4D data
     dataset=np.empty(())
-
+   
 
 
 ################ MAIN FUNCTION DEFINITION ###################
@@ -225,6 +225,7 @@ def readDataFile(filename):
     # for i in range(mcluster.shape[0]):
     #     print mcluster[i]
 
+
 if __name__=='__main__':
     import sys
 
@@ -251,8 +252,9 @@ if __name__=='__main__':
     #     parser.print_help()
     #     print 'Error: Missing input data file name'
     #     sys.exit(1)
-
+    
     #Calling the driver function
     generate_interpolation(opt.input_file,edge_length=0.7)
 
     #data_df= readDataFile(opt.data_file)
+
