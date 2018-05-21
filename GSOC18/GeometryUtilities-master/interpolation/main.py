@@ -45,14 +45,14 @@ def generate_interpolation(geometry_fname,edge_length=0.7):
                                     coef of each layer in form:
                                     [coef_layer1,coef_layer2......]
     '''
-    no_layers=28                  #[28:EE + 12:FH + 12:BH]
+    no_layers=40                  #[28:EE + 12:FH + 12:BH]
 
     #Generating the Common Mesh Grid to be used for all the layers
     print '>>> Generating Common Mesh Grid for All Layers'
     t0=datetime.datetime.now()
     #Reading Input Geometry
-    subdet=get_subdet(no_layers)
-    hex_cells_dict=readGeometry(geometry_fname,no_layers,subdet)
+    subdet,eff_layer=get_subdet(no_layers)
+    hex_cells_dict=readGeometry(geometry_fname,eff_layer,subdet)
     #Generating the Mesh Grid
     resolution,sq_cells_dict=generate_mesh(hex_cells_dict,edge_length,save_sq_cells=True)
     t1=datetime.datetime.now()
@@ -66,8 +66,8 @@ def generate_interpolation(geometry_fname,edge_length=0.7):
     for layer in range(1,no_layers+1):
 
         #Reading the geometry file
-        subdet=get_subdet(layer)
-        hex_cells_dict=readGeometry(geometry_fname,layer,subdet)
+        subdet,eff_layer=get_subdet(layer)
+        hex_cells_dict=readGeometry(geometry_fname,eff_layer,subdet)
 
         #Calculating the sq_coef (unnormalized)
         sq_coef_dict=linear_interpolate_hex_to_square(hex_cells_dict,
@@ -75,7 +75,7 @@ def generate_interpolation(geometry_fname,edge_length=0.7):
 
         #Saving the sq_coef for this layer in array
         coef_dict_array[layer-1]=sq_coef_dict
-        print 'Done for Layer:%s \n'%(layer)
+        print 'Done for Layer:%s'%(layer)
 
         #Visual Consistency Check
         # print 'Checking for Consistency:'
@@ -96,7 +96,7 @@ def generate_interpolation(geometry_fname,edge_length=0.7):
         pickle.dump(sq_coef_dict,fhandle,protocol=pickle.HIGHEST_PROTOCOL)
         fhandle.close()
         t1=datetime.datetime.now()
-        print 'Pickling completed in: ',t1-t0,' sec'
+        print 'Pickling completed in: ',t1-t0,' sec\n'
 
     #Saving the numpy array
     print '>>> Saving the Numpy array of dict'
@@ -159,16 +159,34 @@ def readGeometry( input_file,  layer, subdet ):
     return cells_d
 
 def get_subdet(layer):
+    '''
+    DESCRIPTION:
+        This function calculates the subdet number and the effective layer
+        number since the layers of the detector into three special sub-
+        detectors which unique subdet number but non-unique eff_layer number
+        which the read geometry function takes as input.
+    USAGE:
+        INPUT:
+            layer       : the actual layer number in the actual detector geometry
+        OUTPUT:
+            subdet      : the number given to subdetectors of the HGCal
+            eff_layer   : since the layers rollback to 1 for each subdet
+    '''
     subdet=None
+    eff_layer=None                  # Effective layer number (for rollback to 0)
     if layer<29:
         subdet=3                    # ECAL (Electromagnetic Calorimeter)
+        eff_layer=layer
     elif layer<(29+12):
         subdet=4                    # Front HCAL (Hadron Calorimeter)
+        eff_layer=layer-28
     elif layer<(29+12+12):
         subdet=5                    # Back HCAL (Hadronic Cal, Scintillator
+        eff_layer=layer-28-12
 
-    print 'Subdet selected: %s for layer: %s'%(subdet,layer)
-    return subdet
+    print 'Subdet selected: %s for layer: %s eff_layer: %s'%(subdet,
+                                                            layer,eff_layer)
+    return subdet,eff_layer
 
 def readDataFile(filename):
     '''
