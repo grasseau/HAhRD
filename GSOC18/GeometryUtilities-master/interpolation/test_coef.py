@@ -61,10 +61,10 @@ def compareAreas( cells_d, sq_coef):
 
     squareArea = float( 0.0 )
     for cell_id in sq_coef.keys():
-        area = cells_d[ cell_id ].vertices.area
-        norm=np.sum([sq[1] for sq in sq_coef[cell_id]])
+        #area = cells_d[ cell_id ].vertices.area
+        #norm=np.sum([sq[1] for sq in sq_coef[cell_id]])
         for sq in sq_coef[ cell_id ]:
-            squareArea = squareArea + sq[1]*area/norm
+            squareArea = squareArea + sq[1]#*area/norm
 
     print "Layer  Area :", layerArea
     print "Square Area :", squareArea
@@ -82,11 +82,11 @@ def mappingOnMatrix( cells_d, sq_coef, resolution ):
     # Spread the coeficient in the squared grid
     sCells = np.zeros((resolution[0], resolution[1]) )
     for cell_id in sq_coef.keys():
-        area = cells_d[ cell_id].vertices.area
-        norm=np.sum([sq[1] for sq in sq_coef[cell_id]])
+        #area = cells_d[ cell_id].vertices.area
+        #norm=np.sum([sq[1] for sq in sq_coef[cell_id]])
         for sq in sq_coef[ cell_id ]:
             i,j =  sq[0]
-            sCells[i][j] = sCells[i][j] + sq[1]*area/norm
+            sCells[i][j] = sCells[i][j] + sq[1]#*area/norm
 
     return sCells
 
@@ -125,22 +125,23 @@ def plotImage( sCells ):
 
 if __name__=='__main__':
 
-    #layers=[1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39]
-    layers=[29]
+    layers=[1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39]
+    #layers=[29]
     #resolution=(514,513)
 
     errors=[]
     for layer in layers:
         # Read cells (hexagons)
         subdet=None
+        eff_layer=layer
         if layer<29:
             subdet=3
         else:
             subdet=4
-            layer=layer-28
+            eff_layer=layer-28
 
-        print 'layer,subdet: ',layer,subdet
-        cells_d = readGeometry( input_default_file, layer, subdet )
+        print 'layer:%s ,subdet:%s,eff_layer:%s '%(layer,subdet,eff_layer)
+        cells_d = readGeometry( input_default_file, eff_layer, subdet )
         # Read coef
         fname='sq_cells_data/coef_dict_layer_%s_res_%s,%s_len_%s.pkl'%(
                                 layer,resolution[0],resolution[1],edge_length)
@@ -150,8 +151,8 @@ if __name__=='__main__':
         error=compareAreas( cells_d, sq_coef )
         errors.append(error)
 
-        sCells = mappingOnMatrix( cells_d, sq_coef, resolution )
-        plotImage( sCells)
+        #sCells = mappingOnMatrix( cells_d, sq_coef, resolution )
+        #plotImage( sCells)
 
     fig=plt.figure()
     fig.suptitle('Surface Area Error for different layers')
