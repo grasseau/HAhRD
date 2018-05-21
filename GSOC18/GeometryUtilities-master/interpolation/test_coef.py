@@ -72,7 +72,7 @@ def compareAreas( cells_d, sq_coef):
     else:
         print "Surface test ERROR"
 
-    return
+    return abs( (layerArea - squareArea)/layerArea )
 
 # Map the cell coef to a regular grid
 def mappingOnMatrix( cells_d, sq_coef, resolution ):
@@ -122,20 +122,45 @@ def plotImage( sCells ):
 
 if __name__=='__main__':
 
-    layer=1
-    # Read cells (hexagons)
-    cells_d = readGeometry( input_default_file, layer, 3 )
+    #layers=[1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39]
+    layers=[29]
+    resolution=(514,513)
+    edge_length=0.7
 
-    # Read coef
-    coef_filename='sq_cells_data/coef_dict_array_res_444,443_len_0.7.pkl.npy'
-    # fhandle=open(coef_filename,'rb')
-    # sq_coef=pickle.load(fhandle)
-    # fhandle.close()
-    coef_dict_array=np.load(coef_filename)
-    sq_coef=coef_dict_array[layer-1]  #for layer 1
+    errors=[]
+    for layer in layers:
+        # Read cells (hexagons)
+        subdet=None
+        if layer<29:
+            subdet=3
+        else:
+            subdet=4
+            layer=layer-28
 
-    compareAreas( cells_d, sq_coef )
+        cells_d = readGeometry( input_default_file, layer, subdet )
+        # Read coef
+        fname='sq_cells_data/coef_dict_layer_%s_res_%s,%s_len_%s.pkl'%(
+                                layer,resolution[0],resolution[1],edge_length)
+        fhandle=open(fname,'rb')
+        sq_coef=pickle.load(fhandle)
+        fhandle.close()
+        error=compareAreas( cells_d, sq_coef )
+        errors.append(error)
 
-    sCells = mappingOnMatrix( cells_d, sq_coef, resolution )
+        sCells = mappingOnMatrix( cells_d, sq_coef, resolution )
+        plotImage( sCells)
 
-    plotImage( sCells)
+    fig=plt.figure()
+    fig.suptitle('Surface Area Error for different layers')
+
+    ax1=fig.add_subplot(122)
+    ax1.hist(errors)
+    ax1.set_xlabel('Relative Error in Surface area of Mesh and Hex')
+    ax1.set_ylabel('Count')
+
+    ax2=fig.add_subplot(121)
+    ax2.plot(layers,errors,'o')
+    ax2.set_xlabel('layer no')
+    ax2.set_ylabel('Surface Area Error')
+
+    plt.show()

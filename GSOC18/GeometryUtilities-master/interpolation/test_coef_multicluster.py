@@ -86,7 +86,7 @@ def check_event_multicluster_interpolation(event_id,df,sq_cells_dict):
 
     print '#########################################'
     print '>>> Interpolation the event: ',event_id
-    cluster_properties=interpolation_check(all_hits,sq_cells_dict)
+    cluster_properties=interpolation_check(all_hits,sq_cells_dict,event_id)
 
     print '>>> Writing the results to file in multicluster_results folder'
     fname='multicluster_results/event%s.txt'%(event_id)
@@ -101,7 +101,7 @@ def check_event_multicluster_interpolation(event_id,df,sq_cells_dict):
     fhandle.close()
 
 ############ MAIN FUNCTION ##################
-def interpolation_check(all_hits_df,sq_cells_dict,precision_adjust=1e-3):
+def interpolation_check(all_hits_df,sq_cells_dict,event_id,precision_adjust=1e-3):
     '''
     DESCRIPTION:
         This is mainly used to check the validity of the interpolation coef
@@ -221,7 +221,7 @@ def interpolation_check(all_hits_df,sq_cells_dict,precision_adjust=1e-3):
 
     #Plotting
     fig=plt.figure()
-    fig.suptitle('Error (Absolute value) Histograms')
+    fig.suptitle('Error (Absolute value) Histograms Event %s'%(event_id))
 
     #Adding the energy error histogram
     ax1=fig.add_subplot(221)
@@ -264,11 +264,11 @@ if __name__=='__main__':
     sq_cells_dict=readSqCellsDict(sfname)
 
     #Now checking for ~100 events
-    total_events=1
+    total_events=50
     event_ids=np.array(np.squeeze(df.index.tolist()))
 
     #Sampling some random events to interpolate
     choice=np.random.choice(event_ids.shape[0],total_events)
     sample_event_ids=event_ids[choice]
     for i in sample_event_ids:
-        check_event_multicluster_interpolation(12,df,sq_cells_dict)
+        check_event_multicluster_interpolation(i,df,sq_cells_dict)
