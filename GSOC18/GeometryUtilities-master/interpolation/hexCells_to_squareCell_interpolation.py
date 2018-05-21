@@ -43,13 +43,7 @@ def linear_interpolate_hex_to_square(hex_cells_dict,sq_cells_dict,edge_length):
                             { hexid :[((i,j),cf),((i,j),cf)....]
                             }
     '''
-    #Calculating the Resolution (based on exp_edge_length)
-    #Removing the +1 since now distributing by whole bound not the centers
-    res_x=int(np.ceil((max_x-min_x)/exp_edge_length))  #+1 cuz the bound used are center
-    res_y=int(np.ceil((max_y-min_y)/exp_edge_length))  #so, for last two cell only one uinit
-                                                    #area was counnted
-    resolution=(res_x,res_y)
-
+    
     #Calculating the maximum length of any cells
         #(will to used to specify search radius in KD tree)
     print '>>> Calculating the Search Radius'
