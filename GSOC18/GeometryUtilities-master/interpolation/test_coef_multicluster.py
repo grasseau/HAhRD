@@ -1,7 +1,9 @@
 import sys
+import os
 import cPickle as pickle
 import numpy as np
 from scipy.spatial import cKDTree
+import matplotlib.pyplot as plt
 
 import uproot
 import pandas as pd
@@ -12,9 +14,14 @@ executor=concurrent.futures.ThreadPoolExecutor(ncpu*4)
 #Location of the root data file
 dfname='detector_data/hgcalNtuple_electrons_15GeV_n100.root'
 #cfname='sq_cells_data/coef_dict_res_473,473_len_0.7.pkl'
-sfname='sq_cells_data/sq_cells_dict_res_473,473_len_0.7.pkl'
-resolution=(473,473)
+sfname='sq_cells_data/sq_cells_dict_res_514,513_len_0.7.pkl'
+resolution=(514,513)
 edge_length=0.7
+
+#Setting up the results directory
+result_basepath='multicluster_results/'
+if not os.path.exists(result_basepath):
+    os.makedirs(result_basepath)
 
 ############# HELPER FUNCTION ###############
 def readCoefFile(filename):
@@ -56,26 +63,42 @@ def readDataFile(filename):
     cache={}
     df=tree.pandas.df(branches,cache=cache,executor=executor)
 
-    #Selecting hits from a particular event
-    event_id=13
-    for event_id in df.index.tolist():
-        all_hits = pd.DataFrame({name.replace('rechit_',''):df.loc[event_id,name]
-                                for name in branches if 'rechit_' in name })
+    return df
 
-        #Generating the multicluster index
-        cl2d_idx=df.loc[event_id,'rechit_cluster2d']
-        mcl_idx=df.loc[event_id,'cluster2d_multicluster'][cl2d_idx]
+def check_event_multicluster_interpolation(event_id,df,sq_cells_dict):
+    branches=[]
+    branches += ["genpart_gen","genpart_reachedEE","genpart_energy",
+                "genpart_eta","genpart_phi", "genpart_pid","genpart_posx",
+                "genpart_posy","genpart_posz"]
+    branches += ["rechit_x", "rechit_y", "rechit_z", "rechit_energy",
+                "rechit_layer", 'rechit_flags','rechit_cluster2d',
+                'cluster2d_multicluster']
 
-        #Adding it to all hits data frame
-        all_hits['cluster3d'] = pd.Series(mcl_idx, index=all_hits.index)
-        max_mcl_idx=np.max(mcl_idx)
+    all_hits = pd.DataFrame({name.replace('rechit_',''):df.loc[event_id,name]
+                            for name in branches if 'rechit_' in name })
 
-        #print all_hits.head()
-        #print all_hits.dtypes
-        print 'Printing layers greater than 39'
-        print all_hits[all_hits['layer']>39]
+    #Generating the multicluster index
+    cl2d_idx=df.loc[event_id,'rechit_cluster2d']
+    mcl_idx=df.loc[event_id,'cluster2d_multicluster'][cl2d_idx]
 
-    return all_hits,max_mcl_idx
+    #Adding it to all hits data frame
+    all_hits['cluster3d'] = pd.Series(mcl_idx, index=all_hits.index)
+
+    print '#########################################'
+    print '>>> Interpolation the event: ',event_id
+    cluster_properties=interpolation_check(all_hits,sq_cells_dict)
+
+    print '>>> Writing the results to file in multicluster_results folder'
+    fname='multicluster_results/event%s.txt'%(event_id)
+    fhandle=open(fname,'w')
+    fhandle.write('####### Results for event %s ########\n'%(event_id))
+    for key,value in cluster_properties.iteritems():
+        fhandle.write('\ncluster3d: %s \n'%key)
+        #Printing the hex-cell values
+        fhandle.write('initial val: %s,%s,%s,%s\n'%(value[0][0],value[0][1],value[0][2],value[0][3]))
+        #Printing the mesh-cells value
+        fhandle.write('sq_mesh val: %s,%s,%s,%s\n'%(value[1][0],value[1][1],value[1][2],value[1][3]))
+    fhandle.close()
 
 ############ MAIN FUNCTION ##################
 def interpolation_check(all_hits_df,sq_cells_dict,precision_adjust=1e-3):
@@ -116,8 +139,15 @@ def interpolation_check(all_hits_df,sq_cells_dict,precision_adjust=1e-3):
         energy_arr=np.squeeze(layer_hits[['energy']].values)
         cluster3d_arr=np.squeeze(layer_hits[['cluster3d']].values)
 
+        #Reshaping if required
+        if energy_arr.shape==():
+            energy_arr=energy_arr.reshape((-1,))
+            center_arr=center_arr.reshape((-1,2))
+            cluster3d_arr=cluster3d_arr.reshape((-1,))
+
         #Making the center as tuple for searching keys in coef_dict
         print '>>> Tuplizing the center of hits '
+        #print center_arr,energy_arr
         hit_centers=[(center_arr[i,0],center_arr[i,1])
                         for i in range(center_arr.shape[0])]
         hex_centers=coef_dict.keys()
@@ -168,22 +198,77 @@ def interpolation_check(all_hits_df,sq_cells_dict,precision_adjust=1e-3):
                 mesh_list=[mesh_energy,mesh_Wx,mesh_Wy,mesh_Wz]
                 cluster_properties[cluster3d][1]+=mesh_list
 
-
+    energy_diff=[]
+    bary_x_diff=[]
+    bary_y_diff=[]
+    bary_z_diff=[]
     for key,value in cluster_properties.iteritems():
         print '\ncluster3d: ',key
         #Finding the barycenter by dividing with total energy
         value[0][1:]=value[0][1:]/value[0][0]
         value[1][1:]=value[1][1:]/value[1][0]
+
+        #Appending the differece to the list for plotting
+        energy_diff.append(np.abs((value[0][0]-value[1][0])/value[0][0]))
+        bary_x_diff.append(np.abs((value[0][1]-value[1][1])/value[0][1]))
+        bary_y_diff.append(np.abs((value[0][2]-value[1][2])/value[0][2]))
+        bary_z_diff.append(np.abs((value[0][3]-value[1][3])/value[0][3]))
+
         #Printing the hex-cell values
         print 'initial val:',value[0][0],value[0][1],value[0][2],value[0][3]
         #Printing the mesh-cells value
         print 'sq_mesh val:',value[1][0],value[1][1],value[1][2],value[1][3]
 
+    #Plotting
+    fig=plt.figure()
+    fig.suptitle('Error (Absolute value) Histograms')
+
+    #Adding the energy error histogram
+    ax1=fig.add_subplot(221)
+    ax1.set_ylabel('Count')
+    ax1.set_xlabel('Relative Error in Energy')
+    ax1.hist(energy_diff)
+
+    #Adding the Error in barycenter
+    ax2=fig.add_subplot(222)
+    ax2.set_ylabel('Count')
+    ax2.set_xlabel('Relative Error in Barycenter-X')
+    ax2.hist(bary_x_diff)
+
+    ax3=fig.add_subplot(223)
+    ax3.set_ylabel('Count')
+    ax3.set_xlabel('Relative Error in Barycenter-Y')
+    ax3.hist(bary_y_diff)
+
+    ax4=fig.add_subplot(224)
+    ax4.set_ylabel('Count')
+    ax4.set_xlabel('Relative Error in Barycenter-Z')
+    ax4.hist(bary_z_diff)
+
+
+    #plt.title('Absolute Error Histogram')
+    # plt.rcParams["figure.figsize"]=(10,10)
+    # plt.savefig('100.png')
+    # plt.rcParams["figure.figsize"]=(10,200)
+    # plt.savefig('200.png')
+    # plt.rcParams["figure.figsize"]=(200,10)
+    # plt.savefig('500.png')
+    plt.show()
+
+
+    return cluster_properties
 
 if __name__=='__main__':
     #Reading the datafile and coef_file
-    all_hits,max_mcl_idx=readDataFile(dfname)
+    df=readDataFile(dfname)
     sq_cells_dict=readSqCellsDict(sfname)
 
-    #Now checking all the multicluster
-    interpolation_check(all_hits,sq_cells_dict)
+    #Now checking for ~100 events
+    total_events=1
+    event_ids=np.array(np.squeeze(df.index.tolist()))
+
+    #Sampling some random events to interpolate
+    choice=np.random.choice(event_ids.shape[0],total_events)
+    sample_event_ids=event_ids[choice]
+    for i in sample_event_ids:
+        check_event_multicluster_interpolation(12,df,sq_cells_dict)
