@@ -40,10 +40,10 @@ def linear_interpolate_hex_to_square(hex_cells_dict,sq_cells_dict,edge_length):
         coef(unnormalized) : a dictionary which contains the coefficient of overlap
                            for each cells with corresponding sqare cell and
                            fraction stored as:
-                            { hexid :[((i,j),cf),((i,j),cf)....]
+                            { hex_center :[((i,j),cf),((i,j),cf)....]
                             }
     '''
-    
+
     #Calculating the maximum length of any cells
         #(will to used to specify search radius in KD tree)
     print '>>> Calculating the Search Radius'

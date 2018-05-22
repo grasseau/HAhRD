@@ -23,6 +23,12 @@ result_basepath='multicluster_results/'
 if not os.path.exists(result_basepath):
     os.makedirs(result_basepath)
 
+#Global Variable for Errors:
+energy_diff=[]       #for error in energy of multicluster between hex and sq mesh
+bary_x_diff=[]       #for error in x coordinate of barycenter of multicluster
+bary_y_diff=[]       #for error in y coordinate of barycenter of multicluster
+bary_z_diff=[]       #for error in z coordinate of barycenter of multicluster
+
 ############# HELPER FUNCTION ###############
 def readCoefFile(filename):
     fhandle=open(filename,'rb')
@@ -88,17 +94,17 @@ def check_event_multicluster_interpolation(event_id,df,sq_cells_dict):
     print '>>> Interpolation the event: ',event_id
     cluster_properties=interpolation_check(all_hits,sq_cells_dict,event_id)
 
-    print '>>> Writing the results to file in multicluster_results folder'
-    fname='multicluster_results/event%s.txt'%(event_id)
-    fhandle=open(fname,'w')
-    fhandle.write('####### Results for event %s ########\n'%(event_id))
-    for key,value in cluster_properties.iteritems():
-        fhandle.write('\ncluster3d: %s \n'%key)
-        #Printing the hex-cell values
-        fhandle.write('initial val: %s,%s,%s,%s\n'%(value[0][0],value[0][1],value[0][2],value[0][3]))
-        #Printing the mesh-cells value
-        fhandle.write('sq_mesh val: %s,%s,%s,%s\n'%(value[1][0],value[1][1],value[1][2],value[1][3]))
-    fhandle.close()
+    print '>>> Not Writing the results to file in multicluster_results folder'
+    # fname='multicluster_results/event%s.txt'%(event_id)
+    # fhandle=open(fname,'w')
+    # fhandle.write('####### Results for event %s ########\n'%(event_id))
+    # for key,value in cluster_properties.iteritems():
+    #     fhandle.write('\ncluster3d: %s \n'%key)
+    #     #Printing the hex-cell values
+    #     fhandle.write('initial val: %s,%s,%s,%s\n'%(value[0][0],value[0][1],value[0][2],value[0][3]))
+    #     #Printing the mesh-cells value
+    #     fhandle.write('sq_mesh val: %s,%s,%s,%s\n'%(value[1][0],value[1][1],value[1][2],value[1][3]))
+    # fhandle.close()
 
 ############ MAIN FUNCTION ##################
 def interpolation_check(all_hits_df,sq_cells_dict,event_id,precision_adjust=1e-3):
@@ -198,10 +204,10 @@ def interpolation_check(all_hits_df,sq_cells_dict,event_id,precision_adjust=1e-3
                 mesh_list=[mesh_energy,mesh_Wx,mesh_Wy,mesh_Wz]
                 cluster_properties[cluster3d][1]+=mesh_list
 
-    energy_diff=[]
-    bary_x_diff=[]
-    bary_y_diff=[]
-    bary_z_diff=[]
+    # energy_diff=[]
+    # bary_x_diff=[]
+    # bary_y_diff=[]
+    # bary_z_diff=[]
     for key,value in cluster_properties.iteritems():
         print '\ncluster3d: ',key
         #Finding the barycenter by dividing with total energy
@@ -219,31 +225,36 @@ def interpolation_check(all_hits_df,sq_cells_dict,event_id,precision_adjust=1e-3
         #Printing the mesh-cells value
         print 'sq_mesh val:',value[1][0],value[1][1],value[1][2],value[1][3]
 
+
+    return cluster_properties
+
+def plot_error_histogram(energy_diff,bary_x_diff,bary_y_diff,bary_z_diff):
     #Plotting
     fig=plt.figure()
-    fig.suptitle('Error (Absolute value) Histograms Event %s'%(event_id))
+    fig.suptitle('Error (Absolute value) Histograms for %s clusters'%(
+                                                        len(energy_diff)))
 
     #Adding the energy error histogram
     ax1=fig.add_subplot(221)
     ax1.set_ylabel('Count')
     ax1.set_xlabel('Relative Error in Energy')
-    ax1.hist(energy_diff)
+    ax1.hist(energy_diff,bins=50)
 
     #Adding the Error in barycenter
     ax2=fig.add_subplot(222)
     ax2.set_ylabel('Count')
     ax2.set_xlabel('Relative Error in Barycenter-X')
-    ax2.hist(bary_x_diff)
+    ax2.hist(bary_x_diff,bins=50)
 
     ax3=fig.add_subplot(223)
     ax3.set_ylabel('Count')
     ax3.set_xlabel('Relative Error in Barycenter-Y')
-    ax3.hist(bary_y_diff)
+    ax3.hist(bary_y_diff,bins=50)
 
     ax4=fig.add_subplot(224)
     ax4.set_ylabel('Count')
     ax4.set_xlabel('Relative Error in Barycenter-Z')
-    ax4.hist(bary_z_diff)
+    ax4.hist(bary_z_diff,bins=50)
 
 
     #plt.title('Absolute Error Histogram')
@@ -255,20 +266,20 @@ def interpolation_check(all_hits_df,sq_cells_dict,event_id,precision_adjust=1e-3
     # plt.savefig('500.png')
     plt.show()
 
-
-    return cluster_properties
-
 if __name__=='__main__':
     #Reading the datafile and coef_file
     df=readDataFile(dfname)
     sq_cells_dict=readSqCellsDict(sfname)
 
     #Now checking for ~100 events
-    total_events=50
+    total_events=100
     event_ids=np.array(np.squeeze(df.index.tolist()))
 
     #Sampling some random events to interpolate
     choice=np.random.choice(event_ids.shape[0],total_events)
     sample_event_ids=event_ids[choice]
-    for i in sample_event_ids:
-        check_event_multicluster_interpolation(i,df,sq_cells_dict)
+    for i,event in enumerate(sample_event_ids):
+        print i,' out of ',total_events
+        check_event_multicluster_interpolation(event,df,sq_cells_dict)
+
+    plot_error_histogram(energy_diff,bary_x_diff,bary_y_diff,bary_z_diff)
