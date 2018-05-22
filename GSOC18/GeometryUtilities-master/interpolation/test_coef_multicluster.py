@@ -28,6 +28,9 @@ energy_diff=[]       #for error in energy of multicluster between hex and sq mes
 bary_x_diff=[]       #for error in x coordinate of barycenter of multicluster
 bary_y_diff=[]       #for error in y coordinate of barycenter of multicluster
 bary_z_diff=[]       #for error in z coordinate of barycenter of multicluster
+event_mcl=[]         # for tracking the events-mcl pair which have
+                                #error in properties more than 2%
+                                #cuz all the error should have been same
 
 ############# HELPER FUNCTION ###############
 def readCoefFile(filename):
@@ -219,6 +222,7 @@ def interpolation_check(all_hits_df,sq_cells_dict,event_id,precision_adjust=1e-3
         bary_x_diff.append(np.abs((value[0][1]-value[1][1])/value[0][1]))
         bary_y_diff.append(np.abs((value[0][2]-value[1][2])/value[0][2]))
         bary_z_diff.append(np.abs((value[0][3]-value[1][3])/value[0][3]))
+        event_mcl.append((event_id,key))
 
         #Printing the hex-cell values
         print 'initial val:',value[0][0],value[0][1],value[0][2],value[0][3]
@@ -272,14 +276,19 @@ if __name__=='__main__':
     sq_cells_dict=readSqCellsDict(sfname)
 
     #Now checking for ~100 events
-    total_events=100
+    total_events=2
     event_ids=np.array(np.squeeze(df.index.tolist()))
 
     #Sampling some random events to interpolate
     choice=np.random.choice(event_ids.shape[0],total_events)
     sample_event_ids=event_ids[choice]
+    #sample_event_ids=[3,74]
     for i,event in enumerate(sample_event_ids):
         print i,' out of ',total_events
         check_event_multicluster_interpolation(event,df,sq_cells_dict)
 
     plot_error_histogram(energy_diff,bary_x_diff,bary_y_diff,bary_z_diff)
+
+    for i in  range(len(event_mcl)):
+        if (bary_y_diff[i]>0.02 or bary_x_diff[i]>0.02):#1e-4:
+            print event_mcl[i],bary_y_diff[i],bary_x_diff[i]

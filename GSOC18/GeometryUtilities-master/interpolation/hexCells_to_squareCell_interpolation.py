@@ -150,13 +150,6 @@ def _get_square_cells(resolution,layer_bounds,edge_length,save_sq_cells):
             This dictionary is saved as pickle file in a new directory created
             automatically in current directory named as 'sq_cells_data'
     '''
-    #Remove during cleanup
-    # #Finding the dimension of each cells
-    # #now n-1 is not used since we are doing on whole area not centers
-    # #-1 could give more stability (THINK)
-    # x_length=(max_x-min_x)/(resolution[0]-1) #n-1 is used like in linear density
-    # y_length=(max_y-min_y)/(resolution[1]-1)
-
     #Creating empty array to store
     #sq_cells=np.empty(resolution,dtype=np.object)
     sq_cells={}
@@ -302,8 +295,6 @@ def plot_hex_to_square_map(coef,hex_cells_dict,sq_cells_dict):
             Currently no output from this function
     '''
     t0=datetime.datetime.now()
-    # fig=plt.figure()
-    # ax1=fig.add_subplot(111)
     print '>>> Calculating the area of smallar cell for filtering'
     filter_hex_cells=([c.vertices.area for c in hex_cells_dict.values()
                         if len(list(c.vertices.exterior.coords))==7])
@@ -340,10 +331,6 @@ def plot_hex_to_square_map(coef,hex_cells_dict,sq_cells_dict):
             ax1.add_patch(patch)
         t1=datetime.datetime.now()
         print 'one hex cell overlap complete in: ',t1-t0,' sec\n'
-        t0=t1
-        #ax1.set_xlim(-160, 160)
-        #ax1.set_ylim(-160, 160)
-        #ax1.set_aspect(1)
         plt.show()
 
 def compute_energy_map(hex_cells_dict,coef,resolution,event_dataframe,
@@ -352,11 +339,12 @@ def compute_energy_map(hex_cells_dict,coef,resolution,event_dataframe,
     DESCRIPTION:
         This function will finally map the energy deposit recorded in the
         hexagonal cell to the corresponding mapped square cells
-        proportional to the coefficient of overlap calculated earlier
-        using the function linear_interpolate_hex_to_square.
+        proportional to the coefficient of overlap calculated earlier.
 
-        The output will then serve as an image to the CNN for futhur learning
-        energy->particles mapping.
+        This function will process the whole event at once and generate
+        as 3D map of the  energy deposit in the detector for that particular
+        event.The output will then serve as an image to the CNN for futhur
+        learning energy->particles mapping.
     CODE COMPLEXITY:
         O(number of hits*log(number of hex cells))
     USAGE:

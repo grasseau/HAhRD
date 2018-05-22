@@ -125,8 +125,8 @@ def plotImage( sCells ):
 
 if __name__=='__main__':
 
-    layers=[1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39]
-    #layers=[29]
+    #layers=[1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39]
+    layers=[29]
     #resolution=(514,513)
 
     errors=[]
@@ -136,9 +136,12 @@ if __name__=='__main__':
         eff_layer=layer
         if layer<29:
             subdet=3
-        else:
+        elif layer<41:
             subdet=4
             eff_layer=layer-28
+        else:
+            subdet=5
+            eff_layer=layer-28-12
 
         print 'layer:%s ,subdet:%s,eff_layer:%s '%(layer,subdet,eff_layer)
         cells_d = readGeometry( input_default_file, eff_layer, subdet )

@@ -45,7 +45,7 @@ def generate_interpolation(geometry_fname,edge_length=0.7):
                                     coef of each layer in form:
                                     [coef_layer1,coef_layer2......]
     '''
-    no_layers=40                  #[28:EE + 12:FH + 12:BH]
+    no_layers=52                  #[28:EE + 12:FH + 12:BH]
 
     #Generating the Common Mesh Grid to be used for all the layers
     print '>>> Generating Common Mesh Grid for All Layers'
@@ -108,6 +108,7 @@ def generate_interpolation(geometry_fname,edge_length=0.7):
     return coef_dict_array
 
 def generate_image(hits_data_fname,coef_dict_array_fname):
+    #ONGOING
     '''
     DESCRIPTION:
         This funtion will read the dataframe and generate the "image" for futher
@@ -128,7 +129,7 @@ def generate_image(hits_data_fname,coef_dict_array_fname):
 
     #Initializing the numpy array to hold 4D data
     dataset=np.empty(())
-   
+
 
 
 ################ MAIN FUNCTION DEFINITION ###################
@@ -152,7 +153,8 @@ def readGeometry( input_file,  layer, subdet ):
     t0 = datetime.datetime.now()
     treename = 'hgcaltriggergeomtester/TreeCells'
     cells = read_geometry(filename=input_file, treename=treename,
-              subdet=subdet, layer=layer, wafer=-1)
+              subdet=5, layer=1, wafer=-1)
+    print cells
     cells_d = dict([(c.id, c) for c in cells])
     t1 = datetime.datetime.now()
     print 'Cells read: number=', len(cells), ', time=', t1-t0
@@ -213,18 +215,6 @@ def readDataFile(filename):
     cache={}
     df=tree.pandas.df(branches,cache=cache,executor=executor)
 
-    #Testings
-    # event_id=12
-    # cluster=df.loc[event_id,'rechit_cluster2d']
-    # mcluster=df.loc[event_id,'cluster2d_multicluster']
-    # layer=df.loc[event_id,'rechit_layer']
-    #
-    # print cluster.shape,mcluster.shape,layer.shape
-    # for i in range(layer.shape[0]):
-    #     print layer[i],cluster[i]
-    # for i in range(mcluster.shape[0]):
-    #     print mcluster[i]
-
 
 if __name__=='__main__':
     import sys
@@ -252,9 +242,8 @@ if __name__=='__main__':
     #     parser.print_help()
     #     print 'Error: Missing input data file name'
     #     sys.exit(1)
-    
+
     #Calling the driver function
     generate_interpolation(opt.input_file,edge_length=0.7)
 
     #data_df= readDataFile(opt.data_file)
-
