@@ -153,8 +153,7 @@ def readGeometry( input_file,  layer, subdet ):
     t0 = datetime.datetime.now()
     treename = 'hgcaltriggergeomtester/TreeCells'
     cells = read_geometry(filename=input_file, treename=treename,
-              subdet=5, layer=1, wafer=-1)
-    print cells
+              subdet=subdet, layer=layer, wafer=-1)
     cells_d = dict([(c.id, c) for c in cells])
     t1 = datetime.datetime.now()
     print 'Cells read: number=', len(cells), ', time=', t1-t0
