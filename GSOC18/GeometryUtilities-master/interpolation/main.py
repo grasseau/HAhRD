@@ -15,7 +15,10 @@ data_default_file = 'detector_data/hgcalNtuple_electrons_15GeV_n100.root'
 #Data File imports
 import uproot
 import pandas as pd
+
+#Impoeting the multiprocessing libraries
 import concurrent.futures,multiprocessing
+from functools import partial
 ncpu=multiprocessing.cpu_count()
 executor=concurrent.futures.ThreadPoolExecutor(ncpu*4)
 
@@ -45,7 +48,7 @@ def generate_interpolation(geometry_fname,edge_length=0.7):
                                     coef of each layer in form:
                                     [coef_layer1,coef_layer2......]
     '''
-    no_layers=52                  #[28:EE + 12:FH + 12:BH]
+    no_layers=10                  #[28:EE + 12:FH + 12:BH]
 
     #Generating the Common Mesh Grid to be used for all the layers
     print '>>> Generating Common Mesh Grid for All Layers'
@@ -60,52 +63,61 @@ def generate_interpolation(geometry_fname,edge_length=0.7):
 
     #Generating the Overlapping Coefficient
     print '>>> Generating Overlapping Coefficient'
-    coef_dict_array=np.empty((no_layers,),dtype=np.object)
+    #coef_dict_array=np.empty((no_layers,),dtype=np.object)
 
+    #Starting to make different process for interpolation of different layers
     talpha=datetime.datetime.now()
-    for layer in range(1,no_layers+1):
+    layers=range(1,no_layers+1)
+    with multiprocessing.Manager() as manager:
+        print '>>> Creating Shared Sq_cells_dict'
+        #Creating a shared dict of square cells among all the process
+        shared_sq_cells_dict=manager.dict(sq_cells_dict)
 
-        #Reading the geometry file
-        subdet,eff_layer=get_subdet(layer)
-        hex_cells_dict=readGeometry(geometry_fname,eff_layer,subdet)
+        #Creating the process
+        print '>>> Starting the multiprocessing with %s process at a time'%(ncpu-2)
+        process_pool=multiprocessing.Pool(processes=ncpu-2)
+        #Now doing Map-Reduce to simultaneously run the processes
+        process_pool.map(partial(interpolate_layer,
+                            geometry_fname,shared_sq_cells_dict,edge_length,
+                            resolution),layers)
 
-        #Calculating the sq_coef (unnormalized)
-        sq_coef_dict=linear_interpolate_hex_to_square(hex_cells_dict,
-                                                sq_cells_dict,edge_length)
-
-        #Saving the sq_coef for this layer in array
-        coef_dict_array[layer-1]=sq_coef_dict
-        print 'Done for Layer:%s'%(layer)
-
-        #Visual Consistency Check
-        # print 'Checking for Consistency:'
-        # sq_filename='sq_cells_data/sq_cells_dict_res_%s,%s_len_%s.pkl'%(
-        #                             resolution[0],resolution[1],edge_length)
-        # fhandle=open(sq_filename,'rb')
-        # sq_cells_dict=pickle.load(fhandle)
-        # fhandle.close()
-        # plot_hex_to_square_map(sq_coef_dict,hex_cells_dict,sq_cells_dict)
-
-        #Saving the coef_dict_array as a pickle
-        #(h5 formats are more memory efficient)
-        print '>>> Pickling the coef_dict'
-        coef_filename='sq_cells_data/coef_dict_layer_%s_res_%s,%s_len_%s.pkl'%(
-                                    layer,resolution[0],resolution[1],edge_length)
-        t0=datetime.datetime.now()
-        fhandle=open(coef_filename,'wb')
-        pickle.dump(sq_coef_dict,fhandle,protocol=pickle.HIGHEST_PROTOCOL)
-        fhandle.close()
-        t1=datetime.datetime.now()
-        print 'Pickling completed in: ',t1-t0,' sec\n'
-
-    #Saving the numpy array
-    print '>>> Saving the Numpy array of dict'
-    coef_filename='sq_cells_data/coef_dict_array_res_%s,%s_len_%s.pkl'%(
-                                resolution[0],resolution[1],edge_length)
-    np.save(coef_filename,coef_dict_array)
+    #Saving the numpy array(Remove in cleanup)
+    # print '>>> Saving the Numpy array of dict'
+    # coef_filename='sq_cells_data/coef_dict_array_res_%s,%s_len_%s.pkl'%(
+    #                             resolution[0],resolution[1],edge_length)
+    # np.save(coef_filename,coef_dict_array)
     tbeta=datetime.datetime.now()
     print '>>>>> TASK COMPLETED in: ',tbeta-talpha
-    return coef_dict_array
+
+def interpolate_layer(geometry_fname,sq_cells_dict,edge_length,resolution,layer):
+    #Reading the geometry file
+    subdet,eff_layer=get_subdet(layer)
+    hex_cells_dict=readGeometry(geometry_fname,eff_layer,subdet)
+
+    #Calculating the sq_coef (unnormalized)
+    sq_coef_dict=linear_interpolate_hex_to_square(hex_cells_dict,
+                                            sq_cells_dict,edge_length)
+    print 'Done for Layer:%s'%(layer)
+
+    #Visual Consistency Check
+    # print 'Checking for Consistency:'
+    # sq_filename='sq_cells_data/sq_cells_dict_res_%s,%s_len_%s.pkl'%(
+    #                             resolution[0],resolution[1],edge_length)
+    # fhandle=open(sq_filename,'rb')
+    # sq_cells_dict=pickle.load(fhandle)
+    # fhandle.close()
+    # plot_hex_to_square_map(sq_coef_dict,hex_cells_dict,sq_cells_dict)
+
+    #Saving the coef_dict_array as a pickle
+    print '>>> Pickling the coef_dict'
+    coef_filename='sq_cells_data/coef_dict_layer_%s_res_%s,%s_len_%s.pkl'%(
+                                layer,resolution[0],resolution[1],edge_length)
+    t0=datetime.datetime.now()
+    fhandle=open(coef_filename,'wb')
+    pickle.dump(sq_coef_dict,fhandle,protocol=pickle.HIGHEST_PROTOCOL)
+    fhandle.close()
+    t1=datetime.datetime.now()
+    print 'Pickling completed in: ',t1-t0,' sec\n'
 
 def generate_image(hits_data_fname,coef_dict_array_fname):
     #ONGOING
