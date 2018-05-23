@@ -48,7 +48,7 @@ def generate_interpolation(geometry_fname,edge_length=0.7):
                                     coef of each layer in form:
                                     [coef_layer1,coef_layer2......]
     '''
-    no_layers=10                  #[28:EE + 12:FH + 12:BH]
+    no_layers=40                  #[28:EE + 12:FH + 12:BH]
 
     #Generating the Common Mesh Grid to be used for all the layers
     print '>>> Generating Common Mesh Grid for All Layers'
@@ -63,7 +63,6 @@ def generate_interpolation(geometry_fname,edge_length=0.7):
 
     #Generating the Overlapping Coefficient
     print '>>> Generating Overlapping Coefficient'
-    #coef_dict_array=np.empty((no_layers,),dtype=np.object)
 
     #Starting to make different process for interpolation of different layers
     talpha=datetime.datetime.now()
@@ -81,11 +80,6 @@ def generate_interpolation(geometry_fname,edge_length=0.7):
                             geometry_fname,shared_sq_cells_dict,edge_length,
                             resolution),layers)
 
-    #Saving the numpy array(Remove in cleanup)
-    # print '>>> Saving the Numpy array of dict'
-    # coef_filename='sq_cells_data/coef_dict_array_res_%s,%s_len_%s.pkl'%(
-    #                             resolution[0],resolution[1],edge_length)
-    # np.save(coef_filename,coef_dict_array)
     tbeta=datetime.datetime.now()
     print '>>>>> TASK COMPLETED in: ',tbeta-talpha
 
