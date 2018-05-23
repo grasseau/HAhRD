@@ -22,7 +22,7 @@ from scipy import misc
 #input_default_file = '/data_CMS/cms/grasseau/HAhRD/test_triggergeom.root'
 input_default_file='geometry_data/test_triggergeom.root'
 #This need to be manually entered
-resolution = (514,513)
+resolution = (452,452)
 edge_length=0.7
 
 ################ DRIVER FUNCTION DEFINITION ###################
@@ -126,7 +126,7 @@ def plotImage( sCells ):
 if __name__=='__main__':
 
     #layers=[1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39]
-    layers=[29]
+    layers=[1,3,5,7,9]
     #resolution=(514,513)
 
     errors=[]
@@ -154,8 +154,8 @@ if __name__=='__main__':
         error=compareAreas( cells_d, sq_coef )
         errors.append(error)
 
-        #sCells = mappingOnMatrix( cells_d, sq_coef, resolution )
-        #plotImage( sCells)
+        sCells = mappingOnMatrix( cells_d, sq_coef, resolution )
+        plotImage( sCells)
 
     fig=plt.figure()
     fig.suptitle('Surface Area Error for different layers')
