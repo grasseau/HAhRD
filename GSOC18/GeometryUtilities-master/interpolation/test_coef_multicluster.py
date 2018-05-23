@@ -218,10 +218,10 @@ def interpolation_check(all_hits_df,sq_cells_dict,event_id,precision_adjust=1e-3
         value[1][1:]=value[1][1:]/value[1][0]
 
         #Appending the differece to the list for plotting
-        energy_diff.append(np.abs((value[0][0]-value[1][0])/value[0][0]))
-        bary_x_diff.append(np.abs((value[0][1]-value[1][1])/value[0][1]))
-        bary_y_diff.append(np.abs((value[0][2]-value[1][2])/value[0][2]))
-        bary_z_diff.append(np.abs((value[0][3]-value[1][3])/value[0][3]))
+        energy_diff.append(np.abs((value[0][0]-value[1][0])))
+        bary_x_diff.append(np.abs((value[0][1]-value[1][1])))
+        bary_y_diff.append(np.abs((value[0][2]-value[1][2])))
+        bary_z_diff.append(np.abs((value[0][3]-value[1][3])))
         event_mcl.append((event_id,key))
 
         #Printing the hex-cell values
@@ -282,7 +282,7 @@ if __name__=='__main__':
     #Sampling some random events to interpolate
     choice=np.random.choice(event_ids.shape[0],total_events)
     sample_event_ids=event_ids[choice]
-    #sample_event_ids=[3,74]
+    #sample_event_ids=[18]
     for i,event in enumerate(sample_event_ids):
         print i,' out of ',total_events
         check_event_multicluster_interpolation(event,df,sq_cells_dict)
