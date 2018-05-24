@@ -241,23 +241,23 @@ def plot_error_histogram(energy_diff,bary_x_diff,bary_y_diff,bary_z_diff):
     #Adding the energy error histogram
     ax1=fig.add_subplot(221)
     ax1.set_ylabel('Count')
-    ax1.set_xlabel('Relative Error in Energy')
+    ax1.set_xlabel('Absolute Diff in Energy')
     ax1.hist(energy_diff,bins=50)
 
     #Adding the Error in barycenter
     ax2=fig.add_subplot(222)
     ax2.set_ylabel('Count')
-    ax2.set_xlabel('Relative Error in Barycenter-X')
+    ax2.set_xlabel('Absolute Diff in Barycenter-X')
     ax2.hist(bary_x_diff,bins=50)
 
     ax3=fig.add_subplot(223)
     ax3.set_ylabel('Count')
-    ax3.set_xlabel('Relative Error in Barycenter-Y')
+    ax3.set_xlabel('Absolute Diff in Barycenter-Y')
     ax3.hist(bary_y_diff,bins=50)
 
     ax4=fig.add_subplot(224)
     ax4.set_ylabel('Count')
-    ax4.set_xlabel('Relative Error in Barycenter-Z')
+    ax4.set_xlabel('Absolute Diff in Barycenter-Z')
     ax4.hist(bary_z_diff,bins=50)
 
 
@@ -276,12 +276,12 @@ if __name__=='__main__':
     sq_cells_dict=readSqCellsDict(sfname)
 
     #Now checking for ~100 events
-    total_events=2
+    total_events=100
     event_ids=np.array(np.squeeze(df.index.tolist()))
 
     #Sampling some random events to interpolate
-    choice=np.random.choice(event_ids.shape[0],total_events)
-    sample_event_ids=event_ids[choice]
+    #choice=np.random.choice(event_ids.shape[0],total_events)
+    sample_event_ids=event_ids
     #sample_event_ids=[18]
     for i,event in enumerate(sample_event_ids):
         print i,' out of ',total_events

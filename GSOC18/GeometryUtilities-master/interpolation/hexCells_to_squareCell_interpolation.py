@@ -333,6 +333,8 @@ def plot_hex_to_square_map(coef,hex_cells_dict,sq_cells_dict):
         print 'one hex cell overlap complete in: ',t1-t0,' sec\n'
         plt.show()
 
+################'IMAGE' CREATION FUNCTION###############
+
 def compute_energy_map(hex_cells_dict,coef,resolution,event_dataframe,
                         event_id,layer,precision_adjust=1e-5):
     '''
