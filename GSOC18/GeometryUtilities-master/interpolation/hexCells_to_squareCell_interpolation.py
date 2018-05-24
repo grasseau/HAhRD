@@ -19,9 +19,14 @@ from sq_Cells import sq_Cells
 
 #################Global Variables#######################
 dtype=np.float64            #data type of any numpy array created
+#For saving the interpolation coefficents and sq_cells data
 sq_cells_basepath='sq_cells_data/'
 if not os.path.exists(sq_cells_basepath):
     os.makedirs(sq_cells_basepath)
+#For saving the "image" after interpolation of hits
+image_basepath='image_data/'
+if not os.path.exists(image_basepath):
+    os.makedirs(image_basepath)
 
 #################Function Definition####################
 def linear_interpolate_hex_to_square(hex_cells_dict,sq_cells_dict,edge_length):
@@ -334,33 +339,41 @@ def plot_hex_to_square_map(coef,hex_cells_dict,sq_cells_dict):
         plt.show()
 
 ################'IMAGE' CREATION FUNCTION###############
+def readCoefFile(filename):
+    fhandle=open(filename,'rb')
+    coef_dict=pickle.load(fhandle)
+    fhandle.close()
 
-def compute_energy_map(hex_cells_dict,coef,resolution,event_dataframe,
-                        event_id,layer,precision_adjust=1e-5):
+    return coef_dict
+
+
+def compute_energy_map(all_event_hits,resolution,event_start_no,event_stride=8
+                                ,no_layers=40,precision_adjust=1e-3):
     '''
     DESCRIPTION:
         This function will finally map the energy deposit recorded in the
         hexagonal cell to the corresponding mapped square cells
         proportional to the coefficient of overlap calculated earlier.
+        Multiprocessing Functionality could be added later if speed
+        remains an issue.
 
-        This function will process the whole event at once and generate
-        as 3D map of the  energy deposit in the detector for that particular
-        event.The output will then serve as an image to the CNN for futhur
+        This function will interpolate the a minibatch of events dataframe
+        and will generate a dataset ready for CNN.
+        The output will then serve as an image to the CNN for futhur
         learning energy->particles mapping.
     CODE COMPLEXITY:
-        O(number of hits*log(number of hex cells))
+
     USAGE:
         INPUT:
-            hex_cells_dict  : the dictionary of hexagonal cells from the
-                                input detector geometry.
-            coef            : the mapping coefficient for cells in the required
-                                layer specified by layer number
-            resolution      : the square grid resolution for generating "image"
-            event_dataframe : the pandas event dataframe read from root file
-                                using the uproot library
-            event_id        : could be a list of events for which to interpolate
-                                (currently will support one event)
-            layer           : the layer of which we are mapping the cells
+            all_event_hits  : the dataframe containing all the rechits from
+                                all the events.
+            resolution      : the current resolution of the interpolation mesh
+            event_start_no  : the starting point of event number to create
+                                minibatches.
+            event_stride    : the size of minibatch to generate
+            no_layers       : the total number of layers to interpolate upto
+                                (current default is 40 since that much coef is
+                                available to us right now)
             precision_adjust: to take into account that the data file of hgcal
                                 hits are haveing rounded/low precision
                                 position values. So searching the exact point
@@ -371,64 +384,69 @@ def compute_energy_map(hex_cells_dict,coef,resolution,event_dataframe,
                                 (we should implement it for all the layers here
                                 itself.and may be for all the event here later)
     '''
-    #Projecting the dataframe for the required attributes
-    print '>>> Projecting required attributes'
-    rechits_attributes=["rechit_x", "rechit_y", "rechit_z",
-                    "rechit_energy","rechit_layer", 'rechit_flags']
-    project_dict={name.replace('rechit_',''):
-                event_dataframe.loc[event_id,name] for name in rechits_attributes}
-    all_hits=pd.DataFrame(project_dict)
+    #Declaring the image array
+    energy_map=np.zeros((event_stride,resolution[0],resolution[1],no_layers),dtype=dtype)
 
-    #Selection of rows which belong to the required layer
-    print '>>> Selecting the rows belonging to layer: %s'%(layer)
-    all_hits_layer=all_hits[all_hits['layer']==layer]
-    print all_hits_layer.head()
-    print all_hits_layer.dtypes
+    #Starting to interpolate layer by layer for all the events
+    layers=range(1,no_layers+1)
+    for layer in layers:
+        #Loading the interpolation coef for this layer
+        print '>>> Reading the layer %s interpolation coefficient'%(layer)
+        coef_filename='sq_cells_data/coef_dict_layer_%s_res_%s,%s_len_%s.pkl'%(
+                                    layer,resolution[0],resolution[1],edge_length)
+        coef_dict=readCoefFile(coef_filename)
 
-    #Getting the center of cells which have hots in that layer
-    center_arr=all_hits_layer[['x','y']].values
-    energy_arr=all_hits_layer['energy'].values
-    print 'The datatype of center array is %s'%(center_arr.dtype)
+        #Making the KD Tree for the hexagonal cells
+        print '>>> Building the tree of Hexagonal cells for searching'
+        hex_centers=coef_dict.keys()
+        hex_tree=cKDTree(hex_centers,balanced_tree=True)
 
-    #Making the id center of each cell as tuple
-    print '>>> Tuplizing the center of hits to make KD-Tree'
-    hit_centers=[(center_arr[i,0],center_arr[i,1])
-                    for i in range(center_arr.shape[0])]
+        #Now we will iterate the all the events
+        events=range(event_start_no,event_start_no+event_stride)
+        for event in events:
+            print '>>> Interpolating for Event:%s',%(event)
+            #Retreiving the data for that event
+            hit_layer_arr=all_event_hits.loc[event,'layer']
+            #Filter out the current layer's data
+            layer_mask=hit_layer_arr==layer
+            hit_energy_arr=all_event_hits.loc[event,'energy'][layer_mask]
+            hit_x_arr=all_event_hits.loc[event,'x'][layer_mask]
+            hit_y_arr=all_event_hits.loc[event,'y'][layer_mask]
 
-    print '>>> Tuplizing the hexagonal cells center for efficient search'
-    #order matters here since our result of query will be indices
-    hex_cells_list=hex_cells_dict.values()
-    hex_centers=[np.float32(cell.center.coords[0]).tolist()
-                        for cell in hex_cells_list]
-    hex_tree=cKDTree(hex_centers,balanced_tree=True)
+            #Tuplizing the center of hit to search its corresponding hex-cell
+            hit_centers=[(hit_x_arr[i],hit_y_arr[i])
+                            for i in range(hit_energy_arr.shape[0])]
+            #Querying the KDTree for corresponding cells
+            indices=hex_tree.query_ball_point(hit_centers,r=precision_adjust)
 
-    #Now querying the tree to get the corresponding cell to the
-    #hit, search for the exact same point so r/distance=0
-    #This will speed up the searching from N^2 to NlogN
-    print '>>> querying the hex_cell_center_tree with the hit_centers'
-    #O(hits*log(#hex_cells))
-    indices=hex_tree.query_ball_point(hit_centers,r=precision_adjust)
-    #print indices
+            #Now iterating over all the hits of this layer in this event
+            for hit_id in range(hit_energy_arr.shape[0]):
+                #Accquiring the hexagonal cell
+                hex_cell_index=indices[hit_id]
+                if not len(hex_cell_index)==1:
+                    print 'Multiple/No Hex Cell Matching with hit cell'
+                    sys.exit(1)
+                hex_cell_center=hex_centers[hex_cell_index[0]]
+                overlaps=coef_dict[hex_cell_center]
 
-    #FINALLY INTERPOLATING!!
-    print '>>> Interpolating the hit Energy finally to square mesh'
-    #Initializing the energy map array
-    energy_map=np.zeros(resolution,dtype=dtype)
-    for hit_id in range(energy_arr.shape[0]): #Complexity: O(#hits)
-        hex_cell_index=indices[hit_id]
-        if not len(hex_cell_index)==1:
-            print 'Multiple/No Hex Cell Matching with hit cell'
-            sys.exit(1)
-            continue
-        hex_cell=hex_cells_list[hex_cell_index[0]]
-        #print np.float32(hex_cell.center.coords[0]).tolist(),hit_centers[hit_id]
-        overlaps=coef[hex_cell.id]  #O(1) retreival
-        for overlap in overlaps:    #O(1) constant due to our choice of grid res
-            i,j=overlap[0]  #getting the sq_cell indices/id
-            #now distributing the energy according to fraction of overlap
-            energy_map[i,j]+=overlap[1]*energy_arr[hit_id]
+                #Performing the interpolation
+                hit_energy=hit_energy_arr[hit_id]
+                norm_coef=np.sum([overlap[1] for overlap in overlaps])
+                for overlap in overlaps:
+                    #Calculating the interpolated/mesh energy for each overlap
+                    i,j=overlap[0]  #index of square cell
+                    weight=overlap[1]/norm_coef
+                    mesh_energy=hit_energy*weight
 
-    plt.imshow(energy_map)
-    plt.colorbar()
-    plt.show()
+                    example_idx=event-event_start_no
+                    energy_map[example_idx,i,j,layer]+=mesh_energy
+
+    #We could save the minibatch alternatively here
+    #but we would be combining the input data as well.
+    #(so better saving will be done later). Hust numpy save done here
+    image_filename=image_basepath+'image%sbatchsize%s'%(event_start_no,event_stride)
+    fhandle=open(image_filename)
+    np.save(energy_map)
+    fhandle.close()
+    
     return energy_map

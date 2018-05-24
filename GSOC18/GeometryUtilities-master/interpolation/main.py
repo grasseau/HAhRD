@@ -113,7 +113,7 @@ def interpolate_layer(geometry_fname,sq_cells_dict,edge_length,resolution,layer)
     t1=datetime.datetime.now()
     print 'Pickling completed in: ',t1-t0,' sec\n'
 
-def generate_image(hits_data_fname,coef_dict_array_fname):
+def generate_image(all_event_hits,resolution):
     #ONGOING
     '''
     DESCRIPTION:
@@ -131,7 +131,7 @@ def generate_image(hits_data_fname,coef_dict_array_fname):
     #Some of the geometry metadata (will be constant)
     no_layers=52
     #Converting the root file to a data frame
-    hits_df=readDataFile(hits_data_filename)
+    all_event_hits=readDataFile(hits_data_filename)
 
     #Initializing the numpy array to hold 4D data
     dataset=np.empty(())
@@ -195,7 +195,7 @@ def get_subdet(layer):
                                                             layer,eff_layer)
     return subdet,eff_layer
 
-def readDataFile(filename):
+def readDataFile_hits(filename):
     '''
     DESCRIPTION:
         This function will read the root file which contains the simulated
@@ -206,8 +206,11 @@ def readDataFile(filename):
     USAGE:
         INPUT:
             filename    : the name of root file
+            query_string: this will be used to filter out the events like
+                            selecting the hits in EE part with certain energy etc.
         OUTPUT:
             df          : the pandas dataframe of the data in root file
+                            with only the recorded hits to convert to image
     '''
     tree=uproot.open(filename)['ana/hgc']
     branches=[]
@@ -219,6 +222,26 @@ def readDataFile(filename):
                 'cluster2d_multicluster']
     cache={}
     df=tree.pandas.df(branches,cache=cache,executor=executor)
+
+    #Projecting the dataframe for the required attributes
+    print '>>> Projecting required attributes of hits'
+    rechits_attributes=["rechit_x", "rechit_y", "rechit_z",
+                    "rechit_energy","rechit_layer", 'rechit_flags']
+    all_event_hits=df[rechits_attributes]
+    #Renaming the attribute in short form
+    col_names={name:name.replace('rechit_','') for name in rechits_attributes}
+    all_event_hits.rename(col_names,inplace=True,axis=1)
+
+    #Do the Filtering here only no need to do it each time for each event
+
+    #Printing for sanity check
+    print all_event_hits.head()
+    print all_event_hits.dtypes
+    # print all_event_hits.loc[0,'energy']
+    # print type(all_event_hits.loc[0,'energy'])
+    # print all_event_hits.loc[0,'energy'].shape
+
+    return all_event_hits
 
 
 if __name__=='__main__':
@@ -249,6 +272,6 @@ if __name__=='__main__':
     #     sys.exit(1)
 
     #Calling the driver function
-    generate_interpolation(opt.input_file,edge_length=0.7)
+    #generate_interpolation(opt.input_file,edge_length=0.7)
 
-    #data_df= readDataFile(opt.data_file)
+    data_df= readDataFile_hits(opt.data_file)
