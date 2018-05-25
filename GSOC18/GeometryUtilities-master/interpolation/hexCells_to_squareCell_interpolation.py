@@ -339,12 +339,30 @@ def plot_hex_to_square_map(coef,hex_cells_dict,sq_cells_dict):
         plt.show()
 
 ################'IMAGE' CREATION FUNCTION###############
-def readCoefFile(filename):
+def _readCoefFile(filename):
     fhandle=open(filename,'rb')
     coef_dict=pickle.load(fhandle)
     fhandle.close()
 
     return coef_dict
+
+def _get_hit_layers(all_event_hits,event_start_no,event_stride):
+    '''
+    DESCRIPTION:
+        This function will collect the set of all the layers which have hits in
+        to be interpolated events.
+    INPUT:
+
+    OUTPUT:
+        layer_set:  the set of hayers which have hits in any of the events
+    '''
+    layers=np.array([],dtype=np.int64)
+    for event in range(event_start_no,event_start_no+event_stride):
+        _layers=np.unique(all_event_hits.loc[event,'layer'])
+        layers=np.append(layers,_layers)
+
+    layers=np.unique(layers)
+    return layers.tolist()
 
 
 def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
@@ -382,18 +400,34 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
             energy_map      : a numpy array containing the map/interpolation
                                 of a minibatch of event.
     '''
+    #For logical ERROR check
+    # event_energy_arr=np.zeros((event_stride,),dtype=dtype)
+    # mesh_energy_arr=np.zeros((event_stride,),dtype=dtype)
+    # event_bary_x_arr=np.zeros((event_stride,),dtype=dtype)
+    # mesh_bary_x_arr=np.zeros((event_stride,),dtype=dtype)
+    # event_bary_y_arr=np.zeros((event_stride,),dtype=dtype)
+    # mesh_bary_y_arr=np.zeros((event_stride,),dtype=dtype)
+    #
+    # sq_cells_filename='sq_cells_data/sq_cells_dict_res_%s,%s_len_%s.pkl'%(
+    #                             resolution[0],resolution[1],edge_length)
+    # sq_cells_dict=_readCoefFile(sq_cells_filename)
+
+
     #Declaring the image array
     energy_map=np.zeros((event_stride,resolution[0],resolution[1],
                                                 no_layers),dtype=dtype)
 
     #Starting to interpolate layer by layer for all the events
+    #We dont have to unnecessarily iterate over all events. We could make
+    #set of layers from dataframe
     layers=range(1,no_layers+1)
+    #layers=_get_hit_layers(all_event_hits,event_start_no,event_stride)
     for layer in layers:
         #Loading the interpolation coef for this layer
         print '\n>>> Reading the layer %s interpolation coefficient'%(layer)
         coef_filename='sq_cells_data/coef_dict_layer_%s_res_%s,%s_len_%s.pkl'%(
                                     layer,resolution[0],resolution[1],edge_length)
-        coef_dict=readCoefFile(coef_filename)
+        coef_dict=_readCoefFile(coef_filename)
 
         #Making the KD Tree for the hexagonal cells
         print '>>> Building the tree of Hexagonal cells for searching'
@@ -433,15 +467,24 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
                 overlaps=coef_dict[hex_cell_center]
 
                 #Performing the interpolation
+                example_idx=event-event_start_no
                 hit_energy=hit_energy_arr[hit_id]
+                # event_energy_arr[example_idx]+=hit_energy   #logical error check
+                # event_bary_x_arr[example_idx]+=hit_energy*hex_cell_center[0]
+                # event_bary_y_arr[example_idx]+=hit_energy*hex_cell_center[1]
+
                 norm_coef=np.sum([overlap[1] for overlap in overlaps])
                 for overlap in overlaps:
                     #Calculating the interpolated/mesh energy for each overlap
                     i,j=overlap[0]  #index of square cell
                     weight=overlap[1]/norm_coef
                     mesh_energy=hit_energy*weight
+                    #Logical Error Check
+                    # mesh_energy_arr[example_idx]+=mesh_energy
+                    # sq_center=sq_cells_dict[(i,j)].center
+                    # mesh_bary_x_arr[example_idx]+=mesh_energy*sq_center.coords[0][0]
+                    # mesh_bary_y_arr[example_idx]+=mesh_energy*sq_center.coords[0][1]
 
-                    example_idx=event-event_start_no
                     energy_map[example_idx,i,j,layer]+=mesh_energy
 
     #We could save the minibatch alternatively here
@@ -449,5 +492,27 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
     #(so better saving will be done later). Hust numpy save done here
     image_filename=image_basepath+'image%sbatchsize%s'%(event_start_no,event_stride)
     np.save(image_filename,energy_map)
+
+    #Logical Error Check
+    #Printing the total energy of each event its hit and mesh corresp
+    # print event_energy_arr
+    # print mesh_energy_arr
+    # print np.allclose(event_energy_arr,mesh_energy_arr)
+    #
+    # event_bary_x_arr/=event_energy_arr
+    # mesh_bary_x_arr/=mesh_energy_arr
+    #
+    # event_bary_y_arr/=event_energy_arr
+    # mesh_bary_y_arr/=mesh_energy_arr
+    #
+    # print event_bary_x_arr
+    # print mesh_bary_x_arr
+    # print event_bary_x_arr-mesh_bary_x_arr
+    # print np.allclose(event_bary_x_arr,mesh_bary_x_arr)
+    #
+    # print event_bary_y_arr
+    # print mesh_bary_y_arr
+    # print event_bary_y_arr-mesh_bary_y_arr
+    # print np.allclose(event_bary_y_arr,mesh_bary_y_arr)
 
     return energy_map

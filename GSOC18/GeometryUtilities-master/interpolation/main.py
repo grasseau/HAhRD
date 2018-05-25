@@ -136,7 +136,7 @@ def generate_image(hits_data_filename,resolution=(514,513),edge_length=0.7):
     all_event_hits=readDataFile_hits(hits_data_filename)
 
     #Specifying the size of minibatch
-    event_stride=20
+    event_stride=10
     t0=datetime.datetime.now()
     compute_energy_map(all_event_hits,resolution,edge_length,0,event_stride,no_layers)
     t1=datetime.datetime.now()
