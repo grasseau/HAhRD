@@ -1,3 +1,5 @@
 *.pkl
 *.root
 *.pyc
+*.txt
+*.npy

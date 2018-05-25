@@ -15,12 +15,15 @@ data_default_file = 'detector_data/hgcalNtuple_electrons_15GeV_n100.root'
 #Data File imports
 import uproot
 import pandas as pd
+
+#Impoeting the multiprocessing libraries
 import concurrent.futures,multiprocessing
+from functools import partial
 ncpu=multiprocessing.cpu_count()
 executor=concurrent.futures.ThreadPoolExecutor(ncpu*4)
 
 ############## DRIVER FUNCTION DEFINITION#############
-def generate_interpolation(hex_cell_dict_root,dataframe,layer,exp_edge_length=0.7):
+def generate_interpolation(geometry_fname,edge_length=0.7):
     '''
     AUTHOR: Abhinav Kumar
     DESCRIPTION:
@@ -36,54 +39,108 @@ def generate_interpolation(hex_cell_dict_root,dataframe,layer,exp_edge_length=0.
             Hexagon cells.
     USAGE:
         INPUT:
-            hex_cell_dict_root : the hex cell dictionary read from the
-                                    root file.
-            dataframe          : the dataframe with recorded energy deposits
-            layer              : the layer for which interpolation coefficient
-                                    need to be calculated
-            exp_edge_length    : expected edge length of the square cell, from
+            geometry_fname     : geometry root file of the detector
+            edge_length        : edge length of the square cell, from
                                     which the resolution will be calculated which
                                     fits with the layer bounds.
-                                    This length will be aprroximate and actual
-                                    length will be around it to have resolution
-                                    as whole number
-        OUTPUT:
-            energy_map          : not currently added
+        OUTPUT:(optional)
+            coef_dict_array    : an array of size 52 have the interpolation
+                                    coef of each layer in form:
+                                    [coef_layer1,coef_layer2......]
     '''
-    base_path=''
-    ## Generating the overlapping coefficient
-    hex_cells_dict=hex_cell_dict_root
-    sq_coef,resolution,act_edge_length=linear_interpolate_hex_to_square(
-                                            hex_cells_dict,layer,exp_edge_length)
-    print '>>> Acual Edge Length %s,Resoultion %s'%(act_edge_length,resolution)
-    #Saving the generated coefficient as pickle file
-    coef_filename=base_path+'sq_cells_data/coef_dict_layer_%s_len_%s.pkl'%(layer,
-                                                            exp_edge_length)
+    no_layers=40                  #[28:EE + 12:FH + 12:BH]
+
+    #Generating the Common Mesh Grid to be used for all the layers
+    print '>>> Generating Common Mesh Grid for All Layers'
+    t0=datetime.datetime.now()
+    #Reading Input Geometry
+    subdet,eff_layer=get_subdet(no_layers)
+    hex_cells_dict=readGeometry(geometry_fname,eff_layer,subdet)
+    #Generating the Mesh Grid
+    resolution,sq_cells_dict=generate_mesh(hex_cells_dict,edge_length,save_sq_cells=True)
+    t1=datetime.datetime.now()
+    print 'Generation of Mesh Grid Completed in: ',t1-t0,' time\n'
+
+    #Generating the Overlapping Coefficient
+    print '>>> Generating Overlapping Coefficient'
+
+    #Starting to make different process for interpolation of different layers
+    talpha=datetime.datetime.now()
+    layers=range(1,no_layers+1)
+    with multiprocessing.Manager() as manager:
+        print '>>> Creating Shared Sq_cells_dict'
+        #Creating a shared dict of square cells among all the process
+        shared_sq_cells_dict=manager.dict(sq_cells_dict)
+
+        #Creating the process
+        print '>>> Starting the multiprocessing with %s process at a time'%(ncpu-2)
+        process_pool=multiprocessing.Pool(processes=ncpu-2)
+        #Now doing Map-Reduce to simultaneously run the processes
+        process_pool.map(partial(interpolate_layer,
+                            geometry_fname,shared_sq_cells_dict,edge_length,
+                            resolution),layers)
+
+    tbeta=datetime.datetime.now()
+    print '>>>>> TASK COMPLETED in: ',tbeta-talpha
+
+def interpolate_layer(geometry_fname,sq_cells_dict,edge_length,resolution,layer):
+    #Reading the geometry file
+    subdet,eff_layer=get_subdet(layer)
+    hex_cells_dict=readGeometry(geometry_fname,eff_layer,subdet)
+
+    #Calculating the sq_coef (unnormalized)
+    sq_coef_dict=linear_interpolate_hex_to_square(hex_cells_dict,
+                                            sq_cells_dict,edge_length)
+    print 'Done for Layer:%s'%(layer)
+
+    #Visual Consistency Check
+    # print 'Checking for Consistency:'
+    # sq_filename='sq_cells_data/sq_cells_dict_res_%s,%s_len_%s.pkl'%(
+    #                             resolution[0],resolution[1],edge_length)
+    # fhandle=open(sq_filename,'rb')
+    # sq_cells_dict=pickle.load(fhandle)
+    # fhandle.close()
+    # plot_hex_to_square_map(sq_coef_dict,hex_cells_dict,sq_cells_dict)
+
+    #Saving the coef_dict_array as a pickle
+    print '>>> Pickling the coef_dict'
+    coef_filename='sq_cells_data/coef_dict_layer_%s_res_%s,%s_len_%s.pkl'%(
+                                layer,resolution[0],resolution[1],edge_length)
+    t0=datetime.datetime.now()
     fhandle=open(coef_filename,'wb')
-    pickle.dump(sq_coef,fhandle,protocol=pickle.HIGHEST_PROTOCOL)
+    pickle.dump(sq_coef_dict,fhandle,protocol=pickle.HIGHEST_PROTOCOL)
     fhandle.close()
-    #Reading the pickle file of saved coefficient
-    print '>>> Reading the Overlap Coefficient File'
-    fhandle=open(coef_filename,'rb')
-    sq_coef=pickle.load(fhandle)
-    fhandle.close()
+    t1=datetime.datetime.now()
+    print 'Pickling completed in: ',t1-t0,' sec\n'
 
+def generate_image(hits_data_filename,resolution=(514,513),edge_length=0.7):
+    #ONGOING
+    '''
+    DESCRIPTION:
+        This funtion will read the dataframe and generate the "image" for futher
+        CNN pipeline.This will read the event file and generate the square Grid
+        interpolation for each event layer by layer thus creating a 3D image
+        per event and finally a 4D dataset for CNN input combining all the event
+    USAGE:
+        INPUTS:
+            hits_data_filename  : the filename for the hits data to read event
+            resolution          : the resolution of current interpolation scheme
+            edge_length         : the edge length of the current interpolation
+                                    scheme
+        OUTPUTS:
 
-    ## Plotting the sq cell for verification
-    print '>>> Reading the Square Cells File'
-    sq_filename=base_path+'sq_cells_data/sq_cells_dict_layer_%s_len_%s.pkl'%(layer,
-                                                            exp_edge_length)
-    fhandle=open(sq_filename,'rb')
-    sq_cells_dict=pickle.load(fhandle)
-    fhandle.close()
+    '''
+    #Some of the geometry metadata (will be constant)
+    no_layers=40
+    #Converting the root file to a data frame
+    all_event_hits=readDataFile_hits(hits_data_filename)
 
-    #plot_sq_cells(sq_cells_dict)
-    #plot_hex_to_square_map(sq_coef,hex_cells_dict,sq_cells_dict)
-
-    #Calculating the ENERGY DEPOSIT map in the square grid from recorded hits
-    #present in the dataframe
-    #event_id=1
-    #compute_energy_map(hex_cells_dict,sq_coef,resolution,dataframe,event_id,layer)
+    #Specifying the size of minibatch
+    event_stride=10 #seems optimal in terms of memory use.
+    t0=datetime.datetime.now()
+    compute_energy_map(all_event_hits,resolution,edge_length,0,event_stride,no_layers)
+    t1=datetime.datetime.now()
+    print '>>> Image Creation Completed in: ',t1-t0
 
 
 ################ MAIN FUNCTION DEFINITION ###################
@@ -113,7 +170,37 @@ def readGeometry( input_file,  layer, subdet ):
     print 'Cells read: number=', len(cells), ', time=', t1-t0
     return cells_d
 
-def readDataFile(filename):
+def get_subdet(layer):
+    '''
+    DESCRIPTION:
+        This function calculates the subdet number and the effective layer
+        number since the layers of the detector into three special sub-
+        detectors which unique subdet number but non-unique eff_layer number
+        which the read geometry function takes as input.
+    USAGE:
+        INPUT:
+            layer       : the actual layer number in the actual detector geometry
+        OUTPUT:
+            subdet      : the number given to subdetectors of the HGCal
+            eff_layer   : since the layers rollback to 1 for each subdet
+    '''
+    subdet=None
+    eff_layer=None                  # Effective layer number (for rollback to 0)
+    if layer<29:
+        subdet=3                    # ECAL (Electromagnetic Calorimeter)
+        eff_layer=layer
+    elif layer<(29+12):
+        subdet=4                    # Front HCAL (Hadron Calorimeter)
+        eff_layer=layer-28
+    elif layer<(29+12+12):
+        subdet=5                    # Back HCAL (Hadronic Cal, Scintillator
+        eff_layer=layer-28-12
+
+    print 'Subdet selected: %s for layer: %s eff_layer: %s'%(subdet,
+                                                            layer,eff_layer)
+    return subdet,eff_layer
+
+def readDataFile_hits(filename):
     '''
     DESCRIPTION:
         This function will read the root file which contains the simulated
@@ -124,8 +211,11 @@ def readDataFile(filename):
     USAGE:
         INPUT:
             filename    : the name of root file
+            query_string: this will be used to filter out the events like
+                            selecting the hits in EE part with certain energy etc.
         OUTPUT:
             df          : the pandas dataframe of the data in root file
+                            with only the recorded hits to convert to image
     '''
     tree=uproot.open(filename)['ana/hgc']
     branches=[]
@@ -138,7 +228,26 @@ def readDataFile(filename):
     cache={}
     df=tree.pandas.df(branches,cache=cache,executor=executor)
 
-    return df
+    #Projecting the dataframe for the required attributes
+    print '>>> Projecting required attributes of hits'
+    rechits_attributes=["rechit_x", "rechit_y", "rechit_z","rechit_energy",
+                    "rechit_layer", 'rechit_flags','rechit_cluster2d',
+                    'cluster2d_multicluster']
+    all_event_hits=df[rechits_attributes]
+    #Renaming the attribute in short form
+    col_names={name:name.replace('rechit_','') for name in rechits_attributes}
+    all_event_hits.rename(col_names,inplace=True,axis=1)
+
+    #Do the Filtering here only no need to do it each time for each event
+
+    #Printing for sanity check
+    #print all_event_hits.head()
+    #print all_event_hits.dtypes
+    # print all_event_hits.loc[0,'energy']
+    # print type(all_event_hits.loc[0,'energy'])
+    # print all_event_hits.loc[0,'energy'].shape
+
+    return all_event_hits
 
 
 if __name__=='__main__':
@@ -167,14 +276,9 @@ if __name__=='__main__':
     #     parser.print_help()
     #     print 'Error: Missing input data file name'
     #     sys.exit(1)
-    if not opt.layer:
-        parser.print_help()
-        print 'Error: Please specify the layer to do interpolation'
-        sys.exit(1)
-
-    #Generating the required files ans calling the driver function
-    cells_d = readGeometry( opt.input_file, opt.layer, opt.subdet )
-    #data_df= readDataFile(opt.data_file)
 
     #Calling the driver function
-    generate_interpolation(cells_d,None,opt.layer,exp_edge_length=0.7)
+    #generate_interpolation(opt.input_file,edge_length=0.7)
+
+    #Generating the image
+    generate_image(opt.data_file)
