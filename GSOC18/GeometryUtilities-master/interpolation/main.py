@@ -136,7 +136,7 @@ def generate_image(hits_data_filename,resolution=(514,513),edge_length=0.7):
     all_event_hits=readDataFile_hits(hits_data_filename)
 
     #Specifying the size of minibatch
-    event_stride=10
+    event_stride=10 #seems optimal in terms of memory use.
     t0=datetime.datetime.now()
     compute_energy_map(all_event_hits,resolution,edge_length,0,event_stride,no_layers)
     t1=datetime.datetime.now()
@@ -230,8 +230,9 @@ def readDataFile_hits(filename):
 
     #Projecting the dataframe for the required attributes
     print '>>> Projecting required attributes of hits'
-    rechits_attributes=["rechit_x", "rechit_y", "rechit_z",
-                    "rechit_energy","rechit_layer", 'rechit_flags']
+    rechits_attributes=["rechit_x", "rechit_y", "rechit_z","rechit_energy",
+                    "rechit_layer", 'rechit_flags','rechit_cluster2d',
+                    'cluster2d_multicluster']
     all_event_hits=df[rechits_attributes]
     #Renaming the attribute in short form
     col_names={name:name.replace('rechit_','') for name in rechits_attributes}

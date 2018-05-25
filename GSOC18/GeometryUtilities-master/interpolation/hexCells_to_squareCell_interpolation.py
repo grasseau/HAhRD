@@ -340,6 +340,10 @@ def plot_hex_to_square_map(coef,hex_cells_dict,sq_cells_dict):
 
 ################'IMAGE' CREATION FUNCTION###############
 def _readCoefFile(filename):
+    '''
+    DESCRIPTION:
+        To read the coef file. Will be used internally in the compute energy map
+    '''
     fhandle=open(filename,'rb')
     coef_dict=pickle.load(fhandle)
     fhandle.close()
@@ -352,9 +356,11 @@ def _get_hit_layers(all_event_hits,event_start_no,event_stride):
         This function will collect the set of all the layers which have hits in
         to be interpolated events.
     INPUT:
-
+        all_event_hits  : the dataframe which contains the hit data
+        event_start_no  : the starting point of interpolation of event
+        event_stride    : the size of the minibatch to create image of
     OUTPUT:
-        layer_set:  the set of hayers which have hits in any of the events
+        layer_set:  the unique list of hayers which have hits in any of the events
     '''
     layers=np.array([],dtype=np.int64)
     for event in range(event_start_no,event_start_no+event_stride):
@@ -437,14 +443,19 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
         #Now we will iterate the all the events
         events=range(event_start_no,event_start_no+event_stride)
         for event in events:
+            # ####For Logical Check #########
+            # cl2d_idx=all_event_hits.loc[event,'cluster2d']
+            # mcl_idx=all_event_hits.loc[event,'cluster2d_multicluster'][cl2d_idx]
+            # cluster_mask=mcl_idx==0
+
             print '>>> Interpolating for Event:%s'%(event)
             #Retreiving the data for that event
             hit_layer_arr=all_event_hits.loc[event,'layer']
             #Filter out the current layer's data
             layer_mask=hit_layer_arr==layer
-            hit_energy_arr=all_event_hits.loc[event,'energy'][layer_mask]
-            hit_x_arr=all_event_hits.loc[event,'x'][layer_mask]
-            hit_y_arr=all_event_hits.loc[event,'y'][layer_mask]
+            hit_energy_arr=all_event_hits.loc[event,'energy'][layer_mask] #& cluster_mask]
+            hit_x_arr=all_event_hits.loc[event,'x'][layer_mask]# & cluster_mask]
+            hit_y_arr=all_event_hits.loc[event,'y'][layer_mask]# & cluster_mask]
             #Cheking if the event contains no hits in this layer
             print hit_energy_arr.shape
             if hit_energy_arr.shape[0]==0:
@@ -469,7 +480,9 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
                 #Performing the interpolation
                 example_idx=event-event_start_no
                 hit_energy=hit_energy_arr[hit_id]
-                # event_energy_arr[example_idx]+=hit_energy   #logical error check
+
+                # #logical error check
+                # event_energy_arr[example_idx]+=hit_energy
                 # event_bary_x_arr[example_idx]+=hit_energy*hex_cell_center[0]
                 # event_bary_y_arr[example_idx]+=hit_energy*hex_cell_center[1]
 
@@ -479,7 +492,8 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
                     i,j=overlap[0]  #index of square cell
                     weight=overlap[1]/norm_coef
                     mesh_energy=hit_energy*weight
-                    #Logical Error Check
+
+                    # #Logical Error Check
                     # mesh_energy_arr[example_idx]+=mesh_energy
                     # sq_center=sq_cells_dict[(i,j)].center
                     # mesh_bary_x_arr[example_idx]+=mesh_energy*sq_center.coords[0][0]
