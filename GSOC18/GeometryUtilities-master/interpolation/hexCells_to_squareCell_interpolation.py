@@ -347,8 +347,8 @@ def readCoefFile(filename):
     return coef_dict
 
 
-def compute_energy_map(all_event_hits,resolution,event_start_no,event_stride=8
-                                ,no_layers=40,precision_adjust=1e-3):
+def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
+                    event_stride=8,no_layers=40,precision_adjust=1e-3):
     '''
     DESCRIPTION:
         This function will finally map the energy deposit recorded in the
@@ -380,18 +380,17 @@ def compute_energy_map(all_event_hits,resolution,event_start_no,event_stride=8
                                 will not be possible.
         OUTPUT:
             energy_map      : a numpy array containing the map/interpolation
-                                of a particular layer of a particular event.
-                                (we should implement it for all the layers here
-                                itself.and may be for all the event here later)
+                                of a minibatch of event.
     '''
     #Declaring the image array
-    energy_map=np.zeros((event_stride,resolution[0],resolution[1],no_layers),dtype=dtype)
+    energy_map=np.zeros((event_stride,resolution[0],resolution[1],
+                                                no_layers),dtype=dtype)
 
     #Starting to interpolate layer by layer for all the events
     layers=range(1,no_layers+1)
     for layer in layers:
         #Loading the interpolation coef for this layer
-        print '>>> Reading the layer %s interpolation coefficient'%(layer)
+        print '\n>>> Reading the layer %s interpolation coefficient'%(layer)
         coef_filename='sq_cells_data/coef_dict_layer_%s_res_%s,%s_len_%s.pkl'%(
                                     layer,resolution[0],resolution[1],edge_length)
         coef_dict=readCoefFile(coef_filename)
@@ -404,7 +403,7 @@ def compute_energy_map(all_event_hits,resolution,event_start_no,event_stride=8
         #Now we will iterate the all the events
         events=range(event_start_no,event_start_no+event_stride)
         for event in events:
-            print '>>> Interpolating for Event:%s',%(event)
+            print '>>> Interpolating for Event:%s'%(event)
             #Retreiving the data for that event
             hit_layer_arr=all_event_hits.loc[event,'layer']
             #Filter out the current layer's data
@@ -412,6 +411,10 @@ def compute_energy_map(all_event_hits,resolution,event_start_no,event_stride=8
             hit_energy_arr=all_event_hits.loc[event,'energy'][layer_mask]
             hit_x_arr=all_event_hits.loc[event,'x'][layer_mask]
             hit_y_arr=all_event_hits.loc[event,'y'][layer_mask]
+            #Cheking if the event contains no hits in this layer
+            print hit_energy_arr.shape
+            if hit_energy_arr.shape[0]==0:
+                continue
 
             #Tuplizing the center of hit to search its corresponding hex-cell
             hit_centers=[(hit_x_arr[i],hit_y_arr[i])
@@ -445,8 +448,6 @@ def compute_energy_map(all_event_hits,resolution,event_start_no,event_stride=8
     #but we would be combining the input data as well.
     #(so better saving will be done later). Hust numpy save done here
     image_filename=image_basepath+'image%sbatchsize%s'%(event_start_no,event_stride)
-    fhandle=open(image_filename)
-    np.save(energy_map)
-    fhandle.close()
-    
+    np.save(image_filename,energy_map)
+
     return energy_map

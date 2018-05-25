@@ -113,7 +113,7 @@ def interpolate_layer(geometry_fname,sq_cells_dict,edge_length,resolution,layer)
     t1=datetime.datetime.now()
     print 'Pickling completed in: ',t1-t0,' sec\n'
 
-def generate_image(all_event_hits,resolution):
+def generate_image(hits_data_filename,resolution=(514,513),edge_length=0.7):
     #ONGOING
     '''
     DESCRIPTION:
@@ -124,18 +124,23 @@ def generate_image(all_event_hits,resolution):
     USAGE:
         INPUTS:
             hits_data_filename  : the filename for the hits data to read event
-            coef_dict_array_fname: filename of saved interpolation Coefficient.
+            resolution          : the resolution of current interpolation scheme
+            edge_length         : the edge length of the current interpolation
+                                    scheme
         OUTPUTS:
 
     '''
     #Some of the geometry metadata (will be constant)
-    no_layers=52
+    no_layers=40
     #Converting the root file to a data frame
-    all_event_hits=readDataFile(hits_data_filename)
+    all_event_hits=readDataFile_hits(hits_data_filename)
 
-    #Initializing the numpy array to hold 4D data
-    dataset=np.empty(())
-
+    #Specifying the size of minibatch
+    event_stride=20
+    t0=datetime.datetime.now()
+    compute_energy_map(all_event_hits,resolution,edge_length,0,event_stride,no_layers)
+    t1=datetime.datetime.now()
+    print '>>> Image Creation Completed in: ',t1-t0
 
 
 ################ MAIN FUNCTION DEFINITION ###################
@@ -235,8 +240,8 @@ def readDataFile_hits(filename):
     #Do the Filtering here only no need to do it each time for each event
 
     #Printing for sanity check
-    print all_event_hits.head()
-    print all_event_hits.dtypes
+    #print all_event_hits.head()
+    #print all_event_hits.dtypes
     # print all_event_hits.loc[0,'energy']
     # print type(all_event_hits.loc[0,'energy'])
     # print all_event_hits.loc[0,'energy'].shape
@@ -274,4 +279,5 @@ if __name__=='__main__':
     #Calling the driver function
     #generate_interpolation(opt.input_file,edge_length=0.7)
 
-    data_df= readDataFile_hits(opt.data_file)
+    #Generating the image
+    generate_image(opt.data_file)
