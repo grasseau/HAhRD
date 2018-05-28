@@ -41,7 +41,7 @@ def _get_variable_on_cpu(name,shape,initializer,weight_decay=None):
                                 name='l2_reg_loss')
         #Adding the loss to the collection so that it could be
         #added to final loss
-        tf.add_to_collection('l2_reg_loss',reg_loss)
+        tf.add_to_collection('all_losses',reg_loss)
 
     return weight
 
@@ -88,13 +88,17 @@ def simple_fully_connected(X,name,output_dim,weight_decay=None
     return A
 
 ################ Convlutional Layers ##########################
-def simple_conv2d(X,name,filter_shape,output_channel,
-                    stride,padding_type,weight_decay=None,
+def rectified_conv2d(X,name,filter_shape,output_channel,
+                    stride,padding_type,is_training,
+                    apply_batchnorm=True,weight_decay=None,apply_relu=True,
                     initializer=tf.glorot_uniform_initializer()):
     '''
     DESCRIPTION:
         This function will apply simple convolution to the given input
         images filtering the input with requires number of filters.
+        This will be a custom block to apply the whole rectified
+        convolutional block which include the following sequence of operation.
+        conv2d --> batch_norm(optional) --> activation(optional)
     USAGE:
         INPUT:
             X              : the input 'image' to this layer. A 4D tensor of
@@ -107,9 +111,17 @@ def simple_conv2d(X,name,filter_shape,output_channel,
                              feature 'image/activation' of this layer
             stride         : a tuple giving (stride_height,stride_width)
             padding_type   : string either to do 'SAME' or 'VALID' padding
+            is_training    : (used with batchnorm) a boolean to specify
+                                whether we are in training or inference mode.
+            apply_batchnorm: a boolean to specify whether to use batch norm or
+                                not.Defaulted to True since bnorm is useful
             weight_decay   : give a value of regularization hyperpaprameter
                                 i.e the amount we want to have l2-regularization
                                 on the weights. defalut no regularization.
+            apply_relu     : this will be useful if we dont want to apply relu
+                                but some other activation function diretly
+                                during the model description. Then this function
+                                will not do rectification.
             initializer    : the initializer for the filter Variables
         OUTPUT:
             A       :the output feature 'image' of this layer
@@ -121,10 +133,6 @@ def simple_conv2d(X,name,filter_shape,output_channel,
         fh,fw=filter_shape
         net_filter_shape=(fh,fw,input_channel,output_channel)
         filters=_get_variable_on_cpu('W',net_filter_shape,initializer,weight_decay)
-        #Biases Weight creation
-        net_bias_shape=(1,1,1,output_channel)
-        bias_initializer=tf.zeros_initializer()
-        biases=_get_variable_on_cpu('b',net_bias_shape,bias_initializer)
 
         #stride and padding configuration
         sh,sw=stride
@@ -134,8 +142,20 @@ def simple_conv2d(X,name,filter_shape,output_channel,
 
         #Now applying the convolution
         Z_conv=tf.nn.conv2d(X,filters,net_stride,padding_type,name='conv')
-        Z=tf.add(Z_conv,biases,name='bias_add')
-        A=tf.nn.relu(Z,name='relu')
+        if apply_batchnorm==True:
+            Z=_batch_normalization2d(Z_conv,is_training)
+        else:
+            #Biases Weight creation
+            net_bias_shape=(1,1,1,output_channel)
+            bias_initializer=tf.zeros_initializer()
+            biases=_get_variable_on_cpu('b',net_bias_shape,bias_initializer)
+            Z=tf.add(Z_conv,biases,name='bias_add')
+
+        #Finally applying the 'relu' activation
+        if apply_relu==True:
+            A=tf.nn.relu(Z,name='relu')
+        else:
+            A=Z #when we want to apply another activation outside in model.
 
     return A
 
@@ -165,7 +185,40 @@ def max_pooling2d(X,name,filter_shape,stride,padding_type):
 
     return A
 
-def identity_residual_block():
+def _batch_normalization2d(Z,is_training,name='batchnorm'):
+    '''
+    DESCRIPTION:
+        (internal helper function to be used by simple conv2d)
+        This function will add batch normalization on the feature map
+        by normalizing the every feature map 'image' after transforming
+        from the previous image to reduce the coupling between the
+        two layers, thus making the current layer more roboust to the
+        changes from the previous layers activation.
+        (but useful with larger size,otherwise we have to seek alternative)
+        like group norm etc.
+
+        WARNING:
+            we have to run a separate update op to update the rolling
+            averages of moments. This has to be taken care during final
+            model declaration.Else inference will not work correctly.
+    USAGE:
+        INPUT:
+            Z           : the linear activation (convolution) of conv2d layer
+            is_training : a boolean to represent whether we are in training
+                            mode or inference mode.(for rolling avgs of moments)
+                            (a tf.bool type usually taken as placeholder)
+        OUTPUT:
+            Z_tilda     : the batch-normailzed version of input
+    '''
+    with tf.name_scope(name):
+        axis=3  #We will normalize the whole feature map across batch
+        Z_tilda=tf.layers.batch_normalization(Z,axis=axis,
+                                            training=is_training)
+    return Z_tilda
+
+def identity_residual_block(X,name,num_channels,mid_filter_shape,is_training,
+                            apply_batchnorm=True,weight_decay=None,
+                            initializer=tf.glorot_uniform_initializer()):
     '''
     DESCRIPTION:
         This layer implements the one of the special case of residual
@@ -174,7 +227,132 @@ def identity_residual_block():
         (nH,nW) dont change in the main branch.
         We will be using bottle-neck approach to reduce computational
         complexity as mentioned in the ResNet Paper.
+
+        There are three sub-layer in this layer:
+        Conv1(one-one):F1 channels ---> Conv2(fh,fw):F2 channels
+                        --->Conv3(one-one):F3 channels
     USAGE:
         INPUT:
+            X               : the input 'image' to this layer
+            name            : the name for this identity resnet block
+            channels        :the number of channels/filters in each of sub-layer
+                                a tuple of (F1,F2,F3)
+            mid_filter_shape: (fh,fw) a tuple of shape of the filter to be used
 
+        OUTPUT:
+            A           : the output feature map/image of this layer
     '''
+    with tf.name_scope(name):
+        #Applying the first one-one convolution
+        A1=rectified_conv2d(X,name='branch_2a',
+                            filter_shape=(1,1),
+                            output_channel=num_channels[0],
+                            stride=(1,1),
+                            padding_type="VALID",
+                            is_training=is_training,apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            initializer=initializer)
+
+        #Applying the Filtering in the mid sub-layer
+        A2=rectified_conv2d(X,name='branch_2b',
+                            filter_shape=mid_filter_shape,
+                            output_channel=num_channels[1],
+                            stride=(1,1),
+                            padding_type="SAME",
+                            is_training=is_training,apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            initializer=initializer)
+
+        #Again one-one convolution for upsampling
+        #Sanity check for the last number of channels which should match with input
+        input_channels=X.get_shape().as_list()[3]
+        if not input_channels==num_channels[3]:
+            raise AssertionError('Identity Block: last sub-layer channels should match input')
+        Z3=rectified_conv2d(X,name='branch_2c',
+                            filter_shape=(1,1),
+                            output_channel=num_channels[3],
+                            stride=(1,1),
+                            padding_type="VALID",
+                            is_training=is_training,apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            apply_relu=False, #necessary cuz addition before activation
+                            initializer=initializer)
+
+        #Skip Connection
+        #Adding the shortcut/skip connection
+        with tf.name_scope('skip_conn'):
+            Z=tf.add(Z3,X)
+            A=tf.nn.relu(Z,name='relu')
+
+        return A
+
+def convolutional_residual_block(X,name,num_channels,
+                            first_filter_stride,mid_filter_shape,
+                            is_training,apply_batchnorm=True,weight_decay=None,
+                            initializer=tf.glorot_uniform_initializer()):
+    '''
+    DESCRIPTION:
+        This block is similar to the previous identity block but the
+        only difference is that the shape (height,width) of main branch i.e 2
+        is changed in the way, so we have to adust this shape in the
+        skip-connection/shortcut branch also. So we will use convolution
+        in the shorcut branch to match the shape.
+    USAGE:
+        INPUT:
+            first_filter_stride : (sh,sw) stride to be used with first filter
+
+            Rest of the argument decription is same a identity block
+        OUTPUT:
+            A   : the final output/feature map of this residual block
+    '''
+    with tf.name_scope(name):
+        #Main Branch
+        #Applying the first one-one convolution
+        A1=rectified_conv2d(X,name='branch_2a',
+                            filter_shape=(1,1),
+                            output_channel=num_channels[0],
+                            stride=first_filter_stride,
+                            padding_type="VALID",
+                            is_training=is_training,apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            initializer=initializer)
+
+        #Applying the Filtering in the mid sub-layer
+        A2=rectified_conv2d(X,name='branch_2b',
+                            filter_shape=mid_filter_shape,
+                            output_channel=num_channels[1],
+                            stride=(1,1),
+                            padding_type="SAME",
+                            is_training=is_training,apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            initializer=initializer)
+
+        #Again one-one convolution for upsampling
+        #Here last number of channels which need not match with input
+        Z3=rectified_conv2d(X,name='branch_2c',
+                            filter_shape=(1,1),
+                            output_channel=num_channels[3],
+                            stride=(1,1),
+                            padding_type="VALID",
+                            is_training=is_training,apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            apply_relu=False, #necessary cuz addition before activation
+                            initializer=initializer)
+
+        #Skip-Connection/Shortcut Branch
+        #Now we have to bring the shortcut/skip-connection in shape and number of channels
+        with tf.name_scope('skip_conn'):
+            Z_shortcut=rectified_conv2d(X,name='branch_1',
+                                filter_shape=(1,1),
+                                output_channel=num_channels[3],
+                                stride=first_filter_stride,
+                                padding_type="VALID",
+                                is_training=is_training,apply_batchnorm=apply_batchnorm,
+                                weight_decay=weight_decay,
+                                apply_relu=False, #necessary cuz addition before activation
+                                initializer=initializer)
+            #now adding the two branches element wise
+            Z=tf.nn.add(Z3,Z_shortcut)
+            A=tf.nn.relu(Z,name='relu')
+
+    return A
