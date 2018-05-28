@@ -5,26 +5,79 @@ mnist = input_data.read_data_sets("/tmp/data/", one_hot = True)
 
 #Global Parameters
 n_classes=10
-batch_size=100
+batch_size=16
 
-def make_model():
-    X=tf.placeholder(tf.float32,[None,784])
+#Global Placeholders
+X=tf.placeholder(tf.float32,[None,784])
+Y=tf.placeholder(tf.float32,[None,10])
+is_training=tf.cast(True,tf.bool)
 
-    A1=simple_fully_connected(X,'fc1',100,None,apply_batchnorm=False)
-    A2=simple_fully_connected(A1,'fc2',100,None,apply_batchnorm=False)
-    A3=simple_fully_connected(A2,'fc3',100,None,apply_batchnorm=False)
 
-    Z4=simple_fully_connected(A3,'fc4',10,None,apply_batchnorm=False,
+def make_model_linear():
+    lambd=0.1
+    bn_decision=True
+    A1=simple_fully_connected(X,'fc1',100,is_training,apply_batchnorm=bn_decision,weight_decay=lambd)
+    A2=simple_fully_connected(A1,'fc2',100,is_training,apply_batchnorm=bn_decision,weight_decay=lambd)
+    A3=simple_fully_connected(A2,'fc3',100,is_training,apply_batchnorm=bn_decision,weight_decay=lambd)
+
+    Z4=simple_fully_connected(A3,'fc4',10,is_training,apply_batchnorm=bn_decision,weight_decay=lambd,
                                 apply_relu=False)
 
     return Z4
 
+def make_model_conv():
+    bn_decision=False
+
+    X_img=tf.reshape(X,[-1,28,28,1])
+    A1=rectified_conv2d(X_img,
+                        name='conv1',
+                        filter_shape=(3,3),
+                        output_channel=5,
+                        stride=(1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=None,
+                        apply_relu=True)
+    A1Mp=max_pooling2d(A1,name='mpool1',
+                        filter_shape=(3,3),stride=(1,1),
+                        padding_type='VALID')
+    A2=rectified_conv2d(A1Mp,
+                        name='conv2',
+                        filter_shape=(5,5),
+                        output_channel=10,
+                        stride=(1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=None,
+                        apply_relu=True)
+    A2Mp=max_pooling2d(A2,name='mpool2',
+                        filter_shape=(5,5),stride=(1,1),
+                        padding_type='VALID')
+
+    A3=simple_fully_connected(A2Mp,name='fc1',output_dim=50,
+                                is_training=is_training,apply_batchnorm=bn_decision,
+                                flatten_first=True,weight_decay=None)
+    Z4=simple_fully_connected(A3,name='fc2',output_dim=10,
+                                is_training=is_training,apply_batchnorm=bn_decision,
+                                weight_decay=None,apply_relu=False)
+
+    return Z4
+
 def train_net():
-    prediction=make_model()
-    Y=tf.placeholder(tf.float32,[None,10])
-    cost=tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=prediction,
-                                                                labels=Y))
-    optimizer=tf.train.AdamOptimizer().minimize(cost)
+    prediction=make_model_conv()
+    extra_update_ops=tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+
+    #For updating the moving averages of the batch norm parameters
+    with tf.control_dependencies(extra_update_ops):
+        x_entropy_cost=tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=prediction,
+                                                                    labels=Y))
+        tf.add_to_collection('all_losses',x_entropy_cost)
+
+    all_losses=tf.get_collection('all_losses')
+    total_cost=tf.add_n(all_losses,name='merge_loss')
+    optimizer=tf.train.AdamOptimizer().minimize(total_cost)
 
     epochs=10
     with tf.Session() as sess:
@@ -33,16 +86,16 @@ def train_net():
         for epoch in range(epochs):
             epoch_loss=0
             for _ in range(mnist.train.num_examples/batch_size):
-                epochs_x,epoch_y=mninst.train._next_batch(batch_size)
-                epochs_x=tf.transpose(epochs_x)
-                epochs_y=tf.transpose(epochs_y)
-                _,c=sess.run([optimizer,cost],feed_dict={X:epoch_x,y:epoch_y})
+                epochs_x,epochs_y=mnist.train.next_batch(batch_size)
+                # epochs_x=tf.transpose(epochs_x)
+                # epochs_y=tf.transpose(epochs_y)
+                _,c=sess.run([optimizer,total_cost],feed_dict={X:epochs_x,Y:epochs_y})
                 epoch_loss +=c
 
             print 'Epoch ',epoch,' out of ',epochs,'loss: ',epoch_loss
 
-            correct=tf.equal(tf.argmax(prediction),tf.argmax(Y))
-            accuracy=tf.reduce_mean(tf.cast(correct,'float'))
-            print 'Accuracy: ',accuracy.eval({X:mnist.test.images,Y:mnist.test.labels})
+        correct=tf.equal(tf.argmax(prediction,axis=1),tf.argmax(Y,axis=1))
+        accuracy=tf.reduce_mean(tf.cast(correct,'float'))
+        print 'Accuracy: ',accuracy.eval({X:mnist.test.images,Y:mnist.test.labels})
 
 train_net()

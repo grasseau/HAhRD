@@ -73,7 +73,7 @@ def simple_fully_connected(X,name,output_dim,is_training,
         OUTPUT:
             A           : the activation of this layer
     '''
-    with tf.name_scope(name):
+    with tf.variable_scope(name):
         #Flattening the input if necessary
         if flatten_first==True:
             X=tf.contrib.layers.flatten(X)
@@ -93,7 +93,7 @@ def simple_fully_connected(X,name,output_dim,is_training,
 
         #Applying batch norm
         if apply_batchnorm==True:
-            with tf.name_scope('batch_norm'):
+            with tf.variable_scope('batch_norm'):
                 axis=1      #here the features are in axis 1
                 Z_tilda=tf.layers.batch_normalization(Z,axis=axis,
                                                     training=is_training)
@@ -149,7 +149,7 @@ def rectified_conv2d(X,name,filter_shape,output_channel,
         OUTPUT:
             A       :the output feature 'image' of this layer
     '''
-    with tf.name_scope(name):
+    with tf.variable_scope(name):
         #Creating the filter weights and biases
         #Filter Weights
         input_channel=X.get_shape().as_list()[3]
@@ -196,7 +196,7 @@ def max_pooling2d(X,name,filter_shape,stride,padding_type):
             A       : the maxpooled map of the input 'image' with same
                         number of channels
     '''
-    with tf.name_scope(name):
+    with tf.variable_scope(name):
         #Writing the filter/kernel shape and stride in proper format
         fh,fw=filter_shape
         net_filter_shape=(1,fh,fw,1)
@@ -204,7 +204,7 @@ def max_pooling2d(X,name,filter_shape,stride,padding_type):
         net_stride=(1,sh,sw,1)
 
         #Applying maxpooling
-        A=tf.nn.max_pool(A,net_filter_shape,net_stride,padding_type,name='max_pool')
+        A=tf.nn.max_pool(X,net_filter_shape,net_stride,padding_type,name='max_pool')
 
     return A
 
@@ -233,7 +233,7 @@ def _batch_normalization2d(Z,is_training,name='batchnorm'):
         OUTPUT:
             Z_tilda     : the batch-normailzed version of input
     '''
-    with tf.name_scope(name):
+    with tf.variable_scope(name):
         axis=3  #We will normalize the whole feature map across batch
         Z_tilda=tf.layers.batch_normalization(Z,axis=axis,
                                             training=is_training)
@@ -266,7 +266,7 @@ def identity_residual_block(X,name,num_channels,mid_filter_shape,is_training,
         OUTPUT:
             A           : the output feature map/image of this layer
     '''
-    with tf.name_scope(name):
+    with tf.variable_scope(name):
         #Applying the first one-one convolution
         A1=rectified_conv2d(X,name='branch_2a',
                             filter_shape=(1,1),
@@ -304,7 +304,7 @@ def identity_residual_block(X,name,num_channels,mid_filter_shape,is_training,
 
         #Skip Connection
         #Adding the shortcut/skip connection
-        with tf.name_scope('skip_conn'):
+        with tf.variable_scope('skip_conn'):
             Z=tf.add(Z3,X)
             A=tf.nn.relu(Z,name='relu')
 
@@ -329,7 +329,7 @@ def convolutional_residual_block(X,name,num_channels,
         OUTPUT:
             A   : the final output/feature map of this residual block
     '''
-    with tf.name_scope(name):
+    with tf.variable_scope(name):
         #Main Branch
         #Applying the first one-one convolution
         A1=rectified_conv2d(X,name='branch_2a',
@@ -365,7 +365,7 @@ def convolutional_residual_block(X,name,num_channels,
 
         #Skip-Connection/Shortcut Branch
         #Now we have to bring the shortcut/skip-connection in shape and number of channels
-        with tf.name_scope('skip_conn'):
+        with tf.variable_scope('skip_conn'):
             Z_shortcut=rectified_conv2d(X,name='branch_1',
                                 filter_shape=(1,1),
                                 output_channel=num_channels[3],
@@ -412,7 +412,7 @@ def inception_block(X,name,final_channel_list,compress_channel_list,
                                     list [#compressed channel for 3x3,
                                           #compressed channel for 5x5]
     '''
-    with tf.name_scope(name):
+    with tf.variable_scope(name):
         #Starting with the direct one-one convolution to output
         A1=rectified_conv2d(X,
                             name='1x1',
