@@ -46,7 +46,9 @@ def _get_variable_on_cpu(name,shape,initializer,weight_decay=None):
     return weight
 
 ################ Simple Feed Forwards Layer ###################
-def simple_fully_connected(X,name,output_dim,weight_decay=None
+def simple_fully_connected(X,name,output_dim,weight_decay=None,
+                            is_training,apply_batchnorm=True,
+                            apply_relu=True,
                         initializer=tf.glorot_uniform_initializer()):
     '''
     DESCRIPTION:
@@ -62,6 +64,8 @@ def simple_fully_connected(X,name,output_dim,weight_decay=None
             weight_decay:(lambda) if specified to a value, then it
                             will be used for implementing the L2-
                             regularization of the weights
+            is_training : to be used to state the mode i.e training or
+                            inference mode.used for batch norm
             initializer :initializer choice to be used for Weights
 
         OUTPUT:
@@ -77,13 +81,26 @@ def simple_fully_connected(X,name,output_dim,weight_decay=None
         shape_W=(input_dim,output_dim)
         shape_b=(1,output_dim)
         W=_get_variable_on_cpu('W',shape_W,initializer,weight_decay)
-        #We generally dont regularize the bias unit
-        bias_initializer=tf.zeros_initializer()
-        b=_get_variable_on_cpu('b',shape_b,bias_initializer)
 
         #Applying the linear transforamtion and passing through non-linearity
-        Z=tf.add(tf.multiply(X,W),b,name='linear')
-        A=tf.nn.relu(Z,name='relu')
+        Z=tf.multiply(X,W,'linear_transform')
+
+        #Applying batch norm
+        if apply_batchnorm==True:
+            with tf.name_scope('batch_norm'):
+                axis=1      #here the features are in axis 1
+                Z_tilda=tf.layers.batch_normalization(Z,axis=axis,
+                                                    training=is_training)
+        else:
+            #We generally dont regularize the bias unit
+            bias_initializer=tf.zeros_initializer()
+            b=_get_variable_on_cpu('b',shape_b,bias_initializer)
+            Z_tilda=tf.add(Z,b,name='bias_add')
+
+        if apply_relu==True:
+            A=tf.nn.relu(Z,name='relu')
+        else:
+            A=Z_tilda
 
     return A
 
@@ -216,6 +233,7 @@ def _batch_normalization2d(Z,is_training,name='batchnorm'):
                                             training=is_training)
     return Z_tilda
 
+############### Residual Layers ##############################
 def identity_residual_block(X,name,num_channels,mid_filter_shape,is_training,
                             apply_batchnorm=True,weight_decay=None,
                             initializer=tf.glorot_uniform_initializer()):
@@ -354,5 +372,129 @@ def convolutional_residual_block(X,name,num_channels,
             #now adding the two branches element wise
             Z=tf.nn.add(Z3,Z_shortcut)
             A=tf.nn.relu(Z,name='relu')
+
+    return A
+
+############## Inception Module #############################
+def inception_block(X,name,final_channel_list,compress_channel_list
+                    is_training,apply_batchnorm=True,weight_decay=None,
+                    initializer=tf.glorot_uniform_initializer()):
+    '''
+    DESCRIPTION:
+        This block will enable us to have multiple filter's activation
+        in the same layer. Multiple filters (here only 1x1,3x3,5x5 and
+        a maxpooling layer) will be aplied to the input image and the
+        ouptput of all these filters will be stacked in one layer.
+
+        This is biologically inspired where we first extrct the feature
+        of multiple frequencey/filter and then combine it to furthur abstract
+        the idea/image.
+
+        Filters larger than 5 not included as they will/could increase
+        the computational complexity.
+    USAGE:
+        INPUT:
+            X                   :the input image/tensor.
+            name                :the name to be given this whole block.will be used in
+                                    visualization
+            final_channels_list : the list of channels as output of these filter
+                                    [# 1x1 channels,# 3x3 channels,
+                                    # 5x5 channels,# compressed maxpool channels]
+            compress_channel_list: since we need to compress the input to do
+                                    3x3 and 5x5 convolution. So we need the number
+                                    of channels to compress into.
+                                    list [#compressed channel for 3x3,
+                                          #compressed channel for 5x5]
+    '''
+    with tf.name_scope(name):
+        #Starting with the direct one-one convolution to output
+        A1=rectified_conv2d(X,
+                            name='1x1',
+                            filter_shape=(1,1),
+                            output_channel=final_channel_list[0],
+                            stride=(1,1),
+                            padding_type='VALID',
+                            is_training=is_training,
+                            apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            apply_relu=True,
+                            initializer=initializer)
+
+        #Now starting the 3x3 convolution part
+        #first compressing by 1x1
+        C3=rectified_conv2d(X,
+                            name='compress 3x3',
+                            filter_shape=(1,1),
+                            output_channel=compress_channel_list[0],
+                            stride=(1,1),
+                            padding_type='VALID',
+                            is_training=is_training,
+                            apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            apply_relu=True,
+                            initializer=initializer)
+        #now doing 3x3 convolution on this compressed 'image'
+        A3=rectified_conv2d(C3,
+                            name='3x3',
+                            filter_shape=(3,3),
+                            output_channel=final_channel_list[1],
+                            stride=(1,1),
+                            padding_type='SAME',
+                            is_training=is_training,
+                            apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            apply_relu=True,
+                            initializer=initializer)
+
+        #Now starting the same structure for the 5x5 conv part
+        #first compressing by 1x1
+        C5=rectified_conv2d(X,
+                            name='compress 5x5',
+                            filter_shape=(1,1),
+                            output_channel=compress_channel_list[1],
+                            stride=(1,1),
+                            padding_type='VALID',
+                            is_training=is_training,
+                            apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            apply_relu=True,
+                            initializer=initializer)
+        #now doing 5x5 convolution on this compressed 'image'
+        A5=rectified_conv2d(C5,
+                            name='5x5',
+                            filter_shape=(5,5),
+                            output_channel=final_channel_list[2],
+                            stride=(1,1),
+                            padding_type='SAME',
+                            is_training=is_training,
+                            apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            apply_relu=True,
+                            initializer=initializer)
+
+        #Now adding the 3x3 maxpooling layer
+        #first maxpooling
+        CMp=max_pooling2d(X,
+                          name='maxpool',
+                          filter_shape=(3,3),
+                          stride=(1,1),
+                          padding_type='SAME')
+        #now comressing to reduce channels
+        AMp=rectified_conv2d(CMp,
+                            name='compress maxpool',
+                            filter_shape=(1,1),
+                            output_channel=compress_channel_list[3],
+                            stride=(1,1),
+                            padding_type='VALID',
+                            is_training=is_training,
+                            apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            apply_relu=True,
+                            initializer=initializer)
+
+        #Now Concatenating the sub-channels of different filter type
+        concat_list=[A1,A3,A5,AMp]
+        axis=-1         #across the channel axis : axis=3
+        A=tf.concat(concat_list,axis=axis,name='concat')
 
     return A
