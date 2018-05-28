@@ -31,7 +31,7 @@ def _get_variable_on_cpu(name,shape,initializer,weight_decay=None):
     '''
     #Initializing the variable on CPU for sharing weights among GPU
     with tf.device('/cpu:0'):
-        weight=tf.get_variable(name,shape=shape,dtype=dtype
+        weight=tf.get_variable(name,shape=shape,dtype=dtype,
                         initializer=initializer)
 
     if not weight_decay==None:
@@ -46,10 +46,10 @@ def _get_variable_on_cpu(name,shape,initializer,weight_decay=None):
     return weight
 
 ################ Simple Feed Forwards Layer ###################
-def simple_fully_connected(X,name,output_dim,weight_decay=None,
-                            is_training,apply_batchnorm=True,
-                            apply_relu=True,
-                        initializer=tf.glorot_uniform_initializer()):
+def simple_fully_connected(X,name,output_dim,is_training,
+                            apply_batchnorm=True,weight_decay=None,
+                            flatten_first=False,apply_relu=True,
+                            initializer=tf.glorot_uniform_initializer()):
     '''
     DESCRIPTION:
         This function will implement a simple feed-foreward network,
@@ -66,15 +66,21 @@ def simple_fully_connected(X,name,output_dim,weight_decay=None,
                             regularization of the weights
             is_training : to be used to state the mode i.e training or
                             inference mode.used for batch norm
+            flatten_first: whether to first flattenthe input into a
+                            2 dimenional tensor as [batch_size,all_activation]
             initializer :initializer choice to be used for Weights
 
         OUTPUT:
             A           : the activation of this layer
     '''
     with tf.name_scope(name):
+        #Flattening the input if necessary
+        if flatten_first==True:
+            X=tf.contrib.layers.flatten(X)
+
         input_dim=X.get_shape().as_list()[1]
         #Checking the dimension of the input
-        if not len(input_dimension)==2:
+        if not len(X.get_shape().as_list())==2:
             raise AssertionError('The X should be of shape: (batch,all_nodes)')
 
         #Get the hold of necessary variable
@@ -83,7 +89,7 @@ def simple_fully_connected(X,name,output_dim,weight_decay=None,
         W=_get_variable_on_cpu('W',shape_W,initializer,weight_decay)
 
         #Applying the linear transforamtion and passing through non-linearity
-        Z=tf.multiply(X,W,'linear_transform')
+        Z=tf.matmul(X,W,name='linear_transform')
 
         #Applying batch norm
         if apply_batchnorm==True:
@@ -376,7 +382,7 @@ def convolutional_residual_block(X,name,num_channels,
     return A
 
 ############## Inception Module #############################
-def inception_block(X,name,final_channel_list,compress_channel_list
+def inception_block(X,name,final_channel_list,compress_channel_list,
                     is_training,apply_batchnorm=True,weight_decay=None,
                     initializer=tf.glorot_uniform_initializer()):
     '''
