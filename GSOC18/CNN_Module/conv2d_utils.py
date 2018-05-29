@@ -259,7 +259,7 @@ def identity_residual_block(X,name,num_channels,mid_filter_shape,is_training,
         INPUT:
             X               : the input 'image' to this layer
             name            : the name for this identity resnet block
-            channels        :the number of channels/filters in each of sub-layer
+            num_channels    :the number of channels/filters in each of sub-layer
                                 a tuple of (F1,F2,F3)
             mid_filter_shape: (fh,fw) a tuple of shape of the filter to be used
 
@@ -278,7 +278,7 @@ def identity_residual_block(X,name,num_channels,mid_filter_shape,is_training,
                             initializer=initializer)
 
         #Applying the Filtering in the mid sub-layer
-        A2=rectified_conv2d(X,name='branch_2b',
+        A2=rectified_conv2d(A1,name='branch_2b',
                             filter_shape=mid_filter_shape,
                             output_channel=num_channels[1],
                             stride=(1,1),
@@ -290,11 +290,11 @@ def identity_residual_block(X,name,num_channels,mid_filter_shape,is_training,
         #Again one-one convolution for upsampling
         #Sanity check for the last number of channels which should match with input
         input_channels=X.get_shape().as_list()[3]
-        if not input_channels==num_channels[3]:
+        if not input_channels==num_channels[2]:
             raise AssertionError('Identity Block: last sub-layer channels should match input')
-        Z3=rectified_conv2d(X,name='branch_2c',
+        Z3=rectified_conv2d(A2,name='branch_2c',
                             filter_shape=(1,1),
-                            output_channel=num_channels[3],
+                            output_channel=num_channels[2],
                             stride=(1,1),
                             padding_type="VALID",
                             is_training=is_training,apply_batchnorm=apply_batchnorm,
@@ -342,7 +342,7 @@ def convolutional_residual_block(X,name,num_channels,
                             initializer=initializer)
 
         #Applying the Filtering in the mid sub-layer
-        A2=rectified_conv2d(X,name='branch_2b',
+        A2=rectified_conv2d(A1,name='branch_2b',
                             filter_shape=mid_filter_shape,
                             output_channel=num_channels[1],
                             stride=(1,1),
@@ -353,9 +353,9 @@ def convolutional_residual_block(X,name,num_channels,
 
         #Again one-one convolution for upsampling
         #Here last number of channels which need not match with input
-        Z3=rectified_conv2d(X,name='branch_2c',
+        Z3=rectified_conv2d(A2,name='branch_2c',
                             filter_shape=(1,1),
-                            output_channel=num_channels[3],
+                            output_channel=num_channels[2],
                             stride=(1,1),
                             padding_type="VALID",
                             is_training=is_training,apply_batchnorm=apply_batchnorm,
@@ -365,18 +365,20 @@ def convolutional_residual_block(X,name,num_channels,
 
         #Skip-Connection/Shortcut Branch
         #Now we have to bring the shortcut/skip-connection in shape and number of channels
+        Z_shortcut=rectified_conv2d(X,name='branch_1',
+                            filter_shape=(1,1),
+                            output_channel=num_channels[2],
+                            stride=first_filter_stride,
+                            padding_type="VALID",
+                            is_training=is_training,apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            apply_relu=False, #necessary cuz addition before activation
+                            initializer=initializer)
+
+        #Finally merging the two branch
         with tf.variable_scope('skip_conn'):
-            Z_shortcut=rectified_conv2d(X,name='branch_1',
-                                filter_shape=(1,1),
-                                output_channel=num_channels[3],
-                                stride=first_filter_stride,
-                                padding_type="VALID",
-                                is_training=is_training,apply_batchnorm=apply_batchnorm,
-                                weight_decay=weight_decay,
-                                apply_relu=False, #necessary cuz addition before activation
-                                initializer=initializer)
             #now adding the two branches element wise
-            Z=tf.nn.add(Z3,Z_shortcut)
+            Z=tf.add(Z3,Z_shortcut)
             A=tf.nn.relu(Z,name='relu')
 
     return A

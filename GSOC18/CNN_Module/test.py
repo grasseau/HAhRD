@@ -14,7 +14,7 @@ epochs=10
 #Global Placeholders
 X=tf.placeholder(tf.float32,[None,784])
 Y=tf.placeholder(tf.float32,[None,10])
-is_training=tf.cast(True,tf.bool)
+is_training=tf.placeholder(tf.bool)
 
 
 def make_model_linear():
@@ -65,24 +65,32 @@ def make_model_conv():
                         padding_type='VALID')
 
     #The third convolution Layer
-    A3=rectified_conv2d(A2Mp,
-                        name='conv3',
-                        filter_shape=(3,3),
-                        output_channel=15,
-                        stride=(2,2),
-                        padding_type='SAME',
-                        is_training=is_training,
-                        apply_batchnorm=bn_decision,
-                        weight_decay=None,
-                        apply_relu=True)
-    A3Mp=max_pooling2d(A3,name='mpool3',
-                        filter_shape=(5,5),stride=(1,1),
-                        padding_type='VALID')
+    #Adding an identity block
+    A3=identity_residual_block(A2Mp,'identity_block',
+                                num_channels=[3,5,10],#here last channel is fixed since it has to be equal to input
+                                mid_filter_shape=(5,5),
+                                is_training=is_training,
+                                apply_batchnorm=bn_decision,
+                                weight_decay=None)
+    # A3Mp=max_pooling2d(A3,name='mpool3',
+    #                     filter_shape=(5,5),stride=(1,1),
+    #                     padding_type='VALID')
 
-    A4=simple_fully_connected(A3Mp,name='fc1',output_dim=25,
+    A4=convolutional_residual_block(A3,
+                                    name='conv_res_block',
+                                    num_channels=[3,5,12],#here last channel can be diff from input
+                                    first_filter_stride=(2,2),
+                                    mid_filter_shape=(5,5),
+                                    is_training=is_training,
+                                    apply_batchnorm=bn_decision,
+                                    weight_decay=None)
+
+
+    A5=simple_fully_connected(A4,name='fc1',output_dim=25,
                                 is_training=is_training,apply_batchnorm=bn_decision,
                                 flatten_first=True,weight_decay=None)
-    Z5=simple_fully_connected(A4,name='fc2',output_dim=10,
+
+    Z5=simple_fully_connected(A5,name='fc2',output_dim=10,
                                 is_training=is_training,apply_batchnorm=bn_decision,
                                 weight_decay=None,apply_relu=False)
 
@@ -121,16 +129,17 @@ def train_net():
                 epochs_x,epochs_y=mnist.train.next_batch(batch_size)
                 # epochs_x=tf.transpose(epochs_x)
                 # epochs_y=tf.transpose(epochs_y)
-                _,c=sess.run([optimizer,total_cost],feed_dict={X:epochs_x,Y:epochs_y})
+                _,c=sess.run([optimizer,total_cost],feed_dict={X:epochs_x,Y:epochs_y,is_training:True})
                 epoch_loss +=c
 
             t1=datetime.datetime.now()
             print 'Epoch ',epoch,' out of ',epochs,'loss: ',epoch_loss,' in ',t1-t0
 
-        is_training=False
+        #BEWARE: we have to use this while doing inference (is_training = False)
+        #is_training=False
         correct=tf.equal(tf.argmax(prediction,axis=1),tf.argmax(Y,axis=1))
         accuracy=tf.reduce_mean(tf.cast(correct,'float'))
-        print 'Accuracy: ',accuracy.eval({X:mnist.test.images,Y:mnist.test.labels})
+        print 'Accuracy: ',accuracy.eval({X:mnist.test.images,Y:mnist.test.labels,is_training:False})
 
         #writer.flush()
         writer.close()
