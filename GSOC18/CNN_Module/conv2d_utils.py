@@ -104,7 +104,7 @@ def simple_fully_connected(X,name,output_dim,is_training,
             Z_tilda=tf.add(Z,b,name='bias_add')
 
         if apply_relu==True:
-            A=tf.nn.relu(Z,name='relu')
+            A=tf.nn.relu(Z_tilda,name='relu')
         else:
             A=Z_tilda
 
