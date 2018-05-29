@@ -431,7 +431,7 @@ def inception_block(X,name,final_channel_list,compress_channel_list,
         #Now starting the 3x3 convolution part
         #first compressing by 1x1
         C3=rectified_conv2d(X,
-                            name='compress 3x3',
+                            name='compress_3x3',
                             filter_shape=(1,1),
                             output_channel=compress_channel_list[0],
                             stride=(1,1),
@@ -457,7 +457,7 @@ def inception_block(X,name,final_channel_list,compress_channel_list,
         #Now starting the same structure for the 5x5 conv part
         #first compressing by 1x1
         C5=rectified_conv2d(X,
-                            name='compress 5x5',
+                            name='compress_5x5',
                             filter_shape=(1,1),
                             output_channel=compress_channel_list[1],
                             stride=(1,1),
@@ -489,9 +489,9 @@ def inception_block(X,name,final_channel_list,compress_channel_list,
                           padding_type='SAME')
         #now comressing to reduce channels
         AMp=rectified_conv2d(CMp,
-                            name='compress maxpool',
+                            name='compress_maxpool',
                             filter_shape=(1,1),
-                            output_channel=compress_channel_list[3],
+                            output_channel=final_channel_list[3],
                             stride=(1,1),
                             padding_type='VALID',
                             is_training=is_training,

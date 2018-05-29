@@ -12,10 +12,9 @@ batch_size=128
 epochs=10
 
 #Global Placeholders
-X=tf.placeholder(tf.float32,[None,784])
-Y=tf.placeholder(tf.float32,[None,10])
-is_training=tf.placeholder(tf.bool)
-
+X=tf.placeholder(tf.float32,[None,784],name='X')
+Y=tf.placeholder(tf.float32,[None,10],name='Y')
+is_training=tf.placeholder(tf.bool,[],name='training_flag')
 
 def make_model_linear():
     lambd=0.1
@@ -76,15 +75,22 @@ def make_model_conv():
     #                     filter_shape=(5,5),stride=(1,1),
     #                     padding_type='VALID')
 
-    A4=convolutional_residual_block(A3,
-                                    name='conv_res_block',
-                                    num_channels=[3,5,12],#here last channel can be diff from input
-                                    first_filter_stride=(2,2),
-                                    mid_filter_shape=(5,5),
-                                    is_training=is_training,
-                                    apply_batchnorm=bn_decision,
-                                    weight_decay=None)
+    # A4=convolutional_residual_block(A3,
+    #                                 name='conv_res_block',
+    #                                 num_channels=[3,5,12],#here last channel can be diff from input
+    #                                 first_filter_stride=(2,2),
+    #                                 mid_filter_shape=(5,5),
+    #                                 is_training=is_training,
+    #                                 apply_batchnorm=bn_decision,
+    #                                 weight_decay=None)
 
+    A4=inception_block(A3,
+                        name='inception1',
+                        final_channel_list=[3,2,1,2],
+                        compress_channel_list=[2,2],
+                        is_training=is_training,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=None)
 
     A5=simple_fully_connected(A4,name='fc1',output_dim=25,
                                 is_training=is_training,apply_batchnorm=bn_decision,
@@ -139,7 +145,7 @@ def train_net():
         #is_training=False
         correct=tf.equal(tf.argmax(prediction,axis=1),tf.argmax(Y,axis=1))
         accuracy=tf.reduce_mean(tf.cast(correct,'float'))
-        print 'Accuracy: ',accuracy.eval({X:mnist.test.images,Y:mnist.test.labels,is_training:False})
+        print 'Accuracy: ',accuracy.eval({X:mnist.test.images,Y:mnist.test.labels,is_training:False})##
 
         #writer.flush()
         writer.close()
