@@ -33,12 +33,13 @@ def _get_variable_on_cpu(name,shape,initializer,weight_decay=None):
     with tf.device('/cpu:0'):
         weight=tf.get_variable(name,shape=shape,dtype=dtype,
                         initializer=initializer)
+        tf.summary.histogram(name,weight)
 
     if not weight_decay==None:
         #Applying the l2 regularization and multiplying with
         #the hyperpaprameter weight_decay: lambda
         reg_loss=tf.multiply(tf.nn.l2_loss(weight),weight_decay,
-                                name='l2_reg_loss')
+                                name='lambd_hyparam')
         #Adding the loss to the collection so that it could be
         #added to final loss
         tf.add_to_collection('all_losses',reg_loss)
@@ -46,7 +47,7 @@ def _get_variable_on_cpu(name,shape,initializer,weight_decay=None):
     return weight
 
 ################ Simple Feed Forwards Layer ###################
-def simple_fully_connected(X,name,output_dim,is_training,
+def simple_fully_connected(X,name,output_dim,is_training,dropout_rate=0.0,
                             apply_batchnorm=True,weight_decay=None,
                             flatten_first=False,apply_relu=True,
                             initializer=tf.glorot_uniform_initializer()):
@@ -66,8 +67,17 @@ def simple_fully_connected(X,name,output_dim,is_training,
                             regularization of the weights
             is_training : to be used to state the mode i.e training or
                             inference mode.used for batch norm
+            dropout_rate: the fraction of the activation which we will
+                            dropout randomly to act as a regularizing effect.
+                            a number between 0 an 1.
+            apply_batchnorm: whether to apply batch norm or not. A boolean
+                            True/False.
+            weight_decay : an hyperparameter which will control the fraction
+                            of L2- norm of weights to add in total loss.
+                            Will act as regularization effect.
             flatten_first: whether to first flattenthe input into a
                             2 dimenional tensor as [batch_size,all_activation]
+            apply_relu  : whether to apply relu activation at last or not.
             initializer :initializer choice to be used for Weights
 
         OUTPUT:
@@ -104,7 +114,11 @@ def simple_fully_connected(X,name,output_dim,is_training,
             Z_tilda=tf.add(Z,b,name='bias_add')
 
         if apply_relu==True:
-            A=tf.nn.relu(Z_tilda,name='relu')
+            with tf.variable_scope('rl_dp'):
+                A=tf.nn.relu(Z_tilda,name='relu')
+                #Adding dropout to the layer with drop_rate parameter
+                A=tf.layers.dropout(A,rate=dropout_rate,training=is_training,
+                                    name='dropout')
         else:
             A=Z_tilda
 
@@ -112,7 +126,7 @@ def simple_fully_connected(X,name,output_dim,is_training,
 
 ################ Convlutional Layers ##########################
 def rectified_conv2d(X,name,filter_shape,output_channel,
-                    stride,padding_type,is_training,
+                    stride,padding_type,is_training,dropout_rate=0.0,
                     apply_batchnorm=True,weight_decay=None,apply_relu=True,
                     initializer=tf.glorot_uniform_initializer()):
     '''
@@ -136,6 +150,9 @@ def rectified_conv2d(X,name,filter_shape,output_channel,
             padding_type   : string either to do 'SAME' or 'VALID' padding
             is_training    : (used with batchnorm) a boolean to specify
                                 whether we are in training or inference mode.
+            dropout_rate   : the fraction of final activation to drop from the
+                             last activation of this layer.
+                            It will act as regularization effect.
             apply_batchnorm: a boolean to specify whether to use batch norm or
                                 not.Defaulted to True since bnorm is useful
             weight_decay   : give a value of regularization hyperpaprameter
@@ -176,7 +193,11 @@ def rectified_conv2d(X,name,filter_shape,output_channel,
 
         #Finally applying the 'relu' activation
         if apply_relu==True:
-            A=tf.nn.relu(Z,name='relu')
+            with tf.variable_scope('rl_dp'):
+                A=tf.nn.relu(Z,name='relu')
+                #Adding the dropout to the last layer
+                A=tf.layers.dropout(A,rate=dropout_rate,training=is_training,
+                                    name='dropout')
         else:
             A=Z #when we want to apply another activation outside in model.
 
@@ -241,7 +262,7 @@ def _batch_normalization2d(Z,is_training,name='batchnorm'):
 
 ############### Residual Layers ##############################
 def identity_residual_block(X,name,num_channels,mid_filter_shape,is_training,
-                            apply_batchnorm=True,weight_decay=None,
+                            dropout_rate=0.0,apply_batchnorm=True,weight_decay=None,
                             initializer=tf.glorot_uniform_initializer()):
     '''
     DESCRIPTION:
@@ -273,7 +294,9 @@ def identity_residual_block(X,name,num_channels,mid_filter_shape,is_training,
                             output_channel=num_channels[0],
                             stride=(1,1),
                             padding_type="VALID",
-                            is_training=is_training,apply_batchnorm=apply_batchnorm,
+                            is_training=is_training,
+                            dropout_rate=dropout_rate,
+                            apply_batchnorm=apply_batchnorm,
                             weight_decay=weight_decay,
                             initializer=initializer)
 
@@ -283,7 +306,9 @@ def identity_residual_block(X,name,num_channels,mid_filter_shape,is_training,
                             output_channel=num_channels[1],
                             stride=(1,1),
                             padding_type="SAME",
-                            is_training=is_training,apply_batchnorm=apply_batchnorm,
+                            is_training=is_training,
+                            dropout_rate=dropout_rate,
+                            apply_batchnorm=apply_batchnorm,
                             weight_decay=weight_decay,
                             initializer=initializer)
 
@@ -297,7 +322,9 @@ def identity_residual_block(X,name,num_channels,mid_filter_shape,is_training,
                             output_channel=num_channels[2],
                             stride=(1,1),
                             padding_type="VALID",
-                            is_training=is_training,apply_batchnorm=apply_batchnorm,
+                            is_training=is_training,
+                            dropout_rate=0.0,
+                            apply_batchnorm=apply_batchnorm,
                             weight_decay=weight_decay,
                             apply_relu=False, #necessary cuz addition before activation
                             initializer=initializer)
@@ -308,11 +335,13 @@ def identity_residual_block(X,name,num_channels,mid_filter_shape,is_training,
             Z=tf.add(Z3,X)
             A=tf.nn.relu(Z,name='relu')
 
+        #Adding dropout to the last sub-layer of this block
+        tf.layers.dropout(A,rate=dropout_rate,training=is_training,name='dropout')
         return A
 
 def convolutional_residual_block(X,name,num_channels,
-                            first_filter_stride,mid_filter_shape,
-                            is_training,apply_batchnorm=True,weight_decay=None,
+                            first_filter_stride,mid_filter_shape,is_training,
+                            dropout_rate=0.0,apply_batchnorm=True,weight_decay=None,
                             initializer=tf.glorot_uniform_initializer()):
     '''
     DESCRIPTION:
@@ -337,7 +366,9 @@ def convolutional_residual_block(X,name,num_channels,
                             output_channel=num_channels[0],
                             stride=first_filter_stride,
                             padding_type="VALID",
-                            is_training=is_training,apply_batchnorm=apply_batchnorm,
+                            is_training=is_training,
+                            dropout_rate=dropout_rate,
+                            apply_batchnorm=apply_batchnorm,
                             weight_decay=weight_decay,
                             initializer=initializer)
 
@@ -347,7 +378,9 @@ def convolutional_residual_block(X,name,num_channels,
                             output_channel=num_channels[1],
                             stride=(1,1),
                             padding_type="SAME",
-                            is_training=is_training,apply_batchnorm=apply_batchnorm,
+                            is_training=is_training,
+                            dropout_rate=dropout_rate,
+                            apply_batchnorm=apply_batchnorm,
                             weight_decay=weight_decay,
                             initializer=initializer)
 
@@ -358,7 +391,9 @@ def convolutional_residual_block(X,name,num_channels,
                             output_channel=num_channels[2],
                             stride=(1,1),
                             padding_type="VALID",
-                            is_training=is_training,apply_batchnorm=apply_batchnorm,
+                            is_training=is_training,
+                            dropout_rate=0.0,
+                            apply_batchnorm=apply_batchnorm,
                             weight_decay=weight_decay,
                             apply_relu=False, #necessary cuz addition before activation
                             initializer=initializer)
@@ -370,7 +405,9 @@ def convolutional_residual_block(X,name,num_channels,
                             output_channel=num_channels[2],
                             stride=first_filter_stride,
                             padding_type="VALID",
-                            is_training=is_training,apply_batchnorm=apply_batchnorm,
+                            is_training=is_training,
+                            dropout_rate=0.0,
+                            apply_batchnorm=apply_batchnorm,
                             weight_decay=weight_decay,
                             apply_relu=False, #necessary cuz addition before activation
                             initializer=initializer)
@@ -381,11 +418,15 @@ def convolutional_residual_block(X,name,num_channels,
             Z=tf.add(Z3,Z_shortcut)
             A=tf.nn.relu(Z,name='relu')
 
+        #Adding the dropout to the last sub-layer after skip-connection
+        tf.layers.dropout(A,rate=dropout_rate,training=is_training,name='dropout')
+
     return A
 
 ############## Inception Module #############################
 def inception_block(X,name,final_channel_list,compress_channel_list,
-                    is_training,apply_batchnorm=True,weight_decay=None,
+                    is_training,dropout_rate=0.0,
+                    apply_batchnorm=True,weight_decay=None,
                     initializer=tf.glorot_uniform_initializer()):
     '''
     DESCRIPTION:
@@ -423,6 +464,7 @@ def inception_block(X,name,final_channel_list,compress_channel_list,
                             stride=(1,1),
                             padding_type='VALID',
                             is_training=is_training,
+                            dropout_rate=dropout_rate,
                             apply_batchnorm=apply_batchnorm,
                             weight_decay=weight_decay,
                             apply_relu=True,
@@ -437,6 +479,7 @@ def inception_block(X,name,final_channel_list,compress_channel_list,
                             stride=(1,1),
                             padding_type='VALID',
                             is_training=is_training,
+                            dropout_rate=0.0,
                             apply_batchnorm=apply_batchnorm,
                             weight_decay=weight_decay,
                             apply_relu=True,
@@ -449,6 +492,7 @@ def inception_block(X,name,final_channel_list,compress_channel_list,
                             stride=(1,1),
                             padding_type='SAME',
                             is_training=is_training,
+                            dropout_rate=dropout_rate,
                             apply_batchnorm=apply_batchnorm,
                             weight_decay=weight_decay,
                             apply_relu=True,
@@ -463,6 +507,7 @@ def inception_block(X,name,final_channel_list,compress_channel_list,
                             stride=(1,1),
                             padding_type='VALID',
                             is_training=is_training,
+                            dropout_rate=0.0,
                             apply_batchnorm=apply_batchnorm,
                             weight_decay=weight_decay,
                             apply_relu=True,
@@ -475,6 +520,7 @@ def inception_block(X,name,final_channel_list,compress_channel_list,
                             stride=(1,1),
                             padding_type='SAME',
                             is_training=is_training,
+                            dropout_rate=dropout_rate,
                             apply_batchnorm=apply_batchnorm,
                             weight_decay=weight_decay,
                             apply_relu=True,
@@ -495,6 +541,7 @@ def inception_block(X,name,final_channel_list,compress_channel_list,
                             stride=(1,1),
                             padding_type='VALID',
                             is_training=is_training,
+                            dropout_rate=dropout_rate,
                             apply_batchnorm=apply_batchnorm,
                             weight_decay=weight_decay,
                             apply_relu=True,
