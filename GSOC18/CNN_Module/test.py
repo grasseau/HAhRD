@@ -10,7 +10,7 @@ mnist = input_data.read_data_sets("/tmp/data/", one_hot = True)
 n_classes=10
 batch_size=128
 epochs=5
-summary_filename="tmp/mnist/8"
+summary_filename="tmp/mnist/1"
 
 ##################  Global Placeholders ##################
 X=tf.placeholder(tf.float32,[None,784],name='X')
@@ -87,8 +87,10 @@ def make_model_linear():
     return Z4
 
 def make_model_conv():
-    bn_decision=None
-    lambd=None
+    #Current Hyperparameter (will be separated later)
+    bn_decision=False
+    lambd=0.0
+    dropout_rate=0.0
 
     X_img=tf.reshape(X,[-1,28,28,1])
     #with tf.device('/cpu:0'):
@@ -100,6 +102,7 @@ def make_model_conv():
                         stride=(1,1),
                         padding_type='SAME',
                         is_training=is_training,
+                        dropout_rate=dropout_rate,
                         apply_batchnorm=bn_decision,
                         weight_decay=lambd,
                         apply_relu=True)
@@ -108,56 +111,63 @@ def make_model_conv():
                         padding_type='VALID')
 
     #The first Convolutional layer
-    A2=rectified_conv2d(A1Mp,
-                        name='conv2',
-                        filter_shape=(5,5),
-                        output_channel=10,
-                        stride=(1,1),
-                        padding_type='SAME',
-                        is_training=is_training,
-                        apply_batchnorm=bn_decision,
-                        weight_decay=lambd,
-                        apply_relu=True)
-    A2Mp=max_pooling2d(A2,name='mpool2',
-                        filter_shape=(5,5),stride=(1,1),
-                        padding_type='VALID')
+    # A2=rectified_conv2d(A1Mp,
+    #                     name='conv2',
+    #                     filter_shape=(5,5),
+    #                     output_channel=10,
+    #                     stride=(1,1),
+    #                     padding_type='SAME',
+    #                     is_training=is_training,
+    #                     dropout_rate=dropout_rate,
+    #                     apply_batchnorm=bn_decision,
+    #                     weight_decay=lambd,
+    #                     apply_relu=True)
+    # A2Mp=max_pooling2d(A2,name='mpool2',
+    #                     filter_shape=(5,5),stride=(1,1),
+    #                     padding_type='VALID')
 
-    #The third convolution Layer
     #Adding an identity block
-    A3=identity_residual_block(A2Mp,'identity_block',
-                                num_channels=[3,5,10],#here last channel is fixed since it has to be equal to input
+    A3=identity_residual_block(A1Mp,'identity_block',
+                                num_channels=[3,3,5],#here last channel is fixed since it has to be equal to input
                                 mid_filter_shape=(5,5),
                                 is_training=is_training,
+                                dropout_rate=dropout_rate,
                                 apply_batchnorm=bn_decision,
                                 weight_decay=lambd)
     # A3Mp=max_pooling2d(A3,name='mpool3',
     #                     filter_shape=(5,5),stride=(1,1),
     #                     padding_type='VALID')
 
-    # A4=convolutional_residual_block(A3,
+    # A4=convolutional_residual_block(A1Mp,
     #                                 name='conv_res_block',
     #                                 num_channels=[3,5,12],#here last channel can be diff from input
     #                                 first_filter_stride=(2,2),
     #                                 mid_filter_shape=(5,5),
     #                                 is_training=is_training,
+    #                                 dropout_rate=dropout_rate,
     #                                 apply_batchnorm=bn_decision,
     #                                 weight_decay=lambd)
 
-    # A4=inception_block(A3,
-    #                     name='inception1',
-    #                     final_channel_list=[3,2,1,2],
-    #                     compress_channel_list=[2,2],
-    #                     is_training=is_training,
-    #                     apply_batchnorm=bn_decision,
-    #                     weight_decay=lambd)
+    A5=inception_block(A3,
+                        name='inception1',
+                        final_channel_list=[3,2,1,2],
+                        compress_channel_list=[2,2],
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd)
 
-    A5=simple_fully_connected(A3,name='fc1',output_dim=25,
-                                is_training=is_training,apply_batchnorm=bn_decision,
-                                flatten_first=True,weight_decay=None)
+    A6=simple_fully_connected(A5,name='fc1',output_dim=25,
+                                is_training=is_training,
+                                dropout_rate=dropout_rate,
+                                apply_batchnorm=bn_decision,
+                                flatten_first=True,weight_decay=lambd)
 
-    Z5=simple_fully_connected(A5,name='fc2',output_dim=10,
-                                is_training=is_training,apply_batchnorm=bn_decision,
-                                weight_decay=None,apply_relu=False)
+    Z5=simple_fully_connected(A6,name='fc2',output_dim=10,
+                                is_training=is_training,
+                                dropout_rate=dropout_rate,
+                                apply_batchnorm=bn_decision,
+                                weight_decay=lambd,apply_relu=False)
 
     return Z5
 

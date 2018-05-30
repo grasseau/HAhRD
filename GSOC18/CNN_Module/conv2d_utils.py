@@ -336,7 +336,7 @@ def identity_residual_block(X,name,num_channels,mid_filter_shape,is_training,
             A=tf.nn.relu(Z,name='relu')
 
         #Adding dropout to the last sub-layer of this block
-        tf.layers.dropout(A,rate=dropout_rate,training=is_training,name='dropout')
+        A=tf.layers.dropout(A,rate=dropout_rate,training=is_training,name='dropout')
         return A
 
 def convolutional_residual_block(X,name,num_channels,
@@ -419,7 +419,7 @@ def convolutional_residual_block(X,name,num_channels,
             A=tf.nn.relu(Z,name='relu')
 
         #Adding the dropout to the last sub-layer after skip-connection
-        tf.layers.dropout(A,rate=dropout_rate,training=is_training,name='dropout')
+        A=tf.layers.dropout(A,rate=dropout_rate,training=is_training,name='dropout')
 
     return A
 
