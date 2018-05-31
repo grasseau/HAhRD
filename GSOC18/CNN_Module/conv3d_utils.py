@@ -182,7 +182,7 @@ def identity3d_residual_block(X,name,num_channels,mid_filter_shape,is_training,
         OUTPUT:
             A               : the output activataion of this layer
     '''
-    with tf.varaible_scope(name):
+    with tf.variable_scope(name):
         #MAIN BRANCH
         #Applying the first filter - one-one convolution for compressing
         A1=rectified_conv3d(X,name='branch_2a',
@@ -250,7 +250,7 @@ def convolutional3d_residual_block(X,name,num_channels,
         OUTPUT:
             A                   : the final output of this layer
     '''
-    with tf.variable_scope():
+    with tf.variable_scope(name):
         #Main Branch
         #Applying the first one one convolution
         A1=rectified_conv3d(X,name='branch_2a',
@@ -314,7 +314,7 @@ def convolutional3d_residual_block(X,name,num_channels,
     return A
 
 ###################### Inception Module ###########################
-def inception_block(X,name,final_channel_list,compress_channel_list,
+def inception3d_block(X,name,final_channel_list,compress_channel_list,
                     is_training,dropout_rate=0.0,
                     apply_batchnorm=False,weight_decay=None,
                     initializer=tf.glorot_uniform_initializer()):

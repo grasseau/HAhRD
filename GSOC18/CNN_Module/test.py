@@ -1,5 +1,6 @@
 import tensorflow as tf
 from conv2d_utils import *
+from conv3d_utils import *
 import datetime
 
 #Getting the training data
@@ -10,7 +11,7 @@ mnist = input_data.read_data_sets("/tmp/data/", one_hot = True)
 n_classes=10
 batch_size=128
 epochs=5
-summary_filename="tmp/mnist/1"
+summary_filename="tmp/mnist/3"
 
 ##################  Global Placeholders ##################
 X=tf.placeholder(tf.float32,[None,784],name='X')
@@ -171,6 +172,70 @@ def make_model_conv():
 
     return Z5
 
+def make_model_conv3d():
+    bn_decision=False
+    lambd=0.0
+    dropout_rate=0.0
+
+    #Converting it into a five dimensional tensor
+    X_img=tf.reshape(X,shape=[-1,28,28,1,1])
+
+    #Adding the first convolution layer
+    A1=rectified_conv3d(X_img,
+                        name='conv3d1',
+                        filter_shape=(3,3,1),
+                        output_channel=5,
+                        stride=(1,1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+    A1Mp=max_pooling3d(A1,
+                        name='mpool1',
+                        filter_shape=(5,5,1),
+                        stride=(1,1,1),
+                        padding_type='VALID')
+
+    # A2=identity3d_residual_block(A1Mp,
+    #                             name='identity1',
+    #                             num_channels=[2,2,5],
+    #                             mid_filter_shape=(5,5,1),
+    #                             is_training=is_training,
+    #                             dropout_rate=dropout_rate,
+    #                             apply_batchnorm=bn_decision,
+    #                             weight_decay=lambd)
+
+    # A2=convolutional3d_residual_block(A1Mp,
+    #                                   name='conv_res_block',
+    #                                   num_channels=(2,2,2),
+    #                                   first_filter_stride=(2,2,1),
+    #                                   mid_filter_shape=(5,5,1),
+    #                                   is_training=is_training,
+    #                                   dropout_rate=dropout_rate,
+    #                                   apply_batchnorm=bn_decision,
+    #                                   weight_decay=lambd)
+
+    A2=inception3d_block(A1Mp,
+                        name='inception1',
+                        final_channel_list=[3,2,1,1],
+                        compress_channel_list=(1,1),
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd)
+
+
+
+    Z5=simple_fully_connected(A2,name='fc2',output_dim=10,
+                                is_training=is_training,
+                                dropout_rate=dropout_rate,
+                                apply_batchnorm=bn_decision,
+                                weight_decay=lambd,
+                                flatten_first=True,apply_relu=False)
+    return Z5
+
 ######################## Main Training Function ######################
 def train_net(prediction):
     #Calculating cost and optimizer op
@@ -220,7 +285,7 @@ def train_net(prediction):
 ################### Main Calling Function ##################
 if __name__=="__main__":
     #Creating the graph
-    prediction=make_model_conv()
+    prediction=make_model_conv3d()
 
     #Training the graph
     train_net(prediction)
