@@ -1,0 +1,445 @@
+import tensorflow as tf
+from conv2d_utils import get_variable_on_cpu
+
+############### Tensorflow Constants ###################
+graph_level_seed=1
+tf.set_random_seed(graph_level_seed)
+############### Global Constant ########################
+#this datatype will be used to generate the weights
+dtype=tf.float32    #this will help us save memory
+
+############## Convolutional Layers ###################
+def rectified_conv3d(X,name,filter_shape,output_channel,
+                    stride,padding_type,is_training,dropout_rate=0.0,
+                    apply_batchnorm=False,weight_decay=None,apply_relu=True,
+                    initializer=tf.glorot_uniform_initializer()):
+    '''
+    DESCRIPTION:
+        This function will apply a 3D convolution to the 3D image of
+        form :
+        [
+         depth  : in our case the layer of HGCAL detector
+         height : in out case x-axis of the detector (check orientation of HGCAL)
+         width  : in our case y-axis of the detector
+        ]
+        Unlike the 2d version, this will also convolute in depth dimension
+        of image since they also contain the information about
+        TIME-axis.
+
+        So, input will be of form (using default data format of tensorflow NDHWC)
+        [batch_size,depth,height,width,channels]
+
+    USAGE:
+        INPUT:
+            X               : the input (tensor) to this layer
+            name            : unique name (string) for this convolutional layer
+            filter_shape    : (tuple) of form
+                                (filter_depth,filter_height,filter_width)
+            output_channel  : (int) the total number of output channels
+            stride          : (tuple) of form
+                                (stride_depth,stride_height,stride_width)
+            padding_type    : (string) 'SAME'/'VALID'
+            is_training     : (placeholder)to distinguish whether we are in
+                                training mode or inference/testing mode
+            dropout_rate    : (int)fraction of final activation (if relu activated)
+                                which will be dropped/made zero
+            apply_batchnorm : (boolean) to specify to whether to use batchnorm
+                                or not.Default False
+            weight_decay    : (int) another hyperparameter to specify the
+                                proportion of L2-regularization included in final
+                                total loss. If None/0 the weight decay will not be
+                                applied.
+            apply_relu      : whether to apply relu before giving the result or
+                                not. Useful in cases in Resnet blocks and before
+                                softmax
+            initializer     : the initializer function handle for filter Varaibles
+
+        OUTPUT:
+            A               : the output/final 3D image activation of this layer
+    '''
+    with tf.variable_scope(name):
+        #Creating filter weight
+        #[batch,in_depth,in_height,in_width,in_channels]
+        input_channel=X.get_shape().as_list()[4]
+        fd,fh,fw=filter_shape
+        net_filter_shape=(fd,fh,fw,input_channel,output_channel)
+        filters=get_variable_on_cpu('W',net_filter_shape,initializer,weight_decay)
+
+        #Setting up padding configuration
+        sd,sh,sw=stride
+        net_stride=(1,sd,sh,sw,1)#must have stride[0]=stride[4]=1
+        if not (padding_type=='SAME' or padding_type=='VALID'):
+            raise AssertionError('Please use SAME/VALID string for padding_type')
+
+        #Now applying the convolution
+        Z_conv=tf.nn.conv3d(X,filters,net_stride,padding_type,name='conv3d')
+        if apply_batchnorm==True:
+            Z=_batch_normalization3d(Z_conv,is_training)
+        else:
+            #Since we are not using batchnormalization we can use bias
+            #Bias Weight Creation
+            net_bias_shape=(1,1,1,1,output_channel)
+            bias_initializer=tf.zeros_initializer()
+            #Also, conventionally we dont apply weight decay to biases
+            biases=get_variable_on_cpu('b',net_bias_shape,bias_initializer)
+            #Adding the biases to the Z_conv
+            Z=tf.add(Z_conv,biases,name='bias_add')
+
+        #Finally applying element wise RELU activation and DROPOUT is required
+        if apply_relu==True:
+            with tf.variable_scope('rl_dp'):
+                A=tf.nn.relu(Z,name='relu')
+                #Adding dropout only after activation/rectification
+                A=tf.layers.dropout(A,rate=dropout_rate,training=is_training,
+                                        name='dropout')
+        else:
+            #If we want to apply another activation from outside
+            A=Z
+
+    return A
+
+def _batch_normalization3d(Z,is_training,name='batchnorm'):
+    '''
+    DESCRIPTION:
+        This function will apply batch norm to the 3d unrectified
+        image generated by the the 3d convolution.
+        The axis chosen will be generalization of the one used in
+        2d BatchNormalization case i.e normalizing along the channel
+        axis.(This need to be verified/proven)
+    USAGE:
+        INPUT:
+            Z           : the unrectified image of conv3d layer
+            is_training : a tensorflow boolean got from placeholder
+                          which will tell us whether we are in training mode
+                          or testing mode.
+        OUTPUT:
+            Z_tilda     : a batch-normalized version of input
+    '''
+    with tf.variable_scope(name):
+        axis=4      #here the channel axis is 4. (need to be VERIFIED)
+        #(this function is general purpose for any tensor shape)
+        Z_tilda=tf.layers.batch_normalization(Z,axis=axis,
+                                            training=is_training)
+
+    return Z_tilda
+
+def max_pooling3d(X,name,filter_shape,stride,padding_type):
+    '''
+    DESCRIPTION:
+        This function will perform maxpooling of input 3D image.
+        Again similar to conv3d the filter shape and stride will have all
+        depth,height and width of the image.
+
+        The number of channels will be same as input. And there are no
+        trainable parameter.
+    USAGE:
+        INPUT:
+            X               : the input tensor
+            name            : a unique name for this layer
+            filter_shape    : (tuple) of form
+                                (filter_depth,filter_height,filter_width)
+            stride          : (tuple) of form
+                                (stride_depth,stride_height,stride_width)
+            padding_type    : (string) 'SAME'/'VALID'
+        OUTPUT:
+            A               : the maxpooled output
+    '''
+    with tf.variable_scope(name):
+        #Setting up the filter and stride in proper format
+        fd,fh,fw=filter_shape
+        net_filter_shape=(1,fd,fh,fw,1)
+        sd,sh,sw=stride
+        net_stride=(1,sd,sh,sw,1)
+
+        #Applying the maxpooling
+        A=tf.nn.max_pool3d(X,net_filter_shape,net_stride,padding_type,name='max_pool')
+
+    return A
+
+##################### Residual Layers ##########################
+def identity3d_residual_block(X,name,num_channels,mid_filter_shape,is_training,
+                                dropout_rate=0.0,apply_batchnorm=False,weight_decay=None,
+                                initializer=tf.glorot_uniform_initializer()):
+    '''
+    DESCRIPTION:
+        This function will impletement a 3d "image" (which contain both
+        spatio-temporal information) of the Identity Residual Block.
+        The pattern is similar to the 2D version of Identity Residual Block.
+
+        Again Bottle-neck approach will be used to reduce the dimension of the
+        number of channels to decrease the computational cost of applying a larger
+        sized filter on large number of channels.
+    USAGE:
+        INPUT:
+            X               : the input tensor to this layer
+            name            : the unique name of this layer for namescope/variablescope
+            num_channels    : the number of channels in each sub-layer of main branch
+                                in the resnet architecture : of shape [F1,F2,F3]
+            mid_filter_shape:(tuple) for the mid layer of the main branch
+                             of shape [filter_width,filter_height,filter_width]
+
+            {other arguments are as usual to the conv layers}
+        OUTPUT:
+            A               : the output activataion of this layer
+    '''
+    with tf.varaible_scope(name):
+        #MAIN BRANCH
+        #Applying the first filter - one-one convolution for compressing
+        A1=rectified_conv3d(X,name='branch_2a',
+                            filter_shape=(1,1,1),
+                            output_channel=num_channels[0],
+                            stride=(1,1,1),
+                            padding_type='VALID',
+                            is_training=is_training,
+                            dropout_rate=dropout_rate,
+                            apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            initializer=initializer)
+        #Applying the mid sub-layer of main branch
+        A2=rectified_conv3d(A1,name='branch_2b',
+                            filter_shape=mid_filter_shape,
+                            output_channel=num_channels[1],
+                            stride=(1,1,1),
+                            padding_type='SAME',
+                            is_training=is_training,
+                            apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            initializer=initializer)
+        #Finally decompressing with one-one convolution
+        #Sanity check for the last layer's num of channels should match with input
+        input_channels=X.get_shape().as_list()[4]
+        if not input_channels==num_channels[2]:
+            raise AssertionError('IdentityBlock: last sub-layer channel size should be same to input')
+        Z3=rectified_conv3d(A2,name='branch_2c',
+                            filter_shape=(1,1,1),
+                            output_channel=num_channels[2],
+                            stride=(1,1,1),
+                            padding_type='VALID',
+                            is_training=is_training,
+                            dropout_rate=0.0,#dropout will be after adding shortcut
+                            apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            apply_relu=False,#first we will add the shortcut and then rectify
+                            initializer=initializer)
+
+        #Skip-Connection
+        #Now we will add the shortcut path/skip connection directly from input
+        with tf.variable_scope('skip_conn'):
+            Z=tf.add(Z3,X)        #element wise addition
+            A=tf.nn.relu(Z,name='relu')
+
+        #Now finally adding the dropout to the final activation
+        #(this function is general purpose of any tensor shape)
+        A=tf.layers.dropout(A,rate=dropout_rate,training=is_training,name='dropout')
+    return A
+
+def convolutional3d_residual_block(X,name,num_channels,
+                                first_filter_stride,mid_filter_shape,is_training,
+                                dropout_rate=0.0,apply_batchnorm=False,weight_decay=None,
+                                initializer=tf.glorot_uniform_initializer()):
+    '''
+    DESCRIPTION:
+        Again the fuctionality being similar to it 2d counterpart.
+    USAGE:
+        INPUT:
+            first_filter_stride : (tuple) of form
+                                    (stride_depth,stride_height,stride_width)
+                                    for the first layer to reduce the image(dhw) dimension
+
+            {Rest of the arguments are similar to the identity block}
+        OUTPUT:
+            A                   : the final output of this layer
+    '''
+    with tf.variable_scope():
+        #Main Branch
+        #Applying the first one one convolution
+        A1=rectified_conv3d(X,name='branch_2a',
+                            filter_shape=(1,1,1),
+                            output_channel=num_channels[0],
+                            stride=first_filter_stride,
+                            padding_type='VALID',
+                            is_training=is_training,
+                            dropout_rate=dropout_rate,
+                            apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            initializer=initializer)
+        #Applying the mid sub-layer of main branch
+        A2=rectified_conv3d(A1,name='branch_2b',
+                            filter_shape=mid_filter_shape,
+                            output_channel=num_channels[1],
+                            stride=(1,1,1),
+                            padding_type='SAME',
+                            is_training=is_training,
+                            apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            initializer=initializer)
+        #Again one-one convolution for decompressing/upsampling
+        #Here last number of channels which need not match with input
+        #since we will match them while transforming the shortcut path
+        Z3=rectified_conv3d(A2,name='branch_2c',
+                            filter_shape=(1,1,1),
+                            output_channel=num_channels[2],
+                            stride=(1,1,1),
+                            padding_type='VALID',
+                            is_training=is_training,
+                            dropout_rate=0.0,#dropout will be after adding shortcut
+                            apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            apply_relu=False,#first we will add the shortcut and then rectify
+                            initializer=initializer)
+
+        #Skip-Connection/Shorcut Branch
+        #Now we will bring the "DHWC" of input to the similar shape as main branch
+        Z_shortcut=rectified_conv3d(X,name='branch_1',
+                                    filter_shape=(1,1,1),
+                                    output_channel=num_channels[2],#same number as last sub-layer
+                                    stride=first_filter_stride,#now DHW same as main branch
+                                    padding_type="VALID",
+                                    is_training=is_training,
+                                    dropout_rate=0.0,#will be added after skip connection
+                                    apply_batchnorm=apply_batchnorm,
+                                    weight_decay=weight_decay,
+                                    apply_relu=False,#will be done after skip connection
+                                    initializer=initializer)
+
+        #Finally merging the two branches
+        with tf.variable_scope('skip_conn'):
+            #now adding the two branches element wise
+            Z=tf.add(Z3,Z_shortcut)
+            A=tf.nn.relu(Z,name='relu')
+
+        #Now adding the dropout of the last sub-layer after this skip connection
+        A=tf.layers.dropout(A,rate=dropout_rate,training=is_training,name='dropout')
+
+    return A
+
+###################### Inception Module ###########################
+def inception_block(X,name,final_channel_list,compress_channel_list,
+                    is_training,dropout_rate=0.0,
+                    apply_batchnorm=False,weight_decay=None,
+                    initializer=tf.glorot_uniform_initializer()):
+    '''
+    DESCRIPTION:
+        This function will be again a equivalent of 2d inception
+        block with the 3d convolution at each sub-layer rather than
+        2d convolution. The filter shape currently chosen are
+                [F1:1x1x1, F2:3x3x3, F3:5x5x5]
+        but could be changed if they contribute significantly to
+        the conputational complexity
+    USAGE:
+        INPUT:
+            final_channel_list     :a list of number giving the number of channels in
+                                     output of the each sub-layer of form
+                                     [
+                                      # 1x1x1 channels,# 3x3x3 channels,
+                                      # 5x5x5 channels,# compressed maxpool channels
+                                     ]
+            compress_channel_list : since we need to compress the number of channels
+                                    coming from input to do 3x3x3 and 5x5x5
+                                    convolution (which are computationally expensive)
+                                    we need to compress them using 1x1x1 convolution.
+                                    so list of such compress of form
+                                    [#compressed channel for 3x3x3,
+                                     #compresses channel for 5x5x5]
+        OUTPUT:
+            A        : The final activation after concatenation of all these
+                        sub-layer activation
+    '''
+    with tf.variable_scope(name):
+        #Starting with Route 1: 1x1x1 convolution
+        A1=rectified_conv3d(X,
+                            name='1x1x1',
+                            filter_shape=(1,1,1),
+                            output_channel=final_channel_list[0],
+                            stride=(1,1,1),
+                            padding_type='VALID',
+                            is_training=is_training,
+                            dropout_rate=dropout_rate,
+                            apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            apply_relu=True,
+                            initializer=initializer)
+
+        #Now starting the Route 2:  3x3x3 convolution
+        #First compress by 1x1x1
+        C3=rectified_conv3d(X,
+                            name='compress_3x3x3',
+                            filter_shape=(1,1,1),
+                            output_channel=compress_channel_list[0],
+                            stride=(1,1,1),
+                            padding_type='VALID',
+                            is_training=is_training,
+                            dropout_rate=0.0,#dropout kept to zero
+                            apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            apply_relu=True,
+                            initializer=initializer)
+        #now doing the 3x3x3 convolution on the smallar-compresses representation
+        A3=rectified_conv3d(C3,
+                            name='3x3x3',
+                            filter_shape=(3,3,3),
+                            output_channel=final_channel_list[1],
+                            stride=(1,1,1),
+                            padding_type='SAME',
+                            is_training=is_training,
+                            dropout_rate=dropout_rate,
+                            apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            apply_relu=True,
+                            initializer=initializer)
+
+        #Now starting the Route 3: 5x5x5 convolution
+        #First compressing by 1x1x1 convolution
+        C5=rectified_conv3d(X,
+                            name='compress_5x5x5',
+                            filter_shape=(1,1,1),
+                            output_channel=compress_channel_list[1],
+                            stride=(1,1,1),
+                            padding_type='VALID',
+                            is_training=is_training,
+                            dropout_rate=0.0,
+                            apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            apply_relu=True,
+                            initializer=initializer)
+        #now doing 5x5x5 convolution on this compressed 3Dimage
+        A5=rectified_conv3d(C5,
+                            name='5x5x5',
+                            filter_shape=(5,5,5),
+                            output_channel=final_channel_list[2],
+                            stride=(1,1,1),
+                            padding_type='SAME',
+                            is_training=is_training,
+                            dropout_rate=dropout_rate,
+                            apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            apply_relu=True,
+                            initializer=initializer)
+
+        #Now going though Route 4: Maxpooling sub-layer
+        #First of all maxpooling the input
+        CMp=max_pooling3d(X,
+                          name='maxpool',
+                          filter_shape=(3,3,3),
+                          stride=(1,1,1),
+                          padding_type='SAME')
+        #Now compressing to reduce the number of channels
+        AMp=rectified_conv3d(CMp,
+                            name='compress_maxpool',
+                            filter_shape=(1,1,1),
+                            output_channel=final_channel_list[3],
+                            stride=(1,1,1),
+                            padding_type='VALID',
+                            is_training=is_training,
+                            dropout_rate=dropout_rate,
+                            apply_batchnorm=apply_batchnorm,
+                            weight_decay=weight_decay,
+                            apply_relu=True,
+                            initializer=initializer)
+
+        #Finally concatenating all the routes
+        concat_list=[A1,A3,A5,AMp]
+        axis=-1         #Concatenating along the channel axis: axis=4
+        A=tf.concat(concat_list,axis=axis,name='concat')
+
+    return A

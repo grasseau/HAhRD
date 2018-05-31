@@ -9,7 +9,7 @@ tf.set_random_seed(graph_level_seed)
 dtype=tf.float32    #this could save memory
 
 ################ Weight Initialization ##########################
-def _get_variable_on_cpu(name,shape,initializer,weight_decay=None):
+def get_variable_on_cpu(name,shape,initializer,weight_decay=None):
     '''
     DESCRIPTION:
         Since we wull be using a multi GPU, we will follow a model
@@ -96,7 +96,7 @@ def simple_fully_connected(X,name,output_dim,is_training,dropout_rate=0.0,
         #Get the hold of necessary variable
         shape_W=(input_dim,output_dim)
         shape_b=(1,output_dim)
-        W=_get_variable_on_cpu('W',shape_W,initializer,weight_decay)
+        W=get_variable_on_cpu('W',shape_W,initializer,weight_decay)
 
         #Applying the linear transforamtion and passing through non-linearity
         Z=tf.matmul(X,W,name='linear_transform')
@@ -110,7 +110,7 @@ def simple_fully_connected(X,name,output_dim,is_training,dropout_rate=0.0,
         else:
             #We generally dont regularize the bias unit
             bias_initializer=tf.zeros_initializer()
-            b=_get_variable_on_cpu('b',shape_b,bias_initializer)
+            b=get_variable_on_cpu('b',shape_b,bias_initializer)
             Z_tilda=tf.add(Z,b,name='bias_add')
 
         if apply_relu==True:
@@ -172,7 +172,7 @@ def rectified_conv2d(X,name,filter_shape,output_channel,
         input_channel=X.get_shape().as_list()[3]
         fh,fw=filter_shape
         net_filter_shape=(fh,fw,input_channel,output_channel)
-        filters=_get_variable_on_cpu('W',net_filter_shape,initializer,weight_decay)
+        filters=get_variable_on_cpu('W',net_filter_shape,initializer,weight_decay)
 
         #stride and padding configuration
         sh,sw=stride
@@ -181,14 +181,14 @@ def rectified_conv2d(X,name,filter_shape,output_channel,
             raise AssertionError('Please use SAME/VALID string for padding')
 
         #Now applying the convolution
-        Z_conv=tf.nn.conv2d(X,filters,net_stride,padding_type,name='conv')
+        Z_conv=tf.nn.conv2d(X,filters,net_stride,padding_type,name='conv2d')
         if apply_batchnorm==True:
             Z=_batch_normalization2d(Z_conv,is_training)
         else:
             #Biases Weight creation
             net_bias_shape=(1,1,1,output_channel)
             bias_initializer=tf.zeros_initializer()
-            biases=_get_variable_on_cpu('b',net_bias_shape,bias_initializer)
+            biases=get_variable_on_cpu('b',net_bias_shape,bias_initializer)
             Z=tf.add(Z_conv,biases,name='bias_add')
 
         #Finally applying the 'relu' activation
@@ -337,7 +337,7 @@ def identity_residual_block(X,name,num_channels,mid_filter_shape,is_training,
 
         #Adding dropout to the last sub-layer of this block
         A=tf.layers.dropout(A,rate=dropout_rate,training=is_training,name='dropout')
-        return A
+    return A
 
 def convolutional_residual_block(X,name,num_channels,
                             first_filter_stride,mid_filter_shape,is_training,
@@ -446,7 +446,7 @@ def inception_block(X,name,final_channel_list,compress_channel_list,
             X                   :the input image/tensor.
             name                :the name to be given this whole block.will be used in
                                     visualization
-            final_channels_list : the list of channels as output of these filter
+            final_channel_list : the list of channels as output of these filter
                                     [# 1x1 channels,# 3x3 channels,
                                     # 5x5 channels,# compressed maxpool channels]
             compress_channel_list: since we need to compress the input to do
