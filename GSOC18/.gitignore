@@ -5,4 +5,3 @@
 *.npy
 tmp
 datacifar
-generate_cifar_10_tfrecord.py

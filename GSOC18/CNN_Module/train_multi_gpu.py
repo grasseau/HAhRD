@@ -10,7 +10,7 @@ from test import calculate_total_loss
 
 ################## GLOBAL VARIABLES #######################
 local_directory_path='datacifar/'
-summary_filename='tmp/cifar/3'
+summary_filename='remotetmp/cifar/3'
 model_function_handle=make_model_conv
 
 ################# HELPER FUNCTIONS ########################
