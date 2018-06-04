@@ -114,7 +114,7 @@ def _compute_average_gradient(all_tower_grad_var):
     return average_grad_var_pair
 
 ####################### MAIN TRAIN FUNCTION ###################
-def create_training_graph(next_element,is_training):
+def create_training_graph(iterator,is_training):
     '''
     DESCRIPTION:
         This function will serve the main purpose of training the
@@ -132,8 +132,10 @@ def create_training_graph(next_element,is_training):
         Please run it under the cpu:0 scope in the main driver function
     USAGE:
         INPUTS:
-            next_element    : an instance of iterator.get_next() to get the next
+            iterator    : an instance of iterator having the property of
+                                .get_next() to get the next
                                 batch of data from the input pipeline
+                            (following Derek Murray advice on Stack Overflow)
         OUTPUTS:
             train_track_ops  : the list of op to run of form
                                 [apply_gradient_op,loss1_op,loss2_op.....]
@@ -159,7 +161,7 @@ def create_training_graph(next_element,is_training):
             with tf.device(all_gpu_name[i]):
                 with tf.name_scope('tower%s'%(i)) as tower_scope:
                     #Getting the next batch of the dataset from the iterator
-                    X,Y=next_element    #'element' referes to on minibatch
+                    X,Y=iterator.get_next() #'element' referes to on minibatch
 
                     #Create a graph on the GPU and get the gradient back
                     tower_grad_var_pair,total_cost=_get_GPU_gradient(X,Y,
@@ -216,13 +218,13 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
 
     #Setting up the input_pipeline
     with tf.name_scope('IO_Pipeline'):
-        next_element,train_iter_init_op,test_iter_init_op=parse_tfrecords_file(
+        iterator,train_iter_init_op,test_iter_init_op=parse_tfrecords_file(
                                                         train_filename_list,
                                                         test_filename_list,
                                                         mini_batch_size)
 
     #Creating the multi-GPU training graph
-    train_track_ops=create_training_graph(next_element,is_training)
+    train_track_ops=create_training_graph(iterator,is_training)
 
     #Adding all the varaible summary
     writer=tf.summary.FileWriter(summary_filename)
@@ -270,7 +272,7 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
             bno=1
             while i%1==0:
                 try:
-                    #_,datay=sess.run(next_element)
+                    #_,datay=sess.run(next_element)#dont use iterator now
                     #print datay
                     to=datetime.datetime.now()
                     track_results=sess.run(train_track_ops[1:-1],feed_dict={is_training:False})

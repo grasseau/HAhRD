@@ -37,7 +37,7 @@ def _binary_parse_function(serialized_example_protocol):
     #returning the example as a tuple. So each "element" is a tuple
     return image,label
 
-def parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size
+def parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size,
                             buffer_size=5000):
     '''
     DESCRIPTION:
@@ -90,5 +90,5 @@ def parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size
     train_iter_init_op=iterator.make_initializer(train_dataset)
     test_iter_init_op=iterator.make_initializer(test_dataset)
 
-    #Returning the required elements
-    return next_element,train_iter_init_op,test_iter_init_op
+    #Returning the required elements (dont return next element return iterator)
+    return iterator,train_iter_init_op,test_iter_init_op
