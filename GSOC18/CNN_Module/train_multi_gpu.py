@@ -1,4 +1,5 @@
 import tensorflow as tf
+import datetime
 from tensorflow.python.client import device_lib
 
 #import models here(need to be defined separetely in model file)
@@ -17,7 +18,7 @@ def _add_summary(object):
 
 def _add_all_trainiable_var_summary():
     for var in tf.trainable_variables():
-        add_summary(var)
+        _add_summary(var)
 
 def _get_available_gpus():
     '''
@@ -42,7 +43,7 @@ def _get_available_gpus():
 
     return all_gpu_name
 
-def _get_GPU_gradient(X,Y,scope,optimizer):
+def _get_GPU_gradient(X,Y,is_training,scope,optimizer):
     '''
     DESCRIPTION:
         This function creates a computational graph on the GPU,
@@ -51,16 +52,18 @@ def _get_GPU_gradient(X,Y,scope,optimizer):
         INPUTS:
             X         : the input placeholder
             Y         : the target/output placeholder
+            is_training: the
             scope     : the tower scope to get the l2-reg loss
                             in its namescope
             optimizer : the optimizer function handle
     '''
     #getting the unnormalized prediction from the model
-    Z=model_function_handle(X)
+    Z=model_function_handle(X,is_training)
+    Y=tf.one_hot(Y,depth=10,dtype=tf.int32)
     #Calculating the cost of prediction form model
     total_cost=calculate_total_loss(Z,Y)
 
-    tower_grad_var_pair=optimizer.compute_gradient(total_cost)
+    tower_grad_var_pair=optimizer.compute_gradients(total_cost)
 
     return tower_grad_var_pair,total_cost
 
@@ -106,7 +109,7 @@ def _compute_average_gradient(all_tower_grad_var):
     return average_grad_var_pair
 
 ####################### MAIN TRAIN FUNCTION ###################
-def create_training_graph(next_element):
+def create_training_graph(next_element,is_training):
     '''
     DESCRIPTION:
         This function will serve the main purpose of training the
@@ -155,7 +158,7 @@ def create_training_graph(next_element):
 
                     #Create a graph on the GPU and get the gradient back
                     tower_grad_var_pair,total_cost=_get_GPU_gradient(X,Y,
-                                                tower_scope,optimizer)
+                                        is_training,tower_scope,optimizer)
                     all_tower_grad_var.append(tower_grad_var_pair)
                     all_tower_cost.append(total_cost)
 
@@ -172,7 +175,7 @@ def create_training_graph(next_element):
     extra_update_ops=tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(extra_update_ops):
         #Finally doing the backpropagation suing the optimizer
-        apply_gradient_op=optimizer.apply_gradient(average_grad_val_pair)
+        apply_gradient_op=optimizer.apply_gradients(average_grad_val_pair)
 
     #Keeping the  moving average of the weight instead of the #(Hyperparameter)
     #(LATER)
@@ -204,53 +207,65 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
             nothing
             later checkpoints saving will be added
     '''
+    #Setting the required Placeholders
+    is_training=tf.placeholder(tf.bool,[],name='training_flag')
+
     #Setting up the input_pipeline
     next_element,train_iter_init_op,test_iter_init_op=parse_tfrecords_file(
-                                                        mini_batch_size,
                                                         train_filename_list,
-                                                        test_filename_list)
+                                                        test_filename_list,
+                                                        mini_batch_size)
 
     #Creating the multi-GPU training graph
-    train_track_ops=create_training_graph(next_element)
+    train_track_ops=create_training_graph(next_element,is_training)
 
     #initialization op for all the variable
     init=tf.global_variables_initializer()
 
     #Now creating the session ot run the graph
-    config=tf.configProto(allow_soft_placement=True,
+    config=tf.ConfigProto(allow_soft_placement=True,
                           log_device_placement=True)
-    with tf.Session(config) as sess:
+    with tf.Session(config=config) as sess:
         #initializing the global variables
         sess.run(init)
 
         #Starting the training epochs
         for i in range(epochs):
             #Since we are not repeating the data it will raise error once over
+            #initializing the training iterator
+            sess.run(train_iter_init_op) #we need the is_training placeholder
+            bno=1                        #writing the batch number
             while True:
-                #initializing the training iterator
-                sess.run(train_iter_init_op)#we need the is_training placeholder
                 try:
-                    track_results=sess.run(train_track_ops)
+                    t0=datetime.datetime.now()
+                    #datax,datay=sess.run(next_element)
+                    #print datax.shape
+                    #print datay
+                    track_results=sess.run(train_track_ops,feed_dict={is_training:True})
+                    t1=datetime.datetime.now()
+                    print 'loss @epoch: ',i,' @minibatch: ',bno,track_results[1:],'in ',t1-t0,'\n'
+                    bno+=1
                 except tf.errors.OutOfRangeError:
                     break
 
-            #get the validation accuracy
-            # while i%10==0:
-            #     #starting the validation/test iterator
-            #     sess.run(test_iter_init_op)
-            #     try:
-            #         track_results=sess.run
+            #get the validation accuracy,starting the validation/test iterator
+            sess.run(test_iter_init_op)
+            while i%1==0:
+                try:
+                    track_results=sess.run(train_track_ops[1:],feed_dict={is_training:False})
+                except tf.errors.OutOfRangeError:
+                    break
 
             #Also save the checkpoints
 
 
 
 
-
-
 if __name__=='__main__':
     train_filename_list=[local_directory_path+'train.tfrecords']
-    test_filename_list=[local_directory_path+'test.tfrecords']
-    mini_batch_size=5
+    test_filename_list=[local_directory_path+'validation.tfrecords']
+    mini_batch_size=1000
+    epochs=5
 
-    parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size)
+    #parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size)
+    train(epochs,mini_batch_size,train_filename_list,test_filename_list)

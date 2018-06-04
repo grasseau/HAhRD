@@ -86,7 +86,7 @@ def get_optimizer_op(total_cost,optimizer_type=tf.train.AdamOptimizer()):
     return optimizer
 
 ################ MODEL DEFINITION ########################
-def make_model_linear():
+def make_model_linear(X,is_training):
     lambd=0.01
     bn_decision=True
     A1=simple_fully_connected(X,'fc1',50,is_training,dropout_rate=0.4,
@@ -105,13 +105,13 @@ def make_model_linear():
 
     return Z4
 
-def make_model_conv():
+def make_model_conv(X,is_training):
     #Current Hyperparameter (will be separated later)
     bn_decision=False
     lambd=0.0
     dropout_rate=0.0
 
-    X_img=tf.reshape(X,[-1,28,28,1])
+    X_img=tf.reshape(X,[-1,32,32,3])
     #with tf.device('/cpu:0'):
     #The first convolutional layer
     A1=rectified_conv2d(X_img,
@@ -190,7 +190,7 @@ def make_model_conv():
 
     return Z5
 
-def make_model_conv3d():
+def make_model_conv3d(X,is_training):
     bn_decision=False
     lambd=0.0
     dropout_rate=0.0
