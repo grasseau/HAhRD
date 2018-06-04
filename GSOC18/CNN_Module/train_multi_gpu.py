@@ -10,6 +10,7 @@ from test import calculate_total_loss
 
 ################## GLOBAL VARIABLES #######################
 local_directory_path='datacifar/'
+summary_filename='tmp/cifar/3'
 model_function_handle=make_model_conv
 
 ################# HELPER FUNCTIONS ########################
@@ -19,6 +20,10 @@ def _add_summary(object):
 def _add_all_trainiable_var_summary():
     for var in tf.trainable_variables():
         _add_summary(var)
+
+def _add_all_gpu_losses_summary(train_track_ops):
+    for loss in train_track_ops[1:]:
+        _add_summary(loss)
 
 def _get_available_gpus():
     '''
@@ -182,8 +187,7 @@ def create_training_graph(next_element,is_training):
 
     #Start checkpoint
 
-    #Adding all the varaible summary
-    _add_all_trainiable_var_summary()
+
     #Adding all the gradient for the summary
 
     #Finally accumulating all the runnable op
@@ -211,13 +215,22 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
     is_training=tf.placeholder(tf.bool,[],name='training_flag')
 
     #Setting up the input_pipeline
-    next_element,train_iter_init_op,test_iter_init_op=parse_tfrecords_file(
+    with tf.name_scope('IO_Pipeline'):
+        next_element,train_iter_init_op,test_iter_init_op=parse_tfrecords_file(
                                                         train_filename_list,
                                                         test_filename_list,
                                                         mini_batch_size)
 
     #Creating the multi-GPU training graph
     train_track_ops=create_training_graph(next_element,is_training)
+
+    #Adding all the varaible summary
+    writer=tf.summary.FileWriter(summary_filename)
+    _add_all_trainiable_var_summary()
+    _add_all_gpu_losses_summary(train_track_ops)
+    merged_summary=tf.summary.merge_all()
+    #Adding the merged summary in train-track ops
+    train_track_ops.append(merged_summary)
 
     #initialization op for all the variable
     init=tf.global_variables_initializer()
@@ -229,6 +242,9 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
         #initializing the global variables
         sess.run(init)
 
+        #Adding the graph to tensorborad
+        writer.add_graph(sess.graph)
+
         #Starting the training epochs
         for i in range(epochs):
             #Since we are not repeating the data it will raise error once over
@@ -238,34 +254,40 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
             while True:
                 try:
                     t0=datetime.datetime.now()
-                    #datax,datay=sess.run(next_element)
+                    #_,datay=sess.run(next_element)
                     #print datax.shape
                     #print datay
                     track_results=sess.run(train_track_ops,feed_dict={is_training:True})
                     t1=datetime.datetime.now()
-                    print 'loss @epoch: ',i,' @minibatch: ',bno,track_results[1:],'in ',t1-t0,'\n'
+                    print 'Training loss @epoch: ',i,' @minibatch: ',bno,track_results[1:-1],'in ',t1-t0
+                    writer.add_summary(track_results[-1],bno)
                     bno+=1
                 except tf.errors.OutOfRangeError:
                     break
 
             #get the validation accuracy,starting the validation/test iterator
             sess.run(test_iter_init_op)
+            bno=1
             while i%1==0:
                 try:
-                    track_results=sess.run(train_track_ops[1:],feed_dict={is_training:False})
+                    #_,datay=sess.run(next_element)
+                    #print datay
+                    to=datetime.datetime.now()
+                    track_results=sess.run(train_track_ops[1:-1],feed_dict={is_training:False})
+                    t1=datetime.datetime.now()
+                    print 'Testing loss @epoch: ',i,' @minibatch: ',bno,track_results,'in ',t1-t0,'\n'
+                    bno+=1
                 except tf.errors.OutOfRangeError:
                     break
 
             #Also save the checkpoints
 
 
-
-
 if __name__=='__main__':
     train_filename_list=[local_directory_path+'train.tfrecords']
     test_filename_list=[local_directory_path+'validation.tfrecords']
-    mini_batch_size=1000
-    epochs=5
+    mini_batch_size=1024
+    epochs=1
 
     #parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size)
     train(epochs,mini_batch_size,train_filename_list,test_filename_list)

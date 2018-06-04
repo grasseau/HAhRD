@@ -37,7 +37,8 @@ def _binary_parse_function(serialized_example_protocol):
     #returning the example as a tuple. So each "element" is a tuple
     return image,label
 
-def parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size):
+def parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size
+                            buffer_size=5000):
     '''
     DESCRIPTION:
         This function will read the dataset stored in tfrecords
@@ -74,6 +75,10 @@ def parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size)
     test_dataset=test_dataset.batch(mini_batch_size)
     #print '\nbatched data'
     #print (train_dataset.output_types,train_dataset.output_shapes)
+
+    #Shuffling the data
+    train_dataset=train_dataset.shuffle(buffer_size=buffer_size)
+    test_dataset=test_dataset.shuffle(buffer_size=buffer_size)
 
     #now creating the re_initializable iterator
     iterator=tf.data.Iterator.from_structure(
