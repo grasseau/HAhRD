@@ -33,7 +33,7 @@ def get_variable_on_cpu(name,shape,initializer,weight_decay=None):
     with tf.device('/cpu:0'):
         weight=tf.get_variable(name,shape=shape,dtype=dtype,
                         initializer=initializer)
-        #tf.summary.histogram(name,weight) #we will add them in training script 
+        #tf.summary.histogram(name,weight) #we will add them in training script
 
     if not weight_decay==None:
         #Applying the l2 regularization and multiplying with

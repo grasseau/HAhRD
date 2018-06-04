@@ -27,14 +27,32 @@ def add_all_trainiable_var_summary():
     for var in tf.trainable_variables():
         add_summary(var)
 
-def calculate_total_loss(prediction,Y):
+def calculate_total_loss(prediction,Y,scope=None):
+    '''
+    DESCRIPTION:
+        This function will calculate the total loss collecting
+        from the L-2 Regularization and soft_max cross entropy.
+
+        It will filter the l2-weights from the all_losses
+        collection based on the namescope.
+        (useful for the case of multi-GPU training, when we want
+        separate loss for each tower)
+    USAGE:
+        INPUTS:
+            prediction  : the unnormalized prediction from the model
+            Y           : the actual label of the model
+            scope       : the scope to filter the L2-regularization costs
+                            so that we only include the l2-losses elements
+                            of collection whose name matches with the given scope.
+                            default will match with everyone
+    '''
     #Calculating the cross entropy loss from predicion and labels
     x_entropy_loss=tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
                                     logits=prediction,labels=Y))
     tf.summary.scalar('x_entropy_loss',x_entropy_loss)
 
     #Calculating the L-2 regularization Loss
-    reg_loss_list=tf.get_collection('all_losses')
+    reg_loss_list=tf.get_collection('all_losses',scope=scope)
     l2_reg_loss=0.0
     if not len(reg_loss_list)==0:
         l2_reg_loss=tf.add_n(reg_loss_list,name='l2_reg_loss')
@@ -69,7 +87,7 @@ def get_optimizer_op(total_cost,optimizer_type=tf.train.AdamOptimizer()):
 
 ################ MODEL DEFINITION ########################
 def make_model_linear():
-    lambd=0
+    lambd=0.01
     bn_decision=True
     A1=simple_fully_connected(X,'fc1',50,is_training,dropout_rate=0.4,
                             apply_batchnorm=bn_decision,weight_decay=lambd,
@@ -285,7 +303,7 @@ def train_net(prediction):
 ################### Main Calling Function ##################
 if __name__=="__main__":
     #Creating the graph
-    prediction=make_model_conv3d()
+    prediction=make_model_linear()
 
     #Training the graph
     train_net(prediction)
