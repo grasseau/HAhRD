@@ -10,9 +10,10 @@ from test import calculate_model_accuracy,calculate_total_loss
 
 ################## GLOBAL VARIABLES #######################
 local_directory_path='datacifar/'
-run_number=8                            #for saving the summaries
+run_number=10                            #for saving the summaries
 train_summary_filename='tmp/cifar/train/%s'%(run_number) #for training set
 test_summary_filename='tmp/cifar/valid/%s'%(run_number)  #For validation set
+checkpoint_filename='tmp/cifar/checkpoint/'
 model_function_handle=make_model_conv
 
 ################# HELPER FUNCTIONS ########################
@@ -121,7 +122,7 @@ def _compute_average_gradient(all_tower_grad_var):
     return average_grad_var_pair
 
 ####################### MAIN TRAIN FUNCTION ###################
-def create_training_graph(iterator,is_training):
+def create_training_graph(iterator,is_training,global_step):
     '''
     DESCRIPTION:
         This function will serve the main purpose of training the
@@ -140,15 +141,20 @@ def create_training_graph(iterator,is_training):
     USAGE:
         INPUTS:
             iterator    : an instance of iterator having the property of
-                                .get_next() to get the next
-                                batch of data from the input pipeline
+                            .get_next() to get the next
+                            batch of data from the input pipeline
                             (following Derek Murray advice on Stack Overflow)
+            is_training : a boolean flag to distinguish in what mode we are in
+                            Training/Testing
+            global_step : a varible which could how many rounds of backpropagation
+                            is completed
         OUTPUTS:
             train_track_ops  : the list of op to run of form
                                 [apply_gradient_op,loss1_op,loss2_op.....]
     '''
     #Setting the input placeholders for training mode
     #filename=tf.placeholder
+    #also include learning rate decay here for optimizer using global step
 
 
     #Setting up the optimizer
@@ -189,7 +195,8 @@ def create_training_graph(iterator,is_training):
     extra_update_ops=tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(extra_update_ops):
         #Finally doing the backpropagation suing the optimizer
-        apply_gradient_op=optimizer.apply_gradients(average_grad_val_pair)
+        apply_gradient_op=optimizer.apply_gradients(average_grad_val_pair,
+                                                global_step=global_step)
 
     #Keeping the  moving average of the weight instead of the #(Hyperparameter)
     #(LATER)
@@ -220,8 +227,11 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
             nothing
             later checkpoints saving will be added
     '''
-    #Setting the required Placeholders
+    #Setting the required Placeholders and Global Non-Trainable Variable
     is_training=tf.placeholder(tf.bool,[],name='training_flag')
+    global_step=tf.get_variable('global_step',shape=[],
+                        initializer=tf.constant_initializer(0),
+                        trainable=False)
 
     #Setting up the input_pipeline
     with tf.name_scope('IO_Pipeline'):
@@ -231,7 +241,11 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
                                                         mini_batch_size)
 
     #Creating the multi-GPU training graph
-    train_track_ops=create_training_graph(iterator,is_training)
+    train_track_ops=create_training_graph(iterator,is_training,global_step)
+
+    #Adding saver to create checkpoints for weights
+    saver=tf.train.Saver(tf.global_variables(),
+                        max_to_keep=2)
 
     #Adding all the varaible summary
     train_writer=tf.summary.FileWriter(train_summary_filename)
@@ -250,7 +264,11 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
                           log_device_placement=False)
     with tf.Session(config=config) as sess:
         #initializing the global variables
-        sess.run(init)
+        #sess.run(init)
+        #Restoring the saved model if possible
+        last_epoch_number=8
+        checkpoint_path=checkpoint_filename+'model.ckpt-%s'%(last_epoch_number)
+        saver.restore(sess,checkpoint_path)
 
         #Adding the graph to tensorborad
         train_writer.add_graph(sess.graph)
@@ -295,14 +313,17 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
                 except tf.errors.OutOfRangeError:
                     break
 
-            #Also save the checkpoints
+            #Also save the checkpoints (after two every epoch)
+            if i%2==0:
+                checkpoint_path=checkpoint_filename+'model.ckpt'
+                saver.save(sess,checkpoint_path,global_step=i)
 
 
 if __name__=='__main__':
     train_filename_list=[local_directory_path+'train.tfrecords']
     test_filename_list=[local_directory_path+'validation.tfrecords']
     mini_batch_size=1024
-    epochs=10
+    epochs=2
 
     #parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size)
     train(epochs,mini_batch_size,train_filename_list,test_filename_list)
