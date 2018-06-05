@@ -4,13 +4,15 @@ from tensorflow.python.client import device_lib
 
 #import models here(need to be defined separetely in model file)
 from io_pipeline import parse_tfrecords_file
-from test import make_model_conv,make_model_conv3d
-from test import calculate_total_loss
+from test import make_model_conv,make_model_conv3d,make_model_linear
+from test import calculate_model_accuracy,calculate_total_loss
 
 
 ################## GLOBAL VARIABLES #######################
 local_directory_path='datacifar/'
-summary_filename='remotetmp/cifar/3'
+run_number=8                            #for saving the summaries
+train_summary_filename='tmp/cifar/train/%s'%(run_number) #for training set
+test_summary_filename='tmp/cifar/valid/%s'%(run_number)  #For validation set
 model_function_handle=make_model_conv
 
 ################# HELPER FUNCTIONS ########################
@@ -65,6 +67,11 @@ def _get_GPU_gradient(X,Y,is_training,scope,optimizer):
     #getting the unnormalized prediction from the model
     Z=model_function_handle(X,is_training)
     Y=tf.one_hot(Y,depth=10,dtype=tf.int32)
+
+    #Calculating the accuracy of the model
+    accuracy=calculate_model_accuracy(Z,Y)
+    tf.summary.scalar('accuracy',accuracy)
+
     #Calculating the cost of prediction form model
     total_cost=calculate_total_loss(Z,Y)
 
@@ -227,7 +234,8 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
     train_track_ops=create_training_graph(iterator,is_training)
 
     #Adding all the varaible summary
-    writer=tf.summary.FileWriter(summary_filename)
+    train_writer=tf.summary.FileWriter(train_summary_filename)
+    test_writer=tf.summary.FileWriter(test_summary_filename)
     _add_all_trainiable_var_summary()
     _add_all_gpu_losses_summary(train_track_ops)
     merged_summary=tf.summary.merge_all()
@@ -239,13 +247,14 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
 
     #Now creating the session ot run the graph
     config=tf.ConfigProto(allow_soft_placement=True,
-                          log_device_placement=True)
+                          log_device_placement=False)
     with tf.Session(config=config) as sess:
         #initializing the global variables
         sess.run(init)
 
         #Adding the graph to tensorborad
-        writer.add_graph(sess.graph)
+        train_writer.add_graph(sess.graph)
+        test_writer.add_graph(sess.graph)
 
         #Starting the training epochs
         for i in range(epochs):
@@ -262,7 +271,8 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
                     track_results=sess.run(train_track_ops,feed_dict={is_training:True})
                     t1=datetime.datetime.now()
                     print 'Training loss @epoch: ',i,' @minibatch: ',bno,track_results[1:-1],'in ',t1-t0
-                    writer.add_summary(track_results[-1],bno)
+                    #Now the last op has the merged_summary evaluated.So, write it.
+                    train_writer.add_summary(track_results[-1],bno)
                     bno+=1
                 except tf.errors.OutOfRangeError:
                     break
@@ -275,9 +285,12 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
                     #_,datay=sess.run(next_element)#dont use iterator now
                     #print datay
                     to=datetime.datetime.now()
-                    track_results=sess.run(train_track_ops[1:-1],feed_dict={is_training:False})
+                    #Run the summary also for the validation set.just leave the train op
+                    track_results=sess.run(train_track_ops[1:],feed_dict={is_training:False})
                     t1=datetime.datetime.now()
-                    print 'Testing loss @epoch: ',i,' @minibatch: ',bno,track_results,'in ',t1-t0,'\n'
+                    print 'Testing loss @epoch: ',i,' @minibatch: ',bno,track_results[0:-1],'in ',t1-t0,'\n'
+                    #Again write the evaluated summary to file
+                    test_writer.add_summary(track_results[-1],bno)
                     bno+=1
                 except tf.errors.OutOfRangeError:
                     break
@@ -289,7 +302,7 @@ if __name__=='__main__':
     train_filename_list=[local_directory_path+'train.tfrecords']
     test_filename_list=[local_directory_path+'validation.tfrecords']
     mini_batch_size=1024
-    epochs=1
+    epochs=10
 
     #parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size)
     train(epochs,mini_batch_size,train_filename_list,test_filename_list)

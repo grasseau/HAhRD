@@ -11,7 +11,7 @@ mnist = input_data.read_data_sets("/tmp/data/", one_hot = True)
 n_classes=10
 batch_size=128
 epochs=5
-summary_filename="tmp/mnist/3"
+summary_filename="tmp/mnist/5"
 
 ##################  Global Placeholders ##################
 X=tf.placeholder(tf.float32,[None,784],name='X')
@@ -26,6 +26,28 @@ def add_summary(object):
 def add_all_trainiable_var_summary():
     for var in tf.trainable_variables():
         add_summary(var)
+
+def calculate_model_accuracy(Z,Y):
+    '''
+    DESCRIPTION:
+        This function will have to be accompanied with the
+        model definition always to calculate the accuracy of the model.
+        This function will be unique to the problem domain.
+    USAGE:
+        INPUT:
+            Z       : the activation of the model before final activation
+            Y       : the target label to the model
+        OUPTUT:
+            accuracy: the accuracy for the current global step
+    '''
+    with tf.name_scope('accuracy'):
+        prediction=tf.argmax(Z,axis=1)
+        actual_label=tf.argmax(Y,axis=1)
+
+        correct=tf.equal(prediction,actual_label)
+        accuracy=tf.reduce_mean(tf.cast(correct,'float'))
+
+    return accuracy
 
 def calculate_total_loss(prediction,Y,scope=None):
     '''
@@ -89,6 +111,7 @@ def get_optimizer_op(total_cost,optimizer_type=tf.train.AdamOptimizer()):
 def make_model_linear(X,is_training):
     lambd=0.01
     bn_decision=True
+    X=tf.reshape(X,[-1,32*32*3])
     A1=simple_fully_connected(X,'fc1',50,is_training,dropout_rate=0.4,
                             apply_batchnorm=bn_decision,weight_decay=lambd,
                             apply_relu=True)
@@ -107,7 +130,7 @@ def make_model_linear(X,is_training):
 
 def make_model_conv(X,is_training):
     #Current Hyperparameter (will be separated later)
-    bn_decision=False
+    bn_decision=True
     lambd=0.0
     dropout_rate=0.0
 
@@ -256,6 +279,10 @@ def make_model_conv3d(X,is_training):
 
 ######################## Main Training Function ######################
 def train_net(prediction):
+    #saving the accuracy
+    accuracy=calculate_model_accuracy(prediction,Y)
+    tf.summary.scalar('accuracy',accuracy)
+
     #Calculating cost and optimizer op
     total_cost=calculate_total_loss(prediction,Y)
     optimizer=get_optimizer_op(total_cost,
@@ -303,7 +330,7 @@ def train_net(prediction):
 ################### Main Calling Function ##################
 if __name__=="__main__":
     #Creating the graph
-    prediction=make_model_linear()
+    prediction=make_model_linear(X,is_training)
 
     #Training the graph
     train_net(prediction)
