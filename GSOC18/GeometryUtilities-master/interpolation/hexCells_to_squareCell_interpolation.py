@@ -241,12 +241,12 @@ def calculate_overlap(hex_cells_list,sq_cells_list,search_radius,min_overlap_are
         #Storing the overlap area directly. Normalize later when using O(1)
         overlap_coef_final=overlap_area_final#/np.sum(overlap_area_final)
 
-        #We are using the hex_center's center tuple as the key
-        coef_dict[hex_cell.center.coords[0]]=[]
-        #coef_dict[hex_cell.id]=[]
+        #We are using the hex_cell is as the key instead of cell center
+        #coef_dict[hex_cell.center.coords[0]]=[]
+        coef_dict[hex_cell.id]=[]
         for fid,coef in zip(sq_cell_id_final,overlap_coef_final):
-            coef_dict[hex_cell.center.coords[0]].append((sq_cells_list[fid].id,coef))
-            #coef_dict[hex_cell.id].append((sq_cells_list[fid].id,coef))
+            #coef_dict[hex_cell.center.coords[0]].append((sq_cells_list[fid].id,coef))
+            coef_dict[hex_cell.id].append((sq_cells_list[fid].id,coef))
 
     return coef_dict
 
