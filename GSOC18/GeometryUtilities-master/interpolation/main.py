@@ -200,7 +200,7 @@ def get_subdet(layer):
                                                             layer,eff_layer)
     return subdet,eff_layer
 
-def readDataFile_hits(filename):
+def readDataFile_hits(filename,event_start_no,event_stride):
     '''
     DESCRIPTION:
         This function will read the root file which contains the simulated
@@ -210,44 +210,44 @@ def readDataFile_hits(filename):
         This code is similar to starting code in repo.
     USAGE:
         INPUT:
-            filename    : the name of root file
+            filename        : the name of root file
+            event_start_no  : the starting event number from where we want to
+                                process minibatch.
+            event_stride    : the size of minibatch to process in one go,
+                                (the time cost taken is less than the memory
+                                on increasing the value)
             query_string: this will be used to filter out the events like
                             selecting the hits in EE part with certain energy etc.
         OUTPUT:
             df          : the pandas dataframe of the data in root file
                             with only the recorded hits to convert to image
+                            of the required batch size
     '''
+    print '>>> Reading the root File to get hits dataframe'
     tree=uproot.open(filename)['ana/hgc']
     branches=[]
-    branches += ["genpart_gen","genpart_reachedEE","genpart_energy",
-                "genpart_eta","genpart_phi", "genpart_pid","genpart_posx",
-                "genpart_posy","genpart_posz"]
-    branches += ["rechit_x", "rechit_y", "rechit_z", "rechit_energy",
-                "rechit_layer", 'rechit_flags','rechit_cluster2d',
-                'cluster2d_multicluster']
+    #Just extracting the required attributes to create image
+    branches += ["rechit_detid","rechit_energy"]
     cache={}
     df=tree.pandas.df(branches,cache=cache,executor=executor)
 
-    #Projecting the dataframe for the required attributes
-    print '>>> Projecting required attributes of hits'
-    rechits_attributes=["rechit_x", "rechit_y", "rechit_z","rechit_energy",
-                    "rechit_layer", 'rechit_flags','rechit_cluster2d',
-                    'cluster2d_multicluster']
-    all_event_hits=df[rechits_attributes]
     #Renaming the attribute in short form
-    col_names={name:name.replace('rechit_','') for name in rechits_attributes}
-    all_event_hits.rename(col_names,inplace=True,axis=1)
+    col_names={name:name.replace('rechit_','') for name in branches}
+    df.rename(col_names,inplace=True,axis=1)
+
+    #Extracting out the minibatch of event to process at a time
+    df=df.iloc[event_start_no:event_start_no+event_stride]
 
     #Do the Filtering here only no need to do it each time for each event
 
     #Printing for sanity check
-    #print all_event_hits.head()
-    #print all_event_hits.dtypes
+    print df.iloc[0:1].head()
+    print df.loc[0,'detid'].dtype
     # print all_event_hits.loc[0,'energy']
     # print type(all_event_hits.loc[0,'energy'])
     # print all_event_hits.loc[0,'energy'].shape
 
-    return all_event_hits
+    return df
 
 
 if __name__=='__main__':
@@ -280,5 +280,7 @@ if __name__=='__main__':
     #Calling the driver function
     #generate_interpolation(opt.input_file,edge_length=0.7)
 
+    readDataFile_hits(opt.data_file,0,2)
+    sys.exit(1)
     #Generating the image
     generate_image(opt.data_file)

@@ -350,13 +350,44 @@ def _readCoefFile(filename):
 
     return coef_dict
 
+def _get_layer_number_from_detid(detid):
+    '''
+    DESCRIPTION:
+        This function will enable us to extract out the layer id from the
+        full detid of hit in the data frame.
+    USAGE:
+        INPUT:
+            detid           : a numpy arry having the detid of the hits
+        OUPUT:
+            layer_arr       : a numpy array of unique layers
+    '''
+
+    layer_arr=(detid>>19)&0x1F
+
+    return layer_arr
+
+def _get_cellid_energy_array(all_event_hits,detid,layer,event):
+    '''
+    DESCRIPTION:
+        This will create the energy array and cellid whithout the extra memory
+        overhead of mask.
+    '''
+    #getting the cellid by masking detid's last 18 bits
+    detid=all_event_hits.loc[event,'detid']
+    cellid_arr=detid & 0x3FFFF
+
+    mask=_get_layer_number_from_detid(detid)==layer
+    energy_arr=all_event_hits.loc[event,'energy'][mask]
+
+    return cellid_arr,energy_arr
+
 def _get_hit_layers(all_event_hits,event_start_no,event_stride):
     '''
     DESCRIPTION:
         This function will collect the set of all the layers which have hits in
         to be interpolated events.
     INPUT:
-        all_event_hits  : the dataframe which contains the hit data
+        all_event_hits  : the dataframe which contains the hit data (minibatch)
         event_start_no  : the starting point of interpolation of event
         event_stride    : the size of the minibatch to create image of
     OUTPUT:
@@ -364,7 +395,8 @@ def _get_hit_layers(all_event_hits,event_start_no,event_stride):
     '''
     layers=np.array([],dtype=np.int64)
     for event in range(event_start_no,event_start_no+event_stride):
-        _layers=np.unique(all_event_hits.loc[event,'layer'])
+        detid=all_event_hits.loc[event_no,'detid'].values
+        _layers=np.unique(_get_layer_number_from_detid(detid))
         layers=np.append(layers,_layers)
 
     layers=np.unique(layers)
@@ -372,7 +404,7 @@ def _get_hit_layers(all_event_hits,event_start_no,event_stride):
 
 
 def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
-                    event_stride=8,no_layers=40,precision_adjust=1e-3):
+                    event_stride,no_layers):
     '''
     DESCRIPTION:
         This function will finally map the energy deposit recorded in the
@@ -390,7 +422,7 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
     USAGE:
         INPUT:
             all_event_hits  : the dataframe containing all the rechits from
-                                all the events.
+                                all the events (a certain minibatch of events).
             resolution      : the current resolution of the interpolation mesh
             event_start_no  : the starting point of event number to create
                                 minibatches.
@@ -398,10 +430,6 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
             no_layers       : the total number of layers to interpolate upto
                                 (current default is 40 since that much coef is
                                 available to us right now)
-            precision_adjust: to take into account that the data file of hgcal
-                                hits are haveing rounded/low precision
-                                position values. So searching the exact point
-                                will not be possible.
         OUTPUT:
             energy_map      : a numpy array containing the map/interpolation
                                 of a minibatch of event.
@@ -424,7 +452,7 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
                                                 no_layers),dtype=dtype)
 
     #Starting to interpolate layer by layer for all the events
-    #We dont have to unnecessarily iterate over all events. We could make
+    #We dont have to unnecessarily iterate over all layers. We could make
     #set of layers from dataframe
     layers=range(1,no_layers+1)
     #layers=_get_hit_layers(all_event_hits,event_start_no,event_stride)
@@ -435,10 +463,10 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
                                     layer,resolution[0],resolution[1],edge_length)
         coef_dict=_readCoefFile(coef_filename)
 
-        #Making the KD Tree for the hexagonal cells
-        print '>>> Building the tree of Hexagonal cells for searching'
-        hex_centers=coef_dict.keys()
-        hex_tree=cKDTree(hex_centers,balanced_tree=True)
+        #Making the KD Tree for the hexagonal cells(REMOVE in cleanup)
+        # print '>>> Building the tree of Hexagonal cells for searching'
+        # hex_centers=coef_dict.keys()
+        # hex_tree=cKDTree(hex_centers,balanced_tree=True)
 
         #Now we will iterate the all the events
         events=range(event_start_no,event_start_no+event_stride)
@@ -449,33 +477,28 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
             # cluster_mask=mcl_idx==0
 
             print '>>> Interpolating for Event:%s'%(event)
-            #Retreiving the data for that event
-            hit_layer_arr=all_event_hits.loc[event,'layer']
-            #Filter out the current layer's data
-            layer_mask=hit_layer_arr==layer
-            hit_energy_arr=all_event_hits.loc[event,'energy'][layer_mask] #& cluster_mask]
-            hit_x_arr=all_event_hits.loc[event,'x'][layer_mask]# & cluster_mask]
-            hit_y_arr=all_event_hits.loc[event,'y'][layer_mask]# & cluster_mask]
+            #Retreiving the data for that event of this layer(saving memory also)
+            hit_cellid_arr,hit_energy_arr=_get_energy_array(all_event_hits,
+                                                            layer,event)
+
             #Cheking if the event contains no hits in this layer
-            print hit_energy_arr.shape
-            if hit_energy_arr.shape[0]==0:
-                continue
+            # print hit_energy_arr.shape
+            # if hit_energy_arr.shape[0]==0:
+            #     continue
 
             #Tuplizing the center of hit to search its corresponding hex-cell
-            hit_centers=[(hit_x_arr[i],hit_y_arr[i])
-                            for i in range(hit_energy_arr.shape[0])]
-            #Querying the KDTree for corresponding cells
-            indices=hex_tree.query_ball_point(hit_centers,r=precision_adjust)
+            # hit_centers=[(hit_x_arr[i],hit_y_arr[i])
+            #                 for i in range(hit_energy_arr.shape[0])]
+            # #Querying the KDTree for corresponding cells
+            # indices=hex_tree.query_ball_point(hit_centers,r=precision_adjust)
 
             #Now iterating over all the hits of this layer in this event
             for hit_id in range(hit_energy_arr.shape[0]):
                 #Accquiring the hexagonal cell
-                hex_cell_index=indices[hit_id]
-                if not len(hex_cell_index)==1:
-                    print 'Multiple/No Hex Cell Matching with hit cell'
-                    sys.exit(1)
-                hex_cell_center=hex_centers[hex_cell_index[0]]
-                overlaps=coef_dict[hex_cell_center]
+                hex_cell_id=hit_cellid_arr[hit_id]
+
+                #Retreiving the overlap coef from the dictionary
+                overlaps=coef_dict[hex_cell_id]
 
                 #Performing the interpolation
                 example_idx=event-event_start_no
