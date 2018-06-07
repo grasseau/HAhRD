@@ -16,7 +16,7 @@ from descartes.patch import PolygonPatch
 #Importing custom classes and function
 from sq_Cells import sq_Cells
 #Importing a required function from main file
-from main import get_subdet
+#from main import get_subdet as _get_subdet
 #Importing Tensorflow to save the tfRecords
 import tensorflow as tf
 
@@ -365,18 +365,15 @@ def _get_layer_number_from_detid(detid):
         OUPUT:
             layer_arr       : a numpy array of unique layers
     '''
-    #Get subdet and the effective layer number for this layer
-    subdet,eff_layer=get_subdet(layer)
-
     #Getting effective layer numebr and the subdet number from the detid
     layer_arr=(detid>>19)&0x1F
     subdet_arr=(detid>>25)&0x7
 
     #Now making the effective layer to the actual number
     #Fixing subdet 4 layers
-    layer_arr+=layer_arr[subdet_arr==4]*28
+    layer_arr=layer_arr+(subdet_arr==4)*28
     #Fixing the subdet 5 layers
-    layer_arr+=layer_arr[subdet_arr==5]*40
+    layer_arr=layer_arr+(subdet_arr==5)*40
 
     return layer_arr
 
@@ -508,8 +505,8 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
                                                         layer,zside,event)
 
                 #Checking if the event contains no hits in this layer
-                print 'Empty Event: ',hit_energy_arr.shape
                 if hit_energy_arr.shape[0]==0:
+                    print 'Empty Event: ',hit_energy_arr.shape
                     continue
 
                 #Declaring the image array
@@ -550,18 +547,18 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
                 #REMEMBER: we have to retreive in this format only. also check
                 #in what format numpy stores matrix by using tobytes.
                 #(row mojor or column major)
-                example=tf.train.Example(feature=tf.train.Feature(
-                    feature={
-                        'image': _bytes_feature(emergy_map.tobytes()))
-                    }
-                ))
-                record_writer.write(example.SerializeToString())
+                # example=tf.train.Example(features=tf.train.Features(
+                #     feature={
+                #         'image': _bytes_feature(energy_map.tobytes())
+                #     }
+                # ))
+                # record_writer.write(example.SerializeToString())
 
     #We could save the minibatch alternatively here
     #but we would be combining the input data as well.
     #(so better saving will be done later). Hust numpy save done here
-    image_filename=image_basepath+'image%sbatchsize%s'%(event_start_no,event_stride)
-    np.save(image_filename,energy_map)
+    # image_filename=image_basepath+'image%sbatchsize%s'%(event_start_no,event_stride)
+    # np.save(image_filename,energy_map)
 
     #Logical Error Check
     #Printing the total energy of each event its hit and mesh corresp

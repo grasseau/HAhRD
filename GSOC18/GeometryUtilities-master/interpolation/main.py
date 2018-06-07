@@ -132,13 +132,17 @@ def generate_image(hits_data_filename,resolution=(514,513),edge_length=0.7):
     '''
     #Some of the geometry metadata (will be constant)
     no_layers=40
-    #Converting the root file to a data frame
-    all_event_hits=readDataFile_hits(hits_data_filename)
-
     #Specifying the size of minibatch
     event_stride=10 #seems optimal in terms of memory use.
+    event_start_no=0 #for testing now
+
+    #Converting the root file to a data frame
+    all_event_hits=readDataFile_hits(hits_data_filename,event_start_no,
+                                    event_stride)
+
     t0=datetime.datetime.now()
-    compute_energy_map(all_event_hits,resolution,edge_length,0,event_stride,no_layers)
+    compute_energy_map(all_event_hits,resolution,edge_length,
+                        event_start_no,event_stride,no_layers)
     t1=datetime.datetime.now()
     print '>>> Image Creation Completed in: ',t1-t0
 
@@ -241,8 +245,8 @@ def readDataFile_hits(filename,event_start_no,event_stride):
     #Do the Filtering here only no need to do it each time for each event
 
     #Printing for sanity check
-    print df.iloc[0:1].head()
-    print df.loc[0,'detid'].dtype
+    #print df.head()
+    print 'Shape of dataframe: ',df.shape
     # print all_event_hits.loc[0,'energy']
     # print type(all_event_hits.loc[0,'energy'])
     # print all_event_hits.loc[0,'energy'].shape
@@ -278,9 +282,7 @@ if __name__=='__main__':
     #     sys.exit(1)
 
     #Calling the driver function
-    generate_interpolation(opt.input_file,edge_length=0.7)
+    #generate_interpolation(opt.input_file,edge_length=0.7)
 
-    # readDataFile_hits(opt.data_file,0,2)
-    # sys.exit(1)
     #Generating the image
     generate_image(opt.data_file)
