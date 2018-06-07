@@ -278,9 +278,9 @@ if __name__=='__main__':
     #     sys.exit(1)
 
     #Calling the driver function
-    #generate_interpolation(opt.input_file,edge_length=0.7)
+    generate_interpolation(opt.input_file,edge_length=0.7)
 
-    readDataFile_hits(opt.data_file,0,2)
-    sys.exit(1)
+    # readDataFile_hits(opt.data_file,0,2)
+    # sys.exit(1)
     #Generating the image
     generate_image(opt.data_file)

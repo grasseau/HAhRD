@@ -366,7 +366,7 @@ def _get_layer_number_from_detid(detid):
 
     return layer_arr
 
-def _get_cellid_energy_array(all_event_hits,detid,layer,event):
+def _get_cellid_energy_array(all_event_hits,layer,event):
     '''
     DESCRIPTION:
         This will create the energy array and cellid whithout the extra memory
@@ -377,7 +377,9 @@ def _get_cellid_energy_array(all_event_hits,detid,layer,event):
     cellid_arr=detid & 0x3FFFF
 
     mask=_get_layer_number_from_detid(detid)==layer
+    #Now masking both the energy arr and cellid arr to retreive data of this layer
     energy_arr=all_event_hits.loc[event,'energy'][mask]
+    cellid_arr=cellid_arr[mask]
 
     return cellid_arr,energy_arr
 
@@ -401,7 +403,6 @@ def _get_hit_layers(all_event_hits,event_start_no,event_stride):
 
     layers=np.unique(layers)
     return layers.tolist()
-
 
 def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
                     event_stride,no_layers):

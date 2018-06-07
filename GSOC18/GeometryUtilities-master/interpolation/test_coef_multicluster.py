@@ -7,11 +7,15 @@ import matplotlib.pyplot as plt
 
 import uproot
 import pandas as pd
+import datetime
 import concurrent.futures,multiprocessing
 ncpu=multiprocessing.cpu_count()
 executor=concurrent.futures.ThreadPoolExecutor(ncpu*4)
 
+from main import readGeometry,get_subdet
+
 #Location of the root data file
+posfname='hex_pos_data/'
 dfname='detector_data/hgcalNtuple_electrons_15GeV_n100.root'
 #cfname='sq_cells_data/coef_dict_res_473,473_len_0.7.pkl'
 sfname='sq_cells_data/sq_cells_dict_res_514,513_len_0.7.pkl'
@@ -63,25 +67,17 @@ def readDataFile(filename):
     '''
     tree=uproot.open(filename)['ana/hgc']
     branches=[]
-    branches += ["genpart_gen","genpart_reachedEE","genpart_energy",
-                "genpart_eta","genpart_phi", "genpart_pid","genpart_posx",
-                "genpart_posy","genpart_posz"]
-    branches += ["rechit_x", "rechit_y", "rechit_z", "rechit_energy",
-                "rechit_layer", 'rechit_flags','rechit_cluster2d',
-                'cluster2d_multicluster']
+    branches += ["rechit_detid","rechit_z", "rechit_energy",
+                'rechit_cluster2d','cluster2d_multicluster']
     cache={}
     df=tree.pandas.df(branches,cache=cache,executor=executor)
 
     return df
 
-def check_event_multicluster_interpolation(event_id,df,sq_cells_dict):
+def check_event_multicluster_interpolation(event_id,df,sq_cells_dict,total_layers=40):
     branches=[]
-    branches += ["genpart_gen","genpart_reachedEE","genpart_energy",
-                "genpart_eta","genpart_phi", "genpart_pid","genpart_posx",
-                "genpart_posy","genpart_posz"]
-    branches += ["rechit_x", "rechit_y", "rechit_z", "rechit_energy",
-                "rechit_layer", 'rechit_flags','rechit_cluster2d',
-                'cluster2d_multicluster']
+    branches += ["rechit_detid","rechit_z", "rechit_energy",
+                'rechit_cluster2d','cluster2d_multicluster']
 
     all_hits = pd.DataFrame({name.replace('rechit_',''):df.loc[event_id,name]
                             for name in branches if 'rechit_' in name })
@@ -93,9 +89,13 @@ def check_event_multicluster_interpolation(event_id,df,sq_cells_dict):
     #Adding it to all hits data frame
     all_hits['cluster3d'] = pd.Series(mcl_idx, index=all_hits.index)
 
+    #Filtering the all hits based on one
+    #No need here to separate the z>0 and z<0 since they will be
+    #automatically separated in the multi-cluster
+
     print '#########################################'
     print '>>> Interpolation the event: ',event_id
-    cluster_properties=interpolation_check(all_hits,sq_cells_dict,event_id)
+    cluster_properties=interpolation_check(all_hits,sq_cells_dict,event_id,total_layers)
 
     print '>>> Not Writing the results to file in multicluster_results folder'
     # fname='multicluster_results/event%s.txt'%(event_id)
@@ -110,7 +110,7 @@ def check_event_multicluster_interpolation(event_id,df,sq_cells_dict):
     # fhandle.close()
 
 ############ MAIN FUNCTION ##################
-def interpolation_check(all_hits_df,sq_cells_dict,event_id,precision_adjust=1e-3):
+def interpolation_check(all_hits_df,sq_cells_dict,event_id,total_layers):
     '''
     DESCRIPTION:
         This is mainly used to check the validity of the interpolation coef
@@ -134,49 +134,51 @@ def interpolation_check(all_hits_df,sq_cells_dict,event_id,precision_adjust=1e-3
     cluster_properties={}
 
     #Iteratting layer by layer
-    for layer,layer_hits in all_hits_df.groupby(['layer']):
+    for layer in range(total_layers):
+        #Filtering the current dataframe for this layers
+        layer_hits=all_hits_df[(all_hits_df[['detid']].values>>19 & 0x1F)==layer]
+        if layer_hits.shape[0]==0:
+            continue
 
+        #Finally starting the interpolation
         print '\n>>> Interpolating for Layer: %s'%(layer)
+        #print layer_hits.head()
+
         #Reading the coef_dict for this layer
         fname='sq_cells_data/coef_dict_layer_%s_res_%s,%s_len_%s.pkl'%(
                                 layer,resolution[0],resolution[1],edge_length)
         coef_dict=readCoefFile(fname)
 
+        #Reading the test_geometry file to get the hex_cells dict
+        fname=posfname+'%s.pkl'%(layer)
+        t0=datetime.datetime.now()
+        hex_pos=readCoefFile(fname)
+        t1=datetime.datetime.now()
+        print 'time to read pos dict: ',t1-t0
+
         #Getting the center of the cells which have hits
-        layer_z_value=layer_hits.iloc[0]['z'] #will be same for all the cells in this layer
-        center_arr=np.squeeze(layer_hits[['x','y']].values)
+        layer_z_arr=np.squeeze(layer_hits[['z']].values)
+        cellid_arr=np.squeeze(layer_hits[['detid']].values) & 0x3FFFF
         energy_arr=np.squeeze(layer_hits[['energy']].values)
         cluster3d_arr=np.squeeze(layer_hits[['cluster3d']].values)
 
         #Reshaping if required
         if energy_arr.shape==():
             energy_arr=energy_arr.reshape((-1,))
-            center_arr=center_arr.reshape((-1,2))
+            cell_id_arr=cellid_arr.reshape((-1,))
             cluster3d_arr=cluster3d_arr.reshape((-1,))
-
-        #Making the center as tuple for searching keys in coef_dict
-        print '>>> Tuplizing the center of hits '
-        #print center_arr,energy_arr
-        hit_centers=[(center_arr[i,0],center_arr[i,1])
-                        for i in range(center_arr.shape[0])]
-        hex_centers=coef_dict.keys()
-        print '>>> Building the KDTree of Hex-Cells Center'
-        hex_tree=cKDTree(hex_centers,balanced_tree=True)
-
-        #Searching for hex cell corresp. of the hit in the hex cell tree
-        print '>>> Querying the Tree for corresponding cells'
-        indices=hex_tree.query_ball_point(hit_centers,r=precision_adjust)
 
         #Finally Calculating the Interpolation check values
         print '>>> Calculating the Multi-Cluster Properties'
         for hit_id in range(energy_arr.shape[0]):
+            #print hit_id
             #Identifying the corresponding hexagonal cell for this hit
-            hex_cell_index=indices[hit_id]
-            if not len(hex_cell_index)==1:
-                print 'Multiple/No Hex Cell Matching with hit cell'
-                sys.exit(1)
-            hex_cell_center=hex_centers[hex_cell_index[0]]
-            overlaps=coef_dict[hex_cell_center]
+            hex_cellid=cellid_arr[hit_id]
+
+            #Retreiving the cell coordinates
+            hex_cell_center=hex_pos[hex_cellid]
+            #Retreiving the cell overlap coefs in sq grid/mesh
+            overlaps=coef_dict[hex_cellid]
 
             #Adding the cluster field to dictionary
             cluster3d=cluster3d_arr[hit_id]
@@ -189,7 +191,7 @@ def interpolation_check(all_hits_df,sq_cells_dict,event_id,precision_adjust=1e-3
             hit_energy=energy_arr[hit_id]
             hit_Wx=hex_cell_center[0]*hit_energy
             hit_Wy=hex_cell_center[1]*hit_energy
-            hit_Wz=layer_z_value*hit_energy
+            hit_Wz=layer_z_arr[hit_id]*hit_energy
             init_list=[hit_energy,hit_Wx,hit_Wy,hit_Wz]
             cluster_properties[cluster3d][0]+=init_list
 
@@ -203,7 +205,7 @@ def interpolation_check(all_hits_df,sq_cells_dict,event_id,precision_adjust=1e-3
                 mesh_energy=hit_energy*weight
                 mesh_Wx=mesh_energy*center.coords[0][0]
                 mesh_Wy=mesh_energy*center.coords[0][1]
-                mesh_Wz=mesh_energy*layer_z_value
+                mesh_Wz=mesh_energy*layer_z_arr[hit_id]
                 mesh_list=[mesh_energy,mesh_Wx,mesh_Wy,mesh_Wz]
                 cluster_properties[cluster3d][1]+=mesh_list
 
@@ -276,13 +278,14 @@ if __name__=='__main__':
     sq_cells_dict=readSqCellsDict(sfname)
 
     #Now checking for ~100 events
-    total_events=100
+    total_layers=40
+    total_events=1
     event_ids=np.array(np.squeeze(df.index.tolist()))
 
     #Sampling some random events to interpolate
     #choice=np.random.choice(event_ids.shape[0],total_events)
-    sample_event_ids=event_ids
-    #sample_event_ids=[18]
+    #sample_event_ids=event_ids
+    sample_event_ids=[3]
     for i,event in enumerate(sample_event_ids):
         print i,' out of ',total_events
         check_event_multicluster_interpolation(event,df,sq_cells_dict)
