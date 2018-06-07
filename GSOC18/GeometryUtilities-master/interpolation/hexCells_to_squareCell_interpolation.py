@@ -15,6 +15,10 @@ from shapely.geometry import LineString,Polygon
 from descartes.patch import PolygonPatch
 #Importing custom classes and function
 from sq_Cells import sq_Cells
+#Importing a required function from main file
+from main import get_subdet
+#Importing Tensorflow to save the tfRecords
+import tensorflow as tf
 
 
 #################Global Variables#######################
@@ -361,12 +365,22 @@ def _get_layer_number_from_detid(detid):
         OUPUT:
             layer_arr       : a numpy array of unique layers
     '''
+    #Get subdet and the effective layer number for this layer
+    subdet,eff_layer=get_subdet(layer)
 
+    #Getting effective layer numebr and the subdet number from the detid
     layer_arr=(detid>>19)&0x1F
+    subdet_arr=(detid>>25)&0x7
+
+    #Now making the effective layer to the actual number
+    #Fixing subdet 4 layers
+    layer_arr+=layer_arr[subdet_arr==4]*28
+    #Fixing the subdet 5 layers
+    layer_arr+=layer_arr[subdet_arr==5]*40
 
     return layer_arr
 
-def _get_cellid_energy_array(all_event_hits,layer,event):
+def _get_cellid_energy_array(all_event_hits,layer,zside,event):
     '''
     DESCRIPTION:
         This will create the energy array and cellid whithout the extra memory
@@ -376,7 +390,10 @@ def _get_cellid_energy_array(all_event_hits,layer,event):
     detid=all_event_hits.loc[event,'detid']
     cellid_arr=detid & 0x3FFFF
 
-    mask=_get_layer_number_from_detid(detid)==layer
+    layer_mask=_get_layer_number_from_detid(detid)==layer
+    zside_mask=((detid>>24) & 0x1)==zside
+    mask=layer_mask & zside_mask    #Final mnet mask
+
     #Now masking both the energy arr and cellid arr to retreive data of this layer
     energy_arr=all_event_hits.loc[event,'energy'][mask]
     cellid_arr=cellid_arr[mask]
@@ -397,15 +414,24 @@ def _get_hit_layers(all_event_hits,event_start_no,event_stride):
     '''
     layers=np.array([],dtype=np.int64)
     for event in range(event_start_no,event_start_no+event_stride):
-        detid=all_event_hits.loc[event_no,'detid'].values
+        detid=all_event_hits.loc[event,'detid'].values
         _layers=np.unique(_get_layer_number_from_detid(detid))
         layers=np.append(layers,_layers)
 
     layers=np.unique(layers)
     return layers.tolist()
 
+def _bytes_feature(value):
+    '''
+    DESCRIPTION:
+        Inspired/copied from the usual way to byte to Tensorflow
+        example feature.
+        Dont use it unknowingly.
+    '''
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+
 def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
-                    event_stride,no_layers):
+                    event_stride,no_layers,dtype=np.float32):
     '''
     DESCRIPTION:
         This function will finally map the energy deposit recorded in the
@@ -431,6 +457,8 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
             no_layers       : the total number of layers to interpolate upto
                                 (current default is 40 since that much coef is
                                 available to us right now)
+            dtype           : np.float32 is kept as default to save memory
+                                of the model
         OUTPUT:
             energy_map      : a numpy array containing the map/interpolation
                                 of a minibatch of event.
@@ -448,14 +476,14 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
     # sq_cells_dict=_readCoefFile(sq_cells_filename)
 
 
-    #Declaring the image array
-    energy_map=np.zeros((event_stride,resolution[0],resolution[1],
-                                                no_layers),dtype=dtype)
+    #Strating the tfRecord Writer
+    image_filename=image_basepath+'image%sbatchsize%s.tfrecords'%(
+                                        event_start_no,event_stride)
+    record_writer=tf.python_io.TFRecordWriter(image_filename)
 
     #Starting to interpolate layer by layer for all the events
-    #We dont have to unnecessarily iterate over all layers. We could make
-    #set of layers from dataframe
     layers=range(1,no_layers+1)
+    #Better iterate only those layers whch are there in hit atleast once (LATER)
     #layers=_get_hit_layers(all_event_hits,event_start_no,event_stride)
     for layer in layers:
         #Loading the interpolation coef for this layer
@@ -463,11 +491,6 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
         coef_filename='sq_cells_data/coef_dict_layer_%s_res_%s,%s_len_%s.pkl'%(
                                     layer,resolution[0],resolution[1],edge_length)
         coef_dict=_readCoefFile(coef_filename)
-
-        #Making the KD Tree for the hexagonal cells(REMOVE in cleanup)
-        # print '>>> Building the tree of Hexagonal cells for searching'
-        # hex_centers=coef_dict.keys()
-        # hex_tree=cKDTree(hex_centers,balanced_tree=True)
 
         #Now we will iterate the all the events
         events=range(event_start_no,event_start_no+event_stride)
@@ -477,53 +500,62 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
             # mcl_idx=all_event_hits.loc[event,'cluster2d_multicluster'][cl2d_idx]
             # cluster_mask=mcl_idx==0
 
-            print '>>> Interpolating for Event:%s'%(event)
-            #Retreiving the data for that event of this layer(saving memory also)
-            hit_cellid_arr,hit_energy_arr=_get_energy_array(all_event_hits,
-                                                            layer,event)
+            for zside in [0,1]:
+                print '>>> Interpolating for Event:%s zside:%s'%(event,zside)
+                #Retreiving the data for that event of this layer(saving memory also)
+                print '>>> Masking and retreiving the hit'
+                hit_cellid_arr,hit_energy_arr=_get_cellid_energy_array(all_event_hits,
+                                                        layer,zside,event)
 
-            #Cheking if the event contains no hits in this layer
-            # print hit_energy_arr.shape
-            # if hit_energy_arr.shape[0]==0:
-            #     continue
+                #Checking if the event contains no hits in this layer
+                print 'Empty Event: ',hit_energy_arr.shape
+                if hit_energy_arr.shape[0]==0:
+                    continue
 
-            #Tuplizing the center of hit to search its corresponding hex-cell
-            # hit_centers=[(hit_x_arr[i],hit_y_arr[i])
-            #                 for i in range(hit_energy_arr.shape[0])]
-            # #Querying the KDTree for corresponding cells
-            # indices=hex_tree.query_ball_point(hit_centers,r=precision_adjust)
+                #Declaring the image array
+                energy_map=np.zeros((resolution[0],resolution[1],
+                                        no_layers),dtype=dtype)
+                #Now iterating over all the hits of this layer in this event
+                for hit_id in range(hit_energy_arr.shape[0]):
+                    #Accquiring the hexagonal cell
+                    hex_cell_id=hit_cellid_arr[hit_id]
 
-            #Now iterating over all the hits of this layer in this event
-            for hit_id in range(hit_energy_arr.shape[0]):
-                #Accquiring the hexagonal cell
-                hex_cell_id=hit_cellid_arr[hit_id]
+                    #Retreiving the overlap coef from the dictionary
+                    overlaps=coef_dict[hex_cell_id]
 
-                #Retreiving the overlap coef from the dictionary
-                overlaps=coef_dict[hex_cell_id]
+                    #Performing the interpolation
+                    hit_energy=hit_energy_arr[hit_id]
 
-                #Performing the interpolation
-                example_idx=event-event_start_no
-                hit_energy=hit_energy_arr[hit_id]
+                    # #logical error check
+                    # event_energy_arr[example_idx]+=hit_energy
+                    # event_bary_x_arr[example_idx]+=hit_energy*hex_cell_center[0]
+                    # event_bary_y_arr[example_idx]+=hit_energy*hex_cell_center[1]
 
-                # #logical error check
-                # event_energy_arr[example_idx]+=hit_energy
-                # event_bary_x_arr[example_idx]+=hit_energy*hex_cell_center[0]
-                # event_bary_y_arr[example_idx]+=hit_energy*hex_cell_center[1]
+                    norm_coef=np.sum([overlap[1] for overlap in overlaps])
+                    for overlap in overlaps:
+                        #Calculating the interpolated/mesh energy for each overlap
+                        i,j=overlap[0]  #index of square cell
+                        weight=overlap[1]/norm_coef
+                        mesh_energy=hit_energy*weight
 
-                norm_coef=np.sum([overlap[1] for overlap in overlaps])
-                for overlap in overlaps:
-                    #Calculating the interpolated/mesh energy for each overlap
-                    i,j=overlap[0]  #index of square cell
-                    weight=overlap[1]/norm_coef
-                    mesh_energy=hit_energy*weight
+                        # #Logical Error Check
+                        # mesh_energy_arr[example_idx]+=mesh_energy
+                        # sq_center=sq_cells_dict[(i,j)].center
+                        # mesh_bary_x_arr[example_idx]+=mesh_energy*sq_center.coords[0][0]
+                        # mesh_bary_y_arr[example_idx]+=mesh_energy*sq_center.coords[0][1]
 
-                    # #Logical Error Check
-                    # mesh_energy_arr[example_idx]+=mesh_energy
-                    # sq_center=sq_cells_dict[(i,j)].center
-                    # mesh_bary_x_arr[example_idx]+=mesh_energy*sq_center.coords[0][0]
-                    # mesh_bary_y_arr[example_idx]+=mesh_energy*sq_center.coords[0][1]
+                        energy_map[i,j,layer]+=mesh_energy
 
-                    energy_map[example_idx,i,j,layer]+=mesh_energy
+                #Now saving the energy calculated for the particular z-side of event
+                #REMEMBER: we have to retreive in this format only. also check
+                #in what format numpy stores matrix by using tobytes.
+                #(row mojor or column major)
+                example=tf.train.Example(feature=tf.train.Feature(
+                    feature={
+                        'image': _bytes_feature(emergy_map.tobytes()))
+                    }
+                ))
+                record_writer.write(example.SerializeToString())
 
     #We could save the minibatch alternatively here
     #but we would be combining the input data as well.

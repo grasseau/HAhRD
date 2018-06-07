@@ -12,7 +12,7 @@ import concurrent.futures,multiprocessing
 ncpu=multiprocessing.cpu_count()
 executor=concurrent.futures.ThreadPoolExecutor(ncpu*4)
 
-from main import readGeometry,get_subdet
+from main import get_subdet
 
 #Location of the root data file
 posfname='hex_pos_data/'
@@ -37,6 +37,14 @@ event_mcl=[]         # for tracking the events-mcl pair which have
                                 #cuz all the error should have been same
 
 ############# HELPER FUNCTION ###############
+def _get_layer_mask(all_hits_df,layer):
+    subdet,eff_layer=get_subdet(layer)
+
+    hit_subdet=(all_hits_df[['detid']].values>>25 & 0x7)==subdet
+    hit_layer=(all_hits_df[['detid']].values>>19 & 0x1F)==eff_layer
+
+    return hit_subdet & hit_layer
+
 def readCoefFile(filename):
     fhandle=open(filename,'rb')
     coef_dict=pickle.load(fhandle)
@@ -134,15 +142,14 @@ def interpolation_check(all_hits_df,sq_cells_dict,event_id,total_layers):
     cluster_properties={}
 
     #Iteratting layer by layer
-    for layer in range(total_layers):
+    for layer in range(1,total_layers+1):
+        #Finally starting the interpolation
+        print '>>> Interpolating for Layer: %s'%(layer)
+
         #Filtering the current dataframe for this layers
-        layer_hits=all_hits_df[(all_hits_df[['detid']].values>>19 & 0x1F)==layer]
+        layer_hits=all_hits_df[_get_layer_mask(all_hits_df,layer)]
         if layer_hits.shape[0]==0:
             continue
-
-        #Finally starting the interpolation
-        print '\n>>> Interpolating for Layer: %s'%(layer)
-        #print layer_hits.head()
 
         #Reading the coef_dict for this layer
         fname='sq_cells_data/coef_dict_layer_%s_res_%s,%s_len_%s.pkl'%(
@@ -151,13 +158,11 @@ def interpolation_check(all_hits_df,sq_cells_dict,event_id,total_layers):
 
         #Reading the test_geometry file to get the hex_cells dict
         fname=posfname+'%s.pkl'%(layer)
-        t0=datetime.datetime.now()
         hex_pos=readCoefFile(fname)
-        t1=datetime.datetime.now()
-        print 'time to read pos dict: ',t1-t0
 
         #Getting the center of the cells which have hits
         layer_z_arr=np.squeeze(layer_hits[['z']].values)
+        detid_arr=np.squeeze(layer_hits[['detid']].values)
         cellid_arr=np.squeeze(layer_hits[['detid']].values) & 0x3FFFF
         energy_arr=np.squeeze(layer_hits[['energy']].values)
         cluster3d_arr=np.squeeze(layer_hits[['cluster3d']].values)
@@ -165,13 +170,14 @@ def interpolation_check(all_hits_df,sq_cells_dict,event_id,total_layers):
         #Reshaping if required
         if energy_arr.shape==():
             energy_arr=energy_arr.reshape((-1,))
-            cell_id_arr=cellid_arr.reshape((-1,))
+            cellid_arr=cellid_arr.reshape((-1,))
             cluster3d_arr=cluster3d_arr.reshape((-1,))
+            layer_z_arr=layer_z_arr.reshape((-1,))
 
         #Finally Calculating the Interpolation check values
         print '>>> Calculating the Multi-Cluster Properties'
         for hit_id in range(energy_arr.shape[0]):
-            #print hit_id
+            #print event_id,layer,hit_id,detid_arr[hit_id],cellid_arr[hit_id]
             #Identifying the corresponding hexagonal cell for this hit
             hex_cellid=cellid_arr[hit_id]
 
@@ -214,7 +220,7 @@ def interpolation_check(all_hits_df,sq_cells_dict,event_id,total_layers):
     # bary_y_diff=[]
     # bary_z_diff=[]
     for key,value in cluster_properties.iteritems():
-        print '\ncluster3d: ',key
+        #print '\ncluster3d: ',key
         #Finding the barycenter by dividing with total energy
         value[0][1:]=value[0][1:]/value[0][0]
         value[1][1:]=value[1][1:]/value[1][0]
@@ -227,9 +233,9 @@ def interpolation_check(all_hits_df,sq_cells_dict,event_id,total_layers):
         event_mcl.append((event_id,key))
 
         #Printing the hex-cell values
-        print 'initial val:',value[0][0],value[0][1],value[0][2],value[0][3]
+        #print 'initial val:',value[0][0],value[0][1],value[0][2],value[0][3]
         #Printing the mesh-cells value
-        print 'sq_mesh val:',value[1][0],value[1][1],value[1][2],value[1][3]
+        #print 'sq_mesh val:',value[1][0],value[1][1],value[1][2],value[1][3]
 
 
     return cluster_properties
@@ -279,13 +285,13 @@ if __name__=='__main__':
 
     #Now checking for ~100 events
     total_layers=40
-    total_events=1
+    total_events=100
     event_ids=np.array(np.squeeze(df.index.tolist()))
 
     #Sampling some random events to interpolate
     #choice=np.random.choice(event_ids.shape[0],total_events)
-    #sample_event_ids=event_ids
-    sample_event_ids=[3]
+    sample_event_ids=event_ids
+    #sample_event_ids=[13]
     for i,event in enumerate(sample_event_ids):
         print i,' out of ',total_events
         check_event_multicluster_interpolation(event,df,sq_cells_dict)
