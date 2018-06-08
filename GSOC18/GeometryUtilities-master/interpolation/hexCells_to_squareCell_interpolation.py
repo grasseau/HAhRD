@@ -476,83 +476,92 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
     #Strating the tfRecord Writer
     image_filename=image_basepath+'image%sbatchsize%s.tfrecords'%(
                                         event_start_no,event_stride)
-    record_writer=tf.python_io.TFRecordWriter(image_filename)
+    compression_options=tf.python_io.TFRecordOptions(
+                        tf.python_io.TFRecordCompressionType.ZLIB)
 
-    #Starting to interpolate layer by layer for all the events
-    layers=range(1,no_layers+1)
-    #Better iterate only those layers whch are there in hit atleast once (LATER)
-    #layers=_get_hit_layers(all_event_hits,event_start_no,event_stride)
-    for layer in layers:
-        #Loading the interpolation coef for this layer
-        print '\n>>> Reading the layer %s interpolation coefficient'%(layer)
-        coef_filename='sq_cells_data/coef_dict_layer_%s_res_%s,%s_len_%s.pkl'%(
-                                    layer,resolution[0],resolution[1],edge_length)
-        coef_dict=_readCoefFile(coef_filename)
+    with tf.python_io.TFRecordWriter(image_filename,
+                        options=compression_options) as record_writer:
+        for zside in [0,1]:
+            #Initializing the numpy matrix to hold the interpolation
+            energy_map=np.zeros((event_stride,resolution[0],resolution[1],
+                                    no_layers),dtype=dtype)
 
-        #Now we will iterate the all the events
-        events=range(event_start_no,event_start_no+event_stride)
-        for event in events:
-            # ####For Logical Check #########
-            # cl2d_idx=all_event_hits.loc[event,'cluster2d']
-            # mcl_idx=all_event_hits.loc[event,'cluster2d_multicluster'][cl2d_idx]
-            # cluster_mask=mcl_idx==0
+            #Starting to interpolate layer by layer for all the events
+            layers=range(1,no_layers+1)
+            #Better iterate only those layers whch are there in hit atleast once (LATER)
+            #layers=_get_hit_layers(all_event_hits,event_start_no,event_stride)
+            for layer in layers:
+                #Loading the interpolation coef for this layer
+                print '\n>>> Reading the layer %s interpolation coefficient'%(layer)
+                coef_filename='sq_cells_data/coef_dict_layer_%s_res_%s,%s_len_%s.pkl'%(
+                                            layer,resolution[0],resolution[1],edge_length)
+                coef_dict=_readCoefFile(coef_filename)
 
-            for zside in [0,1]:
-                print '>>> Interpolating for Event:%s zside:%s'%(event,zside)
-                #Retreiving the data for that event of this layer(saving memory also)
-                print '>>> Masking and retreiving the hit'
-                hit_cellid_arr,hit_energy_arr=_get_cellid_energy_array(all_event_hits,
-                                                        layer,zside,event)
+                #Now we will iterate the all the events
+                events=range(event_start_no,event_start_no+event_stride)
+                for event in events:
+                    # ####For Logical Check #########
+                    # cl2d_idx=all_event_hits.loc[event,'cluster2d']
+                    # mcl_idx=all_event_hits.loc[event,'cluster2d_multicluster'][cl2d_idx]
+                    # cluster_mask=mcl_idx==0
 
-                #Checking if the event contains no hits in this layer
-                if hit_energy_arr.shape[0]==0:
-                    print 'Empty Event: ',hit_energy_arr.shape
-                    continue
+                    print '>>> Interpolating for Event:%s zside:%s'%(event,zside)
+                    #Retreiving the data for that event of this layer(saving memory also)
+                    print '>>> Masking and retreiving the hit'
+                    hit_cellid_arr,hit_energy_arr=_get_cellid_energy_array(all_event_hits,
+                                                            layer,zside,event)
 
-                #Declaring the image array
-                energy_map=np.zeros((resolution[0],resolution[1],
-                                        no_layers),dtype=dtype)
-                #Now iterating over all the hits of this layer in this event
-                for hit_id in range(hit_energy_arr.shape[0]):
-                    #Accquiring the hexagonal cell
-                    hex_cell_id=hit_cellid_arr[hit_id]
+                    #Checking if the event contains no hits in this layer
+                    if hit_energy_arr.shape[0]==0:
+                        print 'Empty Event: ',hit_energy_arr.shape
+                        continue
 
-                    #Retreiving the overlap coef from the dictionary
-                    overlaps=coef_dict[hex_cell_id]
+                    #Now iterating over all the hits of this layer in this event
+                    for hit_id in range(hit_energy_arr.shape[0]):
+                        #Accquiring the hexagonal cell
+                        hex_cell_id=hit_cellid_arr[hit_id]
 
-                    #Performing the interpolation
-                    hit_energy=hit_energy_arr[hit_id]
+                        #Retreiving the overlap coef from the dictionary
+                        overlaps=coef_dict[hex_cell_id]
 
-                    # #logical error check
-                    # event_energy_arr[example_idx]+=hit_energy
-                    # event_bary_x_arr[example_idx]+=hit_energy*hex_cell_center[0]
-                    # event_bary_y_arr[example_idx]+=hit_energy*hex_cell_center[1]
+                        #Performing the interpolation
+                        hit_energy=hit_energy_arr[hit_id]
 
-                    norm_coef=np.sum([overlap[1] for overlap in overlaps])
-                    for overlap in overlaps:
-                        #Calculating the interpolated/mesh energy for each overlap
-                        i,j=overlap[0]  #index of square cell
-                        weight=overlap[1]/norm_coef
-                        mesh_energy=hit_energy*weight
+                        # #logical error check
+                        # event_energy_arr[example_idx]+=hit_energy
+                        # event_bary_x_arr[example_idx]+=hit_energy*hex_cell_center[0]
+                        # event_bary_y_arr[example_idx]+=hit_energy*hex_cell_center[1]
 
-                        # #Logical Error Check
-                        # mesh_energy_arr[example_idx]+=mesh_energy
-                        # sq_center=sq_cells_dict[(i,j)].center
-                        # mesh_bary_x_arr[example_idx]+=mesh_energy*sq_center.coords[0][0]
-                        # mesh_bary_y_arr[example_idx]+=mesh_energy*sq_center.coords[0][1]
+                        norm_coef=np.sum([overlap[1] for overlap in overlaps])
+                        for overlap in overlaps:
+                            #Calculating the interpolated/mesh energy for each overlap
+                            i,j=overlap[0]  #index of square cell
+                            weight=overlap[1]/norm_coef
+                            mesh_energy=hit_energy*weight
 
-                        energy_map[i,j,layer]+=mesh_energy
+                            # #Logical Error Check
+                            # mesh_energy_arr[example_idx]+=mesh_energy
+                            # sq_center=sq_cells_dict[(i,j)].center
+                            # mesh_bary_x_arr[example_idx]+=mesh_energy*sq_center.coords[0][0]
+                            # mesh_bary_y_arr[example_idx]+=mesh_energy*sq_center.coords[0][1]
+                            example_idx=event-event_start_no
+                            energy_map[example_idx,i,j,layer]+=mesh_energy
 
-                #Now saving the energy calculated for the particular z-side of event
-                #REMEMBER: we have to retreive in this format only. also check
-                #in what format numpy stores matrix by using tobytes.
-                #(row mojor or column major)
-                # example=tf.train.Example(features=tf.train.Features(
-                #     feature={
-                #         'image': _bytes_feature(energy_map.tobytes())
-                #     }
-                # ))
-                # record_writer.write(example.SerializeToString())
+            #Now saving the energy calculated for the particular z-side of event
+            #REMEMBER: we have to retreive in this format only. also check
+            #in what format numpy stores matrix by using tobytes.
+            #(row mojor or column major)
+            for example_idx in range(event_stride):
+                example=tf.train.Example(features=tf.train.Features(
+                    feature={
+                        'image': _bytes_feature(energy_map[example_idx,:,:,:].tobytes())
+                    }
+                ))
+                record_writer.write(example.SerializeToString())
+
+            #Testing the numpy array
+            #np.save(image_filename,energy_map)
+
 
     #We could save the minibatch alternatively here
     #but we would be combining the input data as well.
