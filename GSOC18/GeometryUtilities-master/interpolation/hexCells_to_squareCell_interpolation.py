@@ -396,7 +396,8 @@ def _get_cellid_energy_array(all_event_hits,layer,zside,event):
     #(LC) required for logical error check
     z_arr=np.squeeze(all_event_hits.loc[event,'z']).reshape((-1,))
     cluster2d_arr=np.squeeze(all_event_hits.loc[event,'cluster2d']).reshape((-1,))
-    cluster3d_arr=np.squeeze(all_event_hits.loc[event,'cluster3d'][cluster2d_arr]).reshape((-1,))
+    cluster3d_arr=np.squeeze(
+        all_event_hits.loc[event,'cluster2d_multicluster'][cluster2d_arr]).reshape((-1,))
 
     #Masking the array for requred zside->layer->event
     cellid_arr=cellid_arr[mask]
@@ -484,8 +485,8 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
 
 
     #Strating the tfRecord Writer
-    # image_filename=image_basepath+'image%sbatchsize%s.tfrecords'%(
-    #                                     event_start_no,event_stride)
+    image_filename=image_basepath+'image%sbatchsize%s.tfrecords'%(
+                                        event_start_no,event_stride)
     compression_options=tf.python_io.TFRecordOptions(
                         tf.python_io.TFRecordCompressionType.ZLIB)
 
@@ -493,8 +494,8 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
                         options=compression_options) as record_writer:
         for zside in [0,1]:
             #Initializing the numpy matrix to hold the interpolation
-            energy_map=np.zeros((event_stride,resolution[0],resolution[1],
-                                    no_layers),dtype=dtype)
+            # energy_map=np.zeros((event_stride,resolution[0],resolution[1],
+            #                         no_layers),dtype=dtype)
 
             #Starting to interpolate layer by layer for all the events
             layers=range(1,no_layers+1)
@@ -542,7 +543,7 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
                         hit_energy=hit_energy_arr[hit_id]
 
                         #(LC)Adding the new key to multi-cluster properties
-                        cluster3d=cluster3d_arr[hit_id]
+                        cluster3d=hit_cluster3d_arr[hit_id]
                         if (event,cluster3d) not in cluster_properties.keys():
                             init_list=np.array([0,0,0,0],dtype=np.float64)
                             mesh_list=np.array([0,0,0,0],dtype=np.float64)
@@ -567,11 +568,12 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
                             #(LC) For adding the mesh contribution to mesh properties
                             sq_center=sq_cells_dict[(i,j)].center
                             mesh_energy=hit_energy*weight
-                            mesh_Wx=mesh_energy*sq_center.ccords[0][0]
-                            mesh_Wy=mesh_energy*sq_center.ccords[0][1]
+                            mesh_Wx=mesh_energy*sq_center.coords[0][0]
+                            mesh_Wy=mesh_energy*sq_center.coords[0][1]
                             mesh_Wz=mesh_energy*hit_z_arr[hit_id]
                             mesh_list=[mesh_energy,mesh_Wx,mesh_Wy,mesh_Wz]
-                            cluster_properties[cluster3d][1]+=mesh_list
+                            key=(event,cluster3d)
+                            cluster_properties[key][1]+=mesh_list
 
                             # example_idx=event-event_start_no
                             # energy_map[example_idx,i,j,layer]+=mesh_energy
@@ -592,7 +594,7 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
             #np.save(image_filename,energy_map)
 
     #(LC)Appending the properties to the final error list
-    for key,value in cluester_properties.iteritems():
+    for key,value in cluster_properties.iteritems():
         #Normalizing the barycenters
         value[0][1:]=value[0][1:]/value[0][0]   #init_properties
         value[1][1:]=value[1][1:]/value[1][0]   #mesh_properties
@@ -604,7 +606,7 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
         bary_z_diff.append(np.abs((value[0][3]-value[1][3])))
     #(LC) Plotting the values
     from test_coef_multicluster import plot_error_histogram
-    plot_error_histogram(energy_diff,bary_x_diff,bary_y_diff,bary_z_diff)
+    # plot_error_histogram(energy_diff,bary_x_diff,bary_y_diff,bary_z_diff)
 
 
-    return energy_map
+    #return energy_map
