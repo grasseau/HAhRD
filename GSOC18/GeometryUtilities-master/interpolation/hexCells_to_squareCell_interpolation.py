@@ -422,7 +422,7 @@ def _get_hit_layers(all_event_hits,event_start_no,event_stride):
     '''
     layers=np.array([],dtype=np.int64)
     for event in range(event_start_no,event_start_no+event_stride):
-        detid=all_event_hits.loc[event,'detid'].values
+        detid=all_event_hits.loc[event,'detid']
         _layers=np.unique(_get_layer_number_from_detid(detid))
         layers=np.append(layers,_layers)
 
