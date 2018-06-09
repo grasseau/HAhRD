@@ -3,9 +3,9 @@ from conv2d_utils import *
 from conv3d_utils import *
 import datetime
 
-#Getting the training data
-from tensorflow.examples.tutorials.mnist import input_data
-mnist = input_data.read_data_sets("/tmp/data/", one_hot = True)
+#Getting the training data(uncomment while doing )
+#from tensorflow.examples.tutorials.mnist import input_data
+#mnist = input_data.read_data_sets("/tmp/data/", one_hot = True)
 
 ################# Global Parameters  ####################
 n_classes=10

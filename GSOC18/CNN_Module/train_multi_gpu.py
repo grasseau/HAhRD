@@ -264,11 +264,11 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
                           log_device_placement=False)
     with tf.Session(config=config) as sess:
         #initializing the global variables
-        #sess.run(init)
+        sess.run(init)
         #Restoring the saved model if possible
-        last_epoch_number=8
-        checkpoint_path=checkpoint_filename+'model.ckpt-%s'%(last_epoch_number)
-        saver.restore(sess,checkpoint_path)
+        # last_epoch_number=8
+        # checkpoint_path=checkpoint_filename+'model.ckpt-%s'%(last_epoch_number)
+        # saver.restore(sess,checkpoint_path)
 
         #Adding the graph to tensorborad
         train_writer.add_graph(sess.graph)
@@ -323,7 +323,7 @@ if __name__=='__main__':
     train_filename_list=[local_directory_path+'train.tfrecords']
     test_filename_list=[local_directory_path+'validation.tfrecords']
     mini_batch_size=1024
-    epochs=2
+    epochs=10
 
     #parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size)
     train(epochs,mini_batch_size,train_filename_list,test_filename_list)
