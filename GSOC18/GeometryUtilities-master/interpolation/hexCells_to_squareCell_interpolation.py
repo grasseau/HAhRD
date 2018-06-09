@@ -394,19 +394,19 @@ def _get_cellid_energy_array(all_event_hits,layer,zside,event):
     #Now masking both the energy arr and cellid arr to retreive data of this layer
     energy_arr=np.squeeze(all_event_hits.loc[event,'energy']).reshape((-1,))
     #(LC) required for logical error check
-    z_arr=np.squeeze(all_event_hits.loc[event,'z']).reshape((-1,))
-    cluster2d_arr=np.squeeze(all_event_hits.loc[event,'cluster2d']).reshape((-1,))
-    cluster3d_arr=np.squeeze(
-        all_event_hits.loc[event,'cluster2d_multicluster'][cluster2d_arr]).reshape((-1,))
+    # z_arr=np.squeeze(all_event_hits.loc[event,'z']).reshape((-1,))
+    # cluster2d_arr=np.squeeze(all_event_hits.loc[event,'cluster2d']).reshape((-1,))
+    # cluster3d_arr=np.squeeze(
+    #     all_event_hits.loc[event,'cluster2d_multicluster'][cluster2d_arr]).reshape((-1,))
 
     #Masking the array for requred zside->layer->event
     cellid_arr=cellid_arr[mask]
     energy_arr=energy_arr[mask]
     #masking (LC)
-    z_arr=z_arr[mask]
-    cluster3d_arr=cluster3d_arr[mask]
+    # z_arr=z_arr[mask]
+    # cluster3d_arr=cluster3d_arr[mask]
 
-    return cellid_arr,energy_arr,cluster3d_arr,z_arr
+    return cellid_arr,energy_arr#,cluster3d_arr,z_arr
 
 def _get_hit_layers(all_event_hits,event_start_no,event_stride):
     '''
@@ -472,16 +472,16 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
                                 of a minibatch of event.
     '''
     #(LC)For logical ERROR check
-    energy_diff=[]          #global list for tracking the error in
-    bary_x_diff=[]          # energy and the barycenter properties
-    bary_y_diff=[]
-    bary_z_diff=[]
-    cluster_properties={}  #For holding the details of cluster and actual data
+    # energy_diff=[]          #global list for tracking the error in
+    # bary_x_diff=[]          # energy and the barycenter properties
+    # bary_y_diff=[]
+    # bary_z_diff=[]
+    # cluster_properties={}  #For holding the details of cluster and actual data
 
     #(LC)Loading the sq_cells dict for sq cell pos
-    sq_cells_filename='sq_cells_data/sq_cells_dict_res_%s,%s_len_%s.pkl'%(
-                                resolution[0],resolution[1],edge_length)
-    sq_cells_dict=_readCoefFile(sq_cells_filename)
+    # sq_cells_filename='sq_cells_data/sq_cells_dict_res_%s,%s_len_%s.pkl'%(
+    #                             resolution[0],resolution[1],edge_length)
+    # sq_cells_dict=_readCoefFile(sq_cells_filename)
 
 
     #Strating the tfRecord Writer
@@ -494,8 +494,8 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
                         options=compression_options) as record_writer:
         for zside in [0,1]:
             #Initializing the numpy matrix to hold the interpolation
-            # energy_map=np.zeros((event_stride,resolution[0],resolution[1],
-            #                         no_layers),dtype=dtype)
+            energy_map=np.zeros((event_stride,resolution[0],resolution[1],
+                                    no_layers),dtype=dtype)
 
             #Starting to interpolate layer by layer for all the events
             layers=range(1,no_layers+1)
@@ -509,22 +509,20 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
                 coef_dict=_readCoefFile(coef_filename)
 
                 #(LC)Reading the position filename
-                pos_fname='hex_pos_data/%s.pkl'%(layer)
-                hex_pos=_readCoefFile(pos_fname)
+                # pos_fname='hex_pos_data/%s.pkl'%(layer)
+                # hex_pos=_readCoefFile(pos_fname)
 
                 #Now we will iterate the all the events
                 events=range(event_start_no,event_start_no+event_stride)
                 for event in events:
-                    # ####For Logical Check #########
-                    # cl2d_idx=all_event_hits.loc[event,'cluster2d']
-                    # mcl_idx=all_event_hits.loc[event,'cluster2d_multicluster'][cl2d_idx]
-                    # cluster_mask=mcl_idx==0
-
                     print '>>> Interpolating for Event:%s zside:%s'%(event,zside)
                     #Retreiving the data for that event of this layer(saving memory also)
-                    print '>>> Masking and retreiving the hit' #(LC also here)
-                    hit_cellid_arr,hit_energy_arr,hit_cluster3d_arr,hit_z_arr=_get_cellid_energy_array(
+                    print '>>> Masking and retreiving the hit'
+                    hit_cellid_arr,hit_energy_arr=_get_cellid_energy_array(
                                             all_event_hits,layer,zside,event)
+                    #(LC)
+                    # hit_cellid_arr,hit_energy_arr,hit_cluster3d_arr,hit_z_arr=_get_cellid_energy_array(
+                    #                         all_event_hits,layer,zside,event)
 
                     #Checking if the event contains no hits in this layer
                     if hit_energy_arr.shape[0]==0:
@@ -543,20 +541,20 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
                         hit_energy=hit_energy_arr[hit_id]
 
                         #(LC)Adding the new key to multi-cluster properties
-                        cluster3d=hit_cluster3d_arr[hit_id]
-                        if (event,cluster3d) not in cluster_properties.keys():
-                            init_list=np.array([0,0,0,0],dtype=np.float64)
-                            mesh_list=np.array([0,0,0,0],dtype=np.float64)
-                            key=(event,cluster3d)
-                            cluster_properties[key]=[init_list,mesh_list]
-                        #(LC)Now adding the hexagonal contribution to initial properties
-                        hex_cell_center=hex_pos[hex_cell_id]
-                        hit_Wx=hex_cell_center[0]*hit_energy
-                        hit_Wy=hex_cell_center[1]*hit_energy
-                        hit_Wz=hit_z_arr[hit_id]*hit_energy
-                        init_list=[hit_energy,hit_Wx,hit_Wy,hit_Wz]
-                        key=(event,cluster3d)
-                        cluster_properties[key][0]+=init_list
+                        # cluster3d=hit_cluster3d_arr[hit_id]
+                        # if (event,cluster3d) not in cluster_properties.keys():
+                        #     init_list=np.array([0,0,0,0],dtype=np.float64)
+                        #     mesh_list=np.array([0,0,0,0],dtype=np.float64)
+                        #     key=(event,cluster3d)
+                        #     cluster_properties[key]=[init_list,mesh_list]
+                        # #(LC)Now adding the hexagonal contribution to initial properties
+                        # hex_cell_center=hex_pos[hex_cell_id]
+                        # hit_Wx=hex_cell_center[0]*hit_energy
+                        # hit_Wy=hex_cell_center[1]*hit_energy
+                        # hit_Wz=hit_z_arr[hit_id]*hit_energy
+                        # init_list=[hit_energy,hit_Wx,hit_Wy,hit_Wz]
+                        # key=(event,cluster3d)
+                        # cluster_properties[key][0]+=init_list
 
                         norm_coef=np.sum([overlap[1] for overlap in overlaps])
                         for overlap in overlaps:
@@ -566,47 +564,47 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
                             mesh_energy=hit_energy*weight
 
                             #(LC) For adding the mesh contribution to mesh properties
-                            sq_center=sq_cells_dict[(i,j)].center
-                            mesh_energy=hit_energy*weight
-                            mesh_Wx=mesh_energy*sq_center.coords[0][0]
-                            mesh_Wy=mesh_energy*sq_center.coords[0][1]
-                            mesh_Wz=mesh_energy*hit_z_arr[hit_id]
-                            mesh_list=[mesh_energy,mesh_Wx,mesh_Wy,mesh_Wz]
-                            key=(event,cluster3d)
-                            cluster_properties[key][1]+=mesh_list
+                            # sq_center=sq_cells_dict[(i,j)].center
+                            # mesh_energy=hit_energy*weight
+                            # mesh_Wx=mesh_energy*sq_center.coords[0][0]
+                            # mesh_Wy=mesh_energy*sq_center.coords[0][1]
+                            # mesh_Wz=mesh_energy*hit_z_arr[hit_id]
+                            # mesh_list=[mesh_energy,mesh_Wx,mesh_Wy,mesh_Wz]
+                            # key=(event,cluster3d)
+                            # cluster_properties[key][1]+=mesh_list
 
-                            # example_idx=event-event_start_no
-                            # energy_map[example_idx,i,j,layer]+=mesh_energy
+                            example_idx=event-event_start_no
+                            energy_map[example_idx,i,j,layer]+=mesh_energy
 
             #Now saving the energy calculated for the particular z-side of event
             #REMEMBER: we have to retreive in this format only. also check
             #in what format numpy stores matrix by using tobytes.
             #(row mojor or column major)
-            # for example_idx in range(event_stride):
-            #     example=tf.train.Example(features=tf.train.Features(
-            #         feature={
-            #             'image': _bytes_feature(energy_map[example_idx,:,:,:].tobytes())
-            #         }
-            #     ))
-            #     record_writer.write(example.SerializeToString())
+            for example_idx in range(event_stride):
+                example=tf.train.Example(features=tf.train.Features(
+                    feature={
+                        'image': _bytes_feature(energy_map[example_idx,:,:,:].tobytes())
+                    }
+                ))
+                record_writer.write(example.SerializeToString())
 
             #Testing the numpy array
-            #np.save(image_filename,energy_map)
+            np.save(image_filename,energy_map)
 
     #(LC)Appending the properties to the final error list
-    for key,value in cluster_properties.iteritems():
-        #Normalizing the barycenters
-        value[0][1:]=value[0][1:]/value[0][0]   #init_properties
-        value[1][1:]=value[1][1:]/value[1][0]   #mesh_properties
-
-        #Appending the difference to the list
-        energy_diff.append(np.abs((value[0][0]-value[1][0])))
-        bary_x_diff.append(np.abs((value[0][1]-value[1][1])))
-        bary_y_diff.append(np.abs((value[0][2]-value[1][2])))
-        bary_z_diff.append(np.abs((value[0][3]-value[1][3])))
+    # for key,value in cluster_properties.iteritems():
+    #     #Normalizing the barycenters
+    #     value[0][1:]=value[0][1:]/value[0][0]   #init_properties
+    #     value[1][1:]=value[1][1:]/value[1][0]   #mesh_properties
+    #
+    #     #Appending the difference to the list
+    #     energy_diff.append(np.abs((value[0][0]-value[1][0])))
+    #     bary_x_diff.append(np.abs((value[0][1]-value[1][1])))
+    #     bary_y_diff.append(np.abs((value[0][2]-value[1][2])))
+    #     bary_z_diff.append(np.abs((value[0][3]-value[1][3])))
     #(LC) Plotting the values
-    from test_coef_multicluster import plot_error_histogram
+    # from test_coef_multicluster import plot_error_histogram
     # plot_error_histogram(energy_diff,bary_x_diff,bary_y_diff,bary_z_diff)
 
-
+    # We are not returning anything currently, but saving the tf records directly
     #return energy_map

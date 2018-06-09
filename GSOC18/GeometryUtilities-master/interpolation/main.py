@@ -133,7 +133,7 @@ def generate_image(hits_data_filename,resolution=(514,513),edge_length=0.7):
     #Some of the geometry metadata (will be constant)
     no_layers=40
     #Specifying the size of minibatch
-    event_stride=100 #seems optimal in terms of memory use.
+    event_stride=20 #seems optimal in terms of memory use.
     event_start_no=0 #for testing now
 
     #Converting the root file to a data frame
