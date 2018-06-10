@@ -130,7 +130,7 @@ def make_model_linear(X,is_training):
 
 def make_model_conv(X,is_training):
     #Current Hyperparameter (will be separated later)
-    bn_decision=True
+    bn_decision=False
     lambd=0.0
     dropout_rate=0.0
 

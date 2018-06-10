@@ -10,7 +10,7 @@ from test import calculate_model_accuracy,calculate_total_loss
 
 ################## GLOBAL VARIABLES #######################
 local_directory_path='datacifar/'
-run_number=10                            #for saving the summaries
+run_number=11                            #for saving the summaries
 train_summary_filename='tmp/cifar/train/%s'%(run_number) #for training set
 test_summary_filename='tmp/cifar/valid/%s'%(run_number)  #For validation set
 checkpoint_filename='tmp/cifar/checkpoint/'
@@ -74,7 +74,7 @@ def _get_GPU_gradient(X,Y,is_training,scope,optimizer):
     tf.summary.scalar('accuracy',accuracy)
 
     #Calculating the cost of prediction form model
-    total_cost=calculate_total_loss(Z,Y)
+    total_cost=calculate_total_loss(Z,Y,scope)
 
     tower_grad_var_pair=optimizer.compute_gradients(total_cost)
 
