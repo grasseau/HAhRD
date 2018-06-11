@@ -293,6 +293,7 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
                     train_writer.add_summary(track_results[-1],bno)
                     bno+=1
                 except tf.errors.OutOfRangeError:
+                    print 'Training one epoch completed!!'
                     break
 
             #get the validation accuracy,starting the validation/test iterator
@@ -302,15 +303,16 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
                 try:
                     #_,datay=sess.run(next_element)#dont use iterator now
                     #print datay
-                    to=datetime.datetime.now()
+                    t0=datetime.datetime.now()
                     #Run the summary also for the validation set.just leave the train op
                     track_results=sess.run(train_track_ops[1:],feed_dict={is_training:False})
                     t1=datetime.datetime.now()
-                    print 'Testing loss @epoch: ',i,' @minibatch: ',bno,track_results[0:-1],'in ',t1-t0,'\n'
+                    print 'Testing loss @epoch: ',i,' @minibatch: ',bno,track_results[0:-1],'in ',t1-t0
                     #Again write the evaluated summary to file
                     test_writer.add_summary(track_results[-1],bno)
                     bno+=1
                 except tf.errors.OutOfRangeError:
+                    print 'Validation check completed!!'
                     break
 
             #Also save the checkpoints (after two every epoch)
