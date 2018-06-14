@@ -354,7 +354,7 @@ def _readCoefFile(filename):
 
     return coef_dict
 
-def _get_layer_number_from_detid(detid):
+def _get_layer_number_or_mask_from_detid(detid,mask_layer=None):
     '''
     DESCRIPTION:
         This function will enable us to extract out the layer id from the
@@ -362,6 +362,9 @@ def _get_layer_number_from_detid(detid):
     USAGE:
         INPUT:
             detid           : a numpy arry having the detid of the hits
+            mask_layer      : an optional layer-number to be used when
+                              we want to get the layer mask for this given
+                              layer number instead of layers list
         OUPUT:
             layer_arr       : a numpy array of unique layers
     '''
@@ -375,7 +378,17 @@ def _get_layer_number_from_detid(detid):
     #Fixing the subdet 5 layers
     layer_arr=layer_arr+(subdet_arr==5)*40
 
-    return layer_arr
+    #Generating the subdet mask to filter hit of required subdet
+    subdet_mask=(subdet_arr==3) | (subdet_arr==4) | (subdet_arr==5)
+    assert (subdet_mask.shape==layer_arr.shape),'Dim mismatch with mask'
+
+    if mask_layer==None:
+        #Now masking the layers which for the requires subdet
+        return layer_arr[subdet_mask]
+    else:
+        #creating the net mask based on subdet and layer
+        layer_mask=subdet_mask & (layer_arr==mask_layer)
+        return layer_mask
 
 def _get_cellid_energy_array(all_event_hits,layer,zside,event):
     '''
@@ -387,7 +400,7 @@ def _get_cellid_energy_array(all_event_hits,layer,zside,event):
     detid=all_event_hits.loc[event,'detid']
     cellid_arr=detid & 0x3FFFF
 
-    layer_mask=_get_layer_number_from_detid(detid)==layer
+    layer_mask=_get_layer_number_or_mask_from_detid(detid,layer)
     zside_mask=((detid>>24) & 0x1)==zside
     mask=layer_mask & zside_mask    #Final mnet mask
 
@@ -423,7 +436,7 @@ def _get_hit_layers(all_event_hits,event_start_no,event_stride):
     layers=np.array([],dtype=np.int64)
     for event in range(event_start_no,event_start_no+event_stride):
         detid=all_event_hits.loc[event,'detid']
-        _layers=np.unique(_get_layer_number_from_detid(detid))
+        _layers=np.unique(_get_layer_number_or_mask_from_detid(detid))
         layers=np.append(layers,_layers)
 
     layers=np.unique(layers)
