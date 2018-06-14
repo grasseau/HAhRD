@@ -574,7 +574,7 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
                             # cluster_properties[key][1]+=mesh_list
 
                             example_idx=event-event_start_no
-                            energy_map[example_idx,i,j,layer]+=mesh_energy
+                            energy_map[example_idx,i,j,layer-1]+=mesh_energy
 
             #Now saving the energy calculated for the particular z-side of event
             #REMEMBER: we have to retreive in this format only. also check

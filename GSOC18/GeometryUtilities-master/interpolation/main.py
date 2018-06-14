@@ -233,7 +233,8 @@ def readDataFile_hits(filename,event_start_no,event_stride):
     #Just extracting the required attributes to create image
     branches += ["rechit_detid","rechit_energy"]
     #Adding the branches for logical Error check (Optional)
-    branches +=["rechit_z","rechit_cluster2d","cluster2d_multicluster"]
+    #branches +=["rechit_z","rechit_cluster2d","cluster2d_multicluster"]
+    branches +=["rechit_cluster2d","cluster2d_multicluster"]
 
     cache={}
     df=tree.pandas.df(branches,cache=cache,executor=executor)
