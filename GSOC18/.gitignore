@@ -6,3 +6,4 @@
 tmp
 datacifar
 *.tfrecords
+*.html
