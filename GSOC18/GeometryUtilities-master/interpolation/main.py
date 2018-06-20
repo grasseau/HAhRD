@@ -133,8 +133,18 @@ def generate_training_dataset(event_data_filename,resolution=(514,513),edge_leng
     #Some of the geometry metadata (will be constant)
     no_layers=40
     #Specifying the size of minibatch
-    event_stride=3000 #seems optimal in terms of memory use.
+    event_stride=20 #seems optimal in terms of memory use.
     event_start_no=0 #for testing now
+
+    #Creating the corresponding label for out image
+    print '>>> Reading the event dataframe for the groundtruth particles'
+    all_event_particles=readDataFile_genpart(event_data_filename,event_start_no,
+                                            event_stride)
+    t0=datetime.datetime.now()
+    event_mask=compute_target_lable(all_event_particles,resolution,edge_length,
+                        event_start_no,event_stride)
+    t1=datetime.datetime.now()
+    print '>>> Label Creation Completed in: ',t1-t0
 
     #Converting the root file to a data frame
     print '>>> Reading the event dataframe for the hits'
@@ -142,21 +152,10 @@ def generate_training_dataset(event_data_filename,resolution=(514,513),edge_leng
                                     event_stride)
 
     t0=datetime.datetime.now()
-    # compute_energy_map(all_event_hits,resolution,edge_length,
-    #                     event_start_no,event_stride,no_layers)
+    compute_energy_map(all_event_hits,event_mask,resolution,edge_length,
+                        event_start_no,event_stride,no_layers)
     t1=datetime.datetime.now()
     print '>>> Image Creation Completed in: ',t1-t0
-
-    #Creating the corresponding label for out image
-    print '>>> Reading the event dataframe for the groundtruth particles'
-    all_event_particles=readDataFile_genpart(event_data_filename,event_start_no,
-                                            event_stride)
-    t0=datetime.datetime.now()
-    compute_target_lable(all_event_particles,resolution,edge_length,
-                        event_start_no,event_stride)
-    t1=datetime.datetime.now()
-    print '>>> Label Creation COmpleted in: ',t1-t0
-
 
 ################ MAIN FUNCTION DEFINITION ###################
 def readGeometry( input_file,  layer, subdet ):

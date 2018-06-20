@@ -451,7 +451,7 @@ def _bytes_feature(value):
     '''
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
-def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
+def compute_energy_map(all_event_hits,event_mask,resolution,edge_length,event_start_no,
                     event_stride,no_layers,dtype=np.float32):
     '''
     DESCRIPTION:
@@ -471,6 +471,8 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
         INPUT:
             all_event_hits  : the dataframe containing all the rechits from
                                 all the events (a certain minibatch of events).
+            event_mask      : a mask whether to select an event or not based
+                                on the decision in the label creation function
             resolution      : the current resolution of the interpolation mesh
             event_start_no  : the starting point of event number to create
                                 minibatches.
@@ -528,6 +530,10 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
                 #Now we will iterate the all the events
                 events=range(event_start_no,event_start_no+event_stride)
                 for event in events:
+                    #Filtering the event based on the event_mask
+                    if event_mask[event-event_start_no]=='False':
+                        continue
+
                     print '>>> Interpolating for Event:%s zside:%s'%(event,zside)
                     #Retreiving the data for that event of this layer(saving memory also)
                     print '>>> Masking and retreiving the hit'
@@ -594,9 +600,15 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
             #in what format numpy stores matrix by using tobytes.
             #(row mojor or column major)
             for example_idx in range(event_stride):
+                #Not saving the events which were not interpolated
+                if event_mask[example_idx]=='False':
+                    continue
+
                 example=tf.train.Example(features=tf.train.Features(
                     feature={
                         'image': _bytes_feature(energy_map[example_idx,:,:,:].tobytes())
+                        #Adding an event lable to check sequential access
+                        'event': _int64_feature(exampleidx+event_start_no)
                     }
                 ))
                 record_writer.write(example.SerializeToString())
@@ -623,7 +635,7 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
     #return energy_map
 
 ############### TARGET CRETION FUNCTION################
-def _int_feature(value):
+def _int64_feature(value):
     '''
     DESCRIPTION:
         This function creates the int64 data to the examples
@@ -661,6 +673,9 @@ def compute_target_lable(genpart_df,resolution,edge_length,
         OUTPUT:
             target_labels   : this will be a file saved in the imag_data directory
                                 with the filename  convention decided inside
+            event_mask      : a mas showing which event to take while Creating
+                                the image to have a sync between the image and
+                                label dataset
     '''
     #Reading the sq_cells dict for finding the probable location of
     #particle to the square layer
@@ -674,6 +689,7 @@ def compute_target_lable(genpart_df,resolution,edge_length,
 
     #Making a flag for the events which dont have any electron
     count=0
+    event_mask=[]
 
     #Setting up the filename and compression options of the target tfrecords
     label_filename=image_basepath+'label%sbatchsize%s.tfrecords'%(
@@ -696,7 +712,7 @@ def compute_target_lable(genpart_df,resolution,edge_length,
             particles_mask &= (genpart_df.loc[event,"reachedEE"]>1)
             particles_mask &= ((genpart_df.loc[event,"energy"]/
                                 np.cosh(genpart_df.loc[event,"eta"]))>5)
-            #particles_mask &= (genpart_df.loc[event,"eta"])>0
+            particles_mask &= (genpart_df.loc[event,"eta"])>0
 
             #Now filtering the required features for the target label
             particles_energy=genpart_df.loc[event,"energy"][particles_mask]
@@ -710,9 +726,14 @@ def compute_target_lable(genpart_df,resolution,edge_length,
 
             #Checking if the electron is filtered and we got just one
             print particles_pid,'\n'
-            if particles_pid.shape!=(1,) and particles_pid.shape!=(2,):
+            if particles_pid.shape!=(1,): #and particles_pid.shape!=(2,):
                 count+=1
+                print 'Multiple/No Electron Detected!!!'
+                event_mask.append('False') #Dont take this event
+            else:
+                event_mask.append('True') #Take this event
             #assert particles_pid.shape==(1,),"Multiple Electrons are detected"
+
             #Creating the example protocol to write to tfrecords
             #Add the event number later for check of the correspondancce
             #between the events in the label and image
@@ -723,10 +744,16 @@ def compute_target_lable(genpart_df,resolution,edge_length,
                         'energy':_bytes_feature(particles_energy.tobytes()),
                         'phi':_bytes_feature(particles_phi.tobytes()),
                         'eta':_bytes_feature(particles_eta.tobytes()),
+                        #extra label of event for seq access check
+                        'event':_int64_feature(event)
                     }
                 )
             )
             #Adding the example to the record writer
             record_writer.write(example.SerializeToString())
 
+    #Seeing the fraction of events which dont have just one electron
     print count
+
+    #Returning the event mask for event selection in image_creation
+    return event_mask
