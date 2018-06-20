@@ -622,8 +622,100 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
     # We are not returning anything currently, but saving the tf records directly
     #return energy_map
 
-def compute_target_lable():
+############### TARGET CRETION FUNCTION################
+def _int_feature(value):
     '''
     DESCRIPTION:
+        This function creates the int64 data to the examples
+        features. If we have bytes which is taken by serializing
+        a numpy array to bytes then used the above defined _bytes_feature.
 
     '''
+    return tf.train.Feature(bytes_list=tf.train.Int64List(value=[value]))
+
+def compute_target_lable(genpart_df,resolution,length
+                        event_start_no,event_stride):
+    '''
+    DESCRIPTION:
+        This function will create the target label for the their
+        corresponding energy map for training the CNN.
+        The target label will currently consist the example protocol
+        which will save different field in target label as
+        name-value pair in that protocol. Appropriate restructuring
+        like converting the categorical variables to one-hot will be done
+        while parsing.
+
+    USAGE:
+        INPUT:
+            genpart_df      : dataframe of the events containing the
+                                genpart information of the initial state of
+                                particle.
+            resolution      : the current resolution of interpolation in use
+                                to be used for target representation on a mesh
+            length          : length of the current sq_cells in the mesh
+            event_start_no  : the starting number of event slice from the root
+                                file to be used for the anming convention
+            event_stride    : the event stride i.e the batch size of the this
+                                datafile i.e the number of examples in this data
+                                file.
+        OUTPUT:
+            target_labels   : this will be a file saved in the imag_data directory
+                                with the filename  convention decided inside
+    '''
+    #Reading the sq_cells dict for finding the probable location of
+    #particle to the square layer
+    sq_cells_filename='sq_cells_data/sq_cells_dict_res_%s,%s_len_%s.pkl'%(
+                                resolution[0],resolution[1],edge_length)
+    sq_cells_dict=_readCoefFile(sq_cells_filename)
+    sq_cells_center=np.array([cell.center.coords[0]
+                        for cell in sq_cells_dict.value()])
+    #Creating the sq_cells KD-Tree
+    sq_kd_tree=cKDTree(sq_cells_center)
+
+    #Setting up the filename and compression options of the target tfrecords
+    label_filename=image_basepath+'label%sbatchsize%s.tfrecords'%(
+                                    event_start_no,event_stride)
+    compression_options=tf.python_io.TFRecordOptions(
+                    tf.python_io.TFRecordCompressionType.ZLIB)
+
+    #Starting the tfrecords
+    with tf.python_io.TFWriter(label_filename,
+                        options=compression_options) as record_writer:
+        events=range(event_start_no:event_start_no+event_stride)
+        for event in events:
+            #Creating the mask for filtering the particles (on current requirement)
+            electron_id=11
+            positron_id=-11
+            particles_mask=np.logical_or(genpart_df.loc[event,"pid"]==electron_id,
+                                    genapart_df.loc[event,"pid"]==positron_id)
+            particles_mask &= (genpart_df.loc[event,"gen"]>=0)
+            particles_mask &= (genpart_df.loc[event,"reachedEE"]>1)
+            particles_mask &= ((genpart_df.loc[event,"energy"]/
+                                np.cosh(genpart_df.loc[event,"eta"]))>5)
+            particles_mask &= (genpart_df.loc[event,"eta"])>0
+
+            #Now filtering the required features for the target label
+            particles_energy=genpart_df.loc[event,"energy"][particles_mask]
+            particles_phi=genpart_df.loc[event,"phi"][particles_mask]
+            particles_eta=genpart_df.loc[event,"eta"][particles_mask]
+            particles_pid=genpart_df.loc[event,"pid"][particles_mask]
+
+            #Saving the label data.(minimal information) which
+            #could be mapped to any output target representation later
+            #if required and efficiently in mapper function by parallel calls
+
+            #Creating the example protocol to write to tfrecords
+            #Add the event number later for check of the correspondancce
+            #between the events in the label and image
+            example=tf.train.Example(features=tf.train.Features(
+                    feature={
+                        #Saving each features as the named dict with bytes
+                        'pid':_bytes_feature(particles_pid.tobytes())
+                        'energy':_bytes_feature(particles_energy.tobytes())
+                        'phi':_bytes_feature(particles_phi.tobytes())
+                        'eta':_bytes_feature(particles_eta.tobytes())
+                    }
+                )
+            )
+            #Adding the example to the record writer
+            record_writer.write(example.SerializeToString())
