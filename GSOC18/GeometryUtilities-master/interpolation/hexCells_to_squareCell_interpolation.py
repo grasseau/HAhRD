@@ -498,14 +498,14 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
 
 
     #Strating the tfRecord Writer
-    image_filename=image_basepath+'image%sbatchsize%s.tfrecords'%(
-                                        event_start_no,event_stride)
-    compression_options=tf.python_io.TFRecordOptions(
+    for zside in [0,1]:
+        image_filename=image_basepath+'image%sbatchsize%szside%s.tfrecords'%(
+                                    event_start_no,event_stride,zside)
+        compression_options=tf.python_io.TFRecordOptions(
                         tf.python_io.TFRecordCompressionType.ZLIB)
 
-    with tf.python_io.TFRecordWriter(image_filename,
+        with tf.python_io.TFRecordWriter(image_filename,
                         options=compression_options) as record_writer:
-        for zside in [0,1]:
             #Initializing the numpy matrix to hold the interpolation
             energy_map=np.zeros((event_stride,resolution[0],resolution[1],
                                     no_layers),dtype=dtype)
@@ -621,3 +621,9 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
 
     # We are not returning anything currently, but saving the tf records directly
     #return energy_map
+
+def compute_target_lable():
+    '''
+    DESCRIPTION:
+
+    '''

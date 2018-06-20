@@ -234,7 +234,7 @@ def readDataFile_hits(filename,event_start_no,event_stride):
     branches += ["rechit_detid","rechit_energy"]
     #Adding the branches for logical Error check (Optional)
     #branches +=["rechit_z","rechit_cluster2d","cluster2d_multicluster"]
-    branches +=["rechit_cluster2d","cluster2d_multicluster"]
+    #branches +=["rechit_cluster2d","cluster2d_multicluster"]
 
     cache={}
     df=tree.pandas.df(branches,cache=cache,executor=executor)
@@ -257,6 +257,46 @@ def readDataFile_hits(filename,event_start_no,event_stride):
 
     return df
 
+def readDataFile_genpart(filename,event_start_no,event_stride):
+    '''
+    DESCRIPTION:
+        This function is similar to readDataFile_hits but this will
+        read the genpart of the same events as read by the above
+        function to generate the target label for the corresponding
+        image files.
+    USAGE:
+        INPUT:
+            filename        : the name of the root file containing the
+                                events
+            event_start_no  : starting event number in this file to
+                                extract the events from. This Will
+                                be controlled manually while generating the
+                                data for training set.
+            event_stride    : the number of events to be processed in the
+                                in one go.(consider memory cost here than the
+                                time cost.)
+        OUTPUT:
+            df              : returns the data frame containing the particles
+                                whose properties we will need to predict from
+                                the corresponding hit images of events
+    '''
+    #Reading the root file to a dataframe
+    print '>>> Reading the rootfile to get genpart dataframe'
+    branches =["genpart_energy","genpart_phi","genpart_eta",
+                "genpart_gen","genpart_pid","genpart_reachedEE"]
+    cache={}
+    df=tree.pandas.df(branches,cache=cache,executor=executor)
+
+    #Renaming the attributes in short form
+    col_names={name:name.replace('genpart_','') for name in branches}
+    df.rename(col_names,inplace=True,axis=1)
+
+    #Extracting the dataframe for the required events
+    df=df.iloc[event_start_no:event_start_no+event_stride]
+
+    print '>>> Extraction completed with current shape: ',df.shape
+
+    return df
 
 if __name__=='__main__':
     import sys
