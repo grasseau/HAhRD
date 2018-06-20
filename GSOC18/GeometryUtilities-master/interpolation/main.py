@@ -113,7 +113,7 @@ def interpolate_layer(geometry_fname,sq_cells_dict,edge_length,resolution,layer)
     t1=datetime.datetime.now()
     print 'Pickling completed in: ',t1-t0,' sec\n'
 
-def generate_image(hits_data_filename,resolution=(514,513),edge_length=0.7):
+def generate_training_dataset(event_data_filename,resolution=(514,513),edge_length=0.7):
     #ONGOING
     '''
     DESCRIPTION:
@@ -123,7 +123,7 @@ def generate_image(hits_data_filename,resolution=(514,513),edge_length=0.7):
         per event and finally a 4D dataset for CNN input combining all the event
     USAGE:
         INPUTS:
-            hits_data_filename  : the filename for the hits data to read event
+            event_data_filename  : the filename of the root file to read event
             resolution          : the resolution of current interpolation scheme
             edge_length         : the edge length of the current interpolation
                                     scheme
@@ -133,18 +133,29 @@ def generate_image(hits_data_filename,resolution=(514,513),edge_length=0.7):
     #Some of the geometry metadata (will be constant)
     no_layers=40
     #Specifying the size of minibatch
-    event_stride=20 #seems optimal in terms of memory use.
+    event_stride=3000 #seems optimal in terms of memory use.
     event_start_no=0 #for testing now
 
     #Converting the root file to a data frame
-    all_event_hits=readDataFile_hits(hits_data_filename,event_start_no,
+    print '>>> Reading the event dataframe for the hits'
+    all_event_hits=readDataFile_hits(event_data_filename,event_start_no,
                                     event_stride)
 
     t0=datetime.datetime.now()
-    compute_energy_map(all_event_hits,resolution,edge_length,
-                        event_start_no,event_stride,no_layers)
+    # compute_energy_map(all_event_hits,resolution,edge_length,
+    #                     event_start_no,event_stride,no_layers)
     t1=datetime.datetime.now()
     print '>>> Image Creation Completed in: ',t1-t0
+
+    #Creating the corresponding label for out image
+    print '>>> Reading the event dataframe for the groundtruth particles'
+    all_event_particles=readDataFile_genpart(event_data_filename,event_start_no,
+                                            event_stride)
+    t0=datetime.datetime.now()
+    compute_target_lable(all_event_particles,resolution,edge_length,
+                        event_start_no,event_stride)
+    t1=datetime.datetime.now()
+    print '>>> Label Creation COmpleted in: ',t1-t0
 
 
 ################ MAIN FUNCTION DEFINITION ###################
@@ -282,6 +293,8 @@ def readDataFile_genpart(filename,event_start_no,event_stride):
     '''
     #Reading the root file to a dataframe
     print '>>> Reading the rootfile to get genpart dataframe'
+    tree=uproot.open(filename)['ana/hgc']
+
     branches =["genpart_energy","genpart_phi","genpart_eta",
                 "genpart_gen","genpart_pid","genpart_reachedEE"]
     cache={}
@@ -329,4 +342,4 @@ if __name__=='__main__':
     #generate_interpolation(opt.input_file,edge_length=0.7)
 
     #Generating the image
-    generate_image(opt.data_file)
+    generate_training_dataset(opt.data_file)

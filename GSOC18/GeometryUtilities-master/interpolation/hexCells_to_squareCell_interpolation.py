@@ -633,7 +633,7 @@ def _int_feature(value):
     '''
     return tf.train.Feature(bytes_list=tf.train.Int64List(value=[value]))
 
-def compute_target_lable(genpart_df,resolution,length
+def compute_target_lable(genpart_df,resolution,edge_length,
                         event_start_no,event_stride):
     '''
     DESCRIPTION:
@@ -652,7 +652,7 @@ def compute_target_lable(genpart_df,resolution,length
                                 particle.
             resolution      : the current resolution of interpolation in use
                                 to be used for target representation on a mesh
-            length          : length of the current sq_cells in the mesh
+            edge_length     : length of the current sq_cells in the mesh
             event_start_no  : the starting number of event slice from the root
                                 file to be used for the anming convention
             event_stride    : the event stride i.e the batch size of the this
@@ -664,13 +664,16 @@ def compute_target_lable(genpart_df,resolution,length
     '''
     #Reading the sq_cells dict for finding the probable location of
     #particle to the square layer
-    sq_cells_filename='sq_cells_data/sq_cells_dict_res_%s,%s_len_%s.pkl'%(
-                                resolution[0],resolution[1],edge_length)
-    sq_cells_dict=_readCoefFile(sq_cells_filename)
-    sq_cells_center=np.array([cell.center.coords[0]
-                        for cell in sq_cells_dict.value()])
-    #Creating the sq_cells KD-Tree
-    sq_kd_tree=cKDTree(sq_cells_center)
+    # sq_cells_filename='sq_cells_data/sq_cells_dict_res_%s,%s_len_%s.pkl'%(
+    #                             resolution[0],resolution[1],edge_length)
+    # sq_cells_dict=_readCoefFile(sq_cells_filename)
+    # sq_cells_center=np.array([cell.center.coords[0]
+    #                     for cell in sq_cells_dict.value()])
+    # #Creating the sq_cells KD-Tree
+    # sq_kd_tree=cKDTree(sq_cells_center)
+
+    #Making a flag for the events which dont have any electron
+    count=0
 
     #Setting up the filename and compression options of the target tfrecords
     label_filename=image_basepath+'label%sbatchsize%s.tfrecords'%(
@@ -679,20 +682,21 @@ def compute_target_lable(genpart_df,resolution,length
                     tf.python_io.TFRecordCompressionType.ZLIB)
 
     #Starting the tfrecords
-    with tf.python_io.TFWriter(label_filename,
+    with tf.python_io.TFRecordWriter(label_filename,
                         options=compression_options) as record_writer:
-        events=range(event_start_no:event_start_no+event_stride)
+        events=range(event_start_no,event_start_no+event_stride)
         for event in events:
+            print '>>> Creating the target label for event: {}'.format(event)
             #Creating the mask for filtering the particles (on current requirement)
             electron_id=11
             positron_id=-11
             particles_mask=np.logical_or(genpart_df.loc[event,"pid"]==electron_id,
-                                    genapart_df.loc[event,"pid"]==positron_id)
+                                    genpart_df.loc[event,"pid"]==positron_id)
             particles_mask &= (genpart_df.loc[event,"gen"]>=0)
             particles_mask &= (genpart_df.loc[event,"reachedEE"]>1)
             particles_mask &= ((genpart_df.loc[event,"energy"]/
                                 np.cosh(genpart_df.loc[event,"eta"]))>5)
-            particles_mask &= (genpart_df.loc[event,"eta"])>0
+            #particles_mask &= (genpart_df.loc[event,"eta"])>0
 
             #Now filtering the required features for the target label
             particles_energy=genpart_df.loc[event,"energy"][particles_mask]
@@ -704,18 +708,25 @@ def compute_target_lable(genpart_df,resolution,length
             #could be mapped to any output target representation later
             #if required and efficiently in mapper function by parallel calls
 
+            #Checking if the electron is filtered and we got just one
+            print particles_pid,'\n'
+            if particles_pid.shape!=(1,) and particles_pid.shape!=(2,):
+                count+=1
+            #assert particles_pid.shape==(1,),"Multiple Electrons are detected"
             #Creating the example protocol to write to tfrecords
             #Add the event number later for check of the correspondancce
             #between the events in the label and image
             example=tf.train.Example(features=tf.train.Features(
                     feature={
                         #Saving each features as the named dict with bytes
-                        'pid':_bytes_feature(particles_pid.tobytes())
-                        'energy':_bytes_feature(particles_energy.tobytes())
-                        'phi':_bytes_feature(particles_phi.tobytes())
-                        'eta':_bytes_feature(particles_eta.tobytes())
+                        'pid':_bytes_feature(particles_pid.tobytes()),
+                        'energy':_bytes_feature(particles_energy.tobytes()),
+                        'phi':_bytes_feature(particles_phi.tobytes()),
+                        'eta':_bytes_feature(particles_eta.tobytes()),
                     }
                 )
             )
             #Adding the example to the record writer
             record_writer.write(example.SerializeToString())
+
+    print count
