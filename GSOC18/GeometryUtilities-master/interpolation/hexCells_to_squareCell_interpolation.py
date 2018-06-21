@@ -606,9 +606,9 @@ def compute_energy_map(all_event_hits,event_mask,resolution,edge_length,event_st
 
                 example=tf.train.Example(features=tf.train.Features(
                     feature={
-                        'image': _bytes_feature(energy_map[example_idx,:,:,:].tobytes())
+                        'image': _bytes_feature(energy_map[example_idx,:,:,:].tobytes()),
                         #Adding an event lable to check sequential access
-                        'event': _int64_feature(exampleidx+event_start_no)
+                        'event': _int64_feature(example_idx+event_start_no)
                     }
                 ))
                 record_writer.write(example.SerializeToString())
@@ -643,7 +643,7 @@ def _int64_feature(value):
         a numpy array to bytes then used the above defined _bytes_feature.
 
     '''
-    return tf.train.Feature(bytes_list=tf.train.Int64List(value=[value]))
+    return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
 def compute_target_lable(genpart_df,resolution,edge_length,
                         event_start_no,event_stride):
