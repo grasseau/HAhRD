@@ -720,19 +720,30 @@ def compute_target_lable(genpart_df,resolution,edge_length,
             particles_eta=genpart_df.loc[event,"eta"][particles_mask]
             particles_pid=genpart_df.loc[event,"pid"][particles_mask]
 
-            #Saving the label data.(minimal information) which
-            #could be mapped to any output target representation later
-            #if required and efficiently in mapper function by parallel calls
-
             #Checking if the electron is filtered and we got just one
             print particles_pid,'\n'
             if particles_pid.shape!=(1,): #and particles_pid.shape!=(2,):
                 count+=1
                 print 'Multiple/No Electron Detected!!!'
                 event_mask.append('False') #Dont take this event
+                continue
             else:
                 event_mask.append('True') #Take this event
             #assert particles_pid.shape==(1,),"Multiple Electrons are detected"
+
+            #Creating the label vector as its easier to manipulate in numpy
+            #format: [pc1(electron),pc2,energy,phi,eta]
+            label=np.empty((5,),dtype=np.float32)
+            #Filling up the target label
+            label[0]=particles_energy[0]
+            label[1]=particles_eta[0]
+            label[2]=particles_phi[0]
+            if particles_pid[0]==11:
+                label[3]=1      #its electron
+                label[4]=0
+            else:
+                label[3]=0
+                label[4]=1      #it not electon(positron ask Florian Sir)
 
             #Creating the example protocol to write to tfrecords
             #Add the event number later for check of the correspondancce
@@ -740,10 +751,7 @@ def compute_target_lable(genpart_df,resolution,edge_length,
             example=tf.train.Example(features=tf.train.Features(
                     feature={
                         #Saving each features as the named dict with bytes
-                        'pid':_bytes_feature(particles_pid.tobytes()),
-                        'energy':_bytes_feature(particles_energy.tobytes()),
-                        'phi':_bytes_feature(particles_phi.tobytes()),
-                        'eta':_bytes_feature(particles_eta.tobytes()),
+                        'label':_bytes_feature(label.tobytes()),
                         #extra label of event for seq access check
                         'event':_int64_feature(event)
                     }
@@ -753,7 +761,7 @@ def compute_target_lable(genpart_df,resolution,edge_length,
             record_writer.write(example.SerializeToString())
 
     #Seeing the fraction of events which dont have just one electron
-    print count
+    print 'Total number of events skipped: ',count
 
     #Returning the event mask for event selection in image_creation
     return event_mask
