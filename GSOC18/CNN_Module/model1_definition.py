@@ -56,9 +56,6 @@ def calculate_model_accuracy(Z,Y):
     return None,classification_accuracy
 
 
-
-
-
 def calculate_total_loss(Z,Y,scope=None):
     '''
     DESCRIPTION:
@@ -151,3 +148,116 @@ def model1(X,is_training):
     X_img=tf.expand_dims(X,axis=-1,name='channel_dim')
 
     #Passing it through the first layer
+    A1=rectified_conv3d(X_img,
+                        name='conv3d1',
+                        filter_shape=(3,3,3),
+                        output_channel=5,
+                        stride=(1,1,1),
+                        padding_type='VALID',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)#it is default no need to write
+    A1Mp=max_pooling3d(A1,
+                        name='mpool1',
+                        filter_shape=(3,3,3),
+                        stride=(2,2,2),
+                        padding_type='VALID')
+
+    #Passing it through the second layer
+    A2=rectified_conv3d(A1Mp,
+                        name='conv3d2',
+                        filter_shape=(3,3,3),
+                        output_channel=10,
+                        stride=(1,1,1),
+                        padding_type='VALID',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)#it is default no need to write
+    A2Mp=max_pooling3d(A2,
+                        name='mpool2',
+                        filter_shape=(3,3,3),
+                        stride=(2,2,2),
+                        padding_type='VALID')
+
+    #Writing the third layer similar as the above pattern
+    A3=rectified_conv3d(A2Mp,
+                        name='conv3d3',
+                        filter_shape=(3,3,3),
+                        output_channel=10,
+                        stride=(1,1,1),
+                        padding_type='VALID',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)#it is default no need to write
+    A3Mp=max_pooling3d(A3,
+                        name='mpool3',
+                        filter_shape=(3,3,3),
+                        stride=(2,2,2),
+                        padding_type='VALID')
+
+    #Passing the activation to the fourth layer which is identity
+    A4=identity3d_residual_block(A3Mp,
+                                name='identity1',
+                                num_channels=[2,2,10],
+                                midfilter_shape=(3,3,3),
+                                is_training=is_training,
+                                dropout_rate=dropout_rate,
+                                apply_batchnorm=bn_decision,
+                                weight_decay=lambd)
+    A4Mp=max_pooling3d(A4,
+                        name='mpool4',
+                        filter_shape=(3,3,3),
+                        stride=(3,3,1),
+                        padding_type='SAME')
+
+    #Passing through the fifth layer
+    A5=convolutional3d_residual_block(A4Mp,
+                                        name='conv_res1',
+                                        num_channels=[2,2,15],
+                                        first_filter_stride=(1,1,1),
+                                        mid_filter_shape=(3,3,3),
+                                        is_training=is_training,
+                                        dropout_rate=dropout_rate,
+                                        apply_batchnorm=bn_decision,
+                                        weight_decay=lambd)
+    A5Mp=max_pooling3d(A5,
+                        name='mpool5',
+                        filter_shape=(3,3,3),
+                        stride=(3,3,1),
+                        padding_type='SAME')
+
+    #Passing it through the sixth layer
+    #Passing the activation to the fourth layer which is identity
+    A6=identity3d_residual_block(A5Mp,
+                                name='identity2',
+                                num_channels=[2,2,15],
+                                midfilter_shape=(3,3,3),
+                                is_training=is_training,
+                                dropout_rate=dropout_rate,
+                                apply_batchnorm=bn_decision,
+                                weight_decay=lambd)
+    A6Mp=max_pooling3d(A6,
+                        name='mpool6',
+                        filter_shape=(3,3,3),
+                        stride=(3,3,1),
+                        padding_type='SAME')
+
+    #Now finally flattening it and connecting it with fully
+    #connected layer
+    Z7=simple_fully_connected(A6Mp,
+                                name='fc1',
+                                output_dim=10,
+                                is_training=is_training,
+                                dropout_rate=dropout_rate,
+                                apply_batchnorm=bn_decision,
+                                weight_decay=lambd,
+                                flatten_first=True,
+                                apply_relu=False)
+
+    return Z7
