@@ -1,4 +1,6 @@
 import tensorflow as tf
+from conv2d_utils import *
+from conv3d_utils import *
 
 def calculate_model_accuracy(Z,Y):
     '''
@@ -24,21 +26,21 @@ def calculate_model_accuracy(Z,Y):
         #Regression accuracy calcuation as 100-%error
         #Energy_accuracy/error
         energy_abs_diff=tf.losses.absolute_difference(Z[:,0],
-                                            Y[:,0],reduction=None)
+                                    Y[:,0],reduction=tf.losses.Reduction.NONE)
         energy_error=(tf.reduce_mean(tf.divide(
                                 energy_abs_diff,Y[:,0]+1e-10)))*100
         tf.summary.scalar('%_energy_error',energy_error)
 
         #Eta Accuracy/Error
         eta_abs_diff=tf.losses.absolute_difference(Z[:,1],
-                                                    Y[:,1],reduction=None)
+                                    Y[:,1],reduction=tf.losses.Reduction.NONE)
         eta_error=(tf.reduce_mean(tf.divide(
                                     eta_abs_diff,Y[:,1]+1e-10)))*100
         tf.summary.scalar('%_eta_error',eta_error)
 
         #Phi Accuracy/Error
         phi_abs_diff=tf.losses.absolute_difference(Z[:,2],
-                                                    Y[:,2],reduction=None)
+                                    Y[:,2],reduction=tf.losses.Reduction.NONE)
         phi_error=(tf.reduce_mean(tf.divide(
                                     phi_abs_diff,Y[:,2]+1e-10)))*100
         tf.summary.scalar('%_phi_error',phi_error)
@@ -205,7 +207,7 @@ def model1(X,is_training):
     A4=identity3d_residual_block(A3Mp,
                                 name='identity1',
                                 num_channels=[2,2,10],
-                                midfilter_shape=(3,3,3),
+                                mid_filter_shape=(3,3,3),
                                 is_training=is_training,
                                 dropout_rate=dropout_rate,
                                 apply_batchnorm=bn_decision,
@@ -237,7 +239,7 @@ def model1(X,is_training):
     A6=identity3d_residual_block(A5Mp,
                                 name='identity2',
                                 num_channels=[2,2,15],
-                                midfilter_shape=(3,3,3),
+                                mid_filter_shape=(3,3,3),
                                 is_training=is_training,
                                 dropout_rate=dropout_rate,
                                 apply_batchnorm=bn_decision,
@@ -252,7 +254,7 @@ def model1(X,is_training):
     #connected layer
     Z7=simple_fully_connected(A6Mp,
                                 name='fc1',
-                                output_dim=10,
+                                output_dim=5,
                                 is_training=is_training,
                                 dropout_rate=dropout_rate,
                                 apply_batchnorm=bn_decision,

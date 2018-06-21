@@ -248,7 +248,7 @@ def train(epochs,mini_batch_size,buffer_size,
                                                     train_image_filename_list,
                                                     train_label_filename_list,
                                                     test_image_filename_list,
-                                                    test_label_filename_list
+                                                    test_label_filename_list,
                                                     mini_batch_size,
                                                     buffer_size=buffer_size)
 
@@ -345,8 +345,8 @@ if __name__=='__main__':
 
 
     #Seting up some metric of dataset and training iteration
-    mini_batch_size=10
-    buffer_size=mini_batch_size*10
+    mini_batch_size=1
+    buffer_size=mini_batch_size
     epochs=10
 
     #parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size)
