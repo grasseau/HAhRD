@@ -43,7 +43,7 @@ def create_event_animation(layers,event_image,
 
     print '>>> Creating the plots'
     #Getting the colorscale
-    colorscale=get_colorscale_view_hits()
+    colorscale=get_colorscale_view_energy()
 
     ####################### DATA ##############################
     #defining the data variable (default to zeroth layer)

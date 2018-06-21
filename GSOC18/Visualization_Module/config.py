@@ -29,8 +29,9 @@ def get_colorscale_view_energy():
         variation.
     '''
     colorscale=[
-                [0,'rgb(255,255,255)'],
-                [1,'rgb(0.0,0.0,0.0)']
+                [0,'#0085ff'],
+                [0.5,'#ff4040'],
+                [1,'rgb(255,215,0)']
                 ]
     return colorscale
 
