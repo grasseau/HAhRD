@@ -119,16 +119,19 @@ def parse_tfrecords_file(train_image_filename_list,train_label_filename_list,
             train_filename_list  : list of tfrecords name for training
             test_filename_list   : list of tfrecords name for testing
         OUPUT:
-            next_mini_batch      : an handle of iterator.get_next()
+            iterator             : an handle of iterator
             train_iter_init_op   : an op which need to be run to make iterator
                                     point to start of training dataset
             test_iter_init_op    : an op which when run in a session will point
                                     point to start of the testing dataset
     '''
     #Reading the tfRecords File
+    comp_type='ZLIB'
     #Reading the training dataset
-    train_dataset_image=tf.data.TFRecordDataset(train_image_filename_list)
-    train_dataset_label=tf.data.TFRecordDataset(train_label_filename_list)
+    train_dataset_image=tf.data.TFRecordDataset(train_image_filename_list,
+                                                compression_type=comp_type)
+    train_dataset_label=tf.data.TFRecordDataset(train_label_filename_list,
+                                                compression_type=comp_type)
     #Applying the apropriate transformation to map from binary
     train_dataset_image=train_dataset_image.map(_binary_parse_function_image)
     train_dataset_label=train_dataset_label.map(_binary_parse_function_label)
@@ -137,8 +140,10 @@ def parse_tfrecords_file(train_image_filename_list,train_label_filename_list,
                                         train_dataset_label))
 
     #Reading the test dataset
-    test_dataset_image=tf.data.TFRecordDataset(test_image_filename_list)
-    test_dataset_label=tf.data.TFRecordDataset(test_label_filename_list)
+    test_dataset_image=tf.data.TFRecordDataset(test_image_filename_list,
+                                                compression_type=comp_type)
+    test_dataset_label=tf.data.TFRecordDataset(test_label_filename_list,
+                                                compression_type=comp_type)
     #print '\ndirect binary'
     #print (train_dataset.output_types,train_dataset.output_shapes)
     #Applying the appropriate transformation to map from binary
