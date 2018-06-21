@@ -4,17 +4,20 @@ from tensorflow.python.client import device_lib
 
 #import models here(need to be defined separetely in model file)
 from io_pipeline import parse_tfrecords_file
-from test import make_model_conv,make_model_conv3d,make_model_linear
-from test import calculate_model_accuracy,calculate_total_loss
+# from test import make_model_conv,make_model_conv3d,make_model_linear
+# from test import calculate_model_accuracy,calculate_total_loss
+from model1_definition import model1
+from model1_definition import calculate_model_accuracy
+from model1_definition import calculate_total_loss
 
 
 ################## GLOBAL VARIABLES #######################
-local_directory_path='/home/abhinav/Desktop/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
+local_directory_path='/home/abhinav/Desktop/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data/'
 run_number=1                            #for saving the summaries
 train_summary_filename='tmp/hgcal/%s/train/'%(run_number) #for training set
 test_summary_filename='tmp/hgcal/%s/valid/'%(run_number)  #For validation set
 checkpoint_filename='tmp/hgcal/checkpoint/'
-model_function_handle=make_model_conv
+model_function_handle=model1
 
 ################# HELPER FUNCTIONS ########################
 def _add_summary(object):
@@ -67,11 +70,9 @@ def _get_GPU_gradient(X,Y,is_training,scope,optimizer):
     '''
     #getting the unnormalized prediction from the model
     Z=model_function_handle(X,is_training)
-    Y=tf.one_hot(Y,depth=10,dtype=tf.int32)
 
     #Calculating the accuracy of the model
     accuracy=calculate_model_accuracy(Z,Y)
-    tf.summary.scalar('accuracy',accuracy)
 
     #Calculating the cost of prediction form model
     total_cost=calculate_total_loss(Z,Y,scope)
@@ -174,7 +175,7 @@ def create_training_graph(iterator,is_training,global_step):
             with tf.device(all_gpu_name[i]):
                 with tf.name_scope('tower%s'%(i)) as tower_scope:
                     #Getting the next batch of the dataset from the iterator
-                    X,Y=iterator.get_next() #'element' referes to on minibatch
+                    ((X,_),(Y,_))=iterator.get_next() #'element' referes to on minibatch
 
                     #Create a graph on the GPU and get the gradient back
                     tower_grad_var_pair,total_cost=_get_GPU_gradient(X,Y,
@@ -201,9 +202,6 @@ def create_training_graph(iterator,is_training,global_step):
     #Keeping the  moving average of the weight instead of the #(Hyperparameter)
     #(LATER)
 
-    #Start checkpoint
-
-
     #Adding all the gradient for the summary
 
     #Finally accumulating all the runnable op
@@ -212,7 +210,9 @@ def create_training_graph(iterator,is_training,global_step):
     return train_track_ops
 
 
-def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
+def train(epochs,mini_batch_size,buffer_size,
+                train_image_filename_list,train_label_filename_list,
+                test_image_filename_list,test_label_filename_list):
     '''
     DESCRIPTION:
         This function will finally take the graph created for training
@@ -220,9 +220,18 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
         and track the result using the loss of all the towers
     USAGE:
         INPUT:
-            mini_batch_size     : the size of minibatch for each tower
-            train_filename_list : the list of all the training tfrecords file
-            test_filename_list  : the list of all the test tfrecords file
+            epochs                    : the total number of epochs to go through
+                                        the dataset
+            mini_batch_size           : the size of minibatch for each tower
+            buffer_size               : the buffer size to randomly sample minibatch
+            train_image_filename_list : list of all the training image tfrecords
+                                        file
+            train_label_filename_list : list of the filename of label of the
+                                        training image
+            test_image_filename_list  : the list of all the test images
+                                        tfrecords file
+            test_label_filename_list  : the list of the filename having
+                                        corresponding labels for the images
         OUTPUT:
             nothing
             later checkpoints saving will be added
@@ -236,9 +245,12 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
     #Setting up the input_pipeline
     with tf.name_scope('IO_Pipeline'):
         iterator,train_iter_init_op,test_iter_init_op=parse_tfrecords_file(
-                                                        train_filename_list,
-                                                        test_filename_list,
-                                                        mini_batch_size)
+                                                    train_image_filename_list,
+                                                    train_label_filename_list,
+                                                    test_image_filename_list,
+                                                    test_label_filename_list
+                                                    mini_batch_size,
+                                                    buffer_size=buffer_size)
 
     #Creating the multi-GPU training graph
     train_track_ops=create_training_graph(iterator,is_training,global_step)
@@ -322,10 +334,25 @@ def train(epochs,mini_batch_size,train_filename_list,test_filename_list):
 
 
 if __name__=='__main__':
-    train_filename_list=[local_directory_path+'train.tfrecords']
-    test_filename_list=[local_directory_path+'validation.tfrecords']
-    mini_batch_size=1024
+
+    #Setting up the name of the filelist of train and test dataset
+    #Making the filelist for the train dataset
+    train_image_filename_list=[local_directory_path+'image0batchsize20zside0.tfrecords']
+    train_label_filename_list=[local_directory_path+'label0batchsize20.tfrecords']
+    #Making the filelist for the test datasets
+    test_image_filename_list=[local_directory_path+'image0batchsize20zside0.tfrecords']
+    test_label_filename_list=[local_directory_path+'label0batchsize20.tfrecords']
+
+
+    #Seting up some metric of dataset and training iteration
+    mini_batch_size=10
+    buffer_size=mini_batch_size*10
     epochs=10
 
     #parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size)
-    train(epochs,mini_batch_size,train_filename_list,test_filename_list)
+    train(epochs,
+            mini_batch_size,buffer_size,
+            train_image_filename_list,
+            train_label_filename_list,
+            test_image_filename_list,
+            test_label_filename_list)
