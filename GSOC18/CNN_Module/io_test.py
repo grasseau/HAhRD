@@ -29,9 +29,11 @@ if __name__=='__main__':
         sess.run(train_iter_init_op)
         while True:
             examples=sess.run(iterator.get_next())
-            print '\n Printing examples:'
-            print examples[0][0].shape
-            print 'eventid:',examples[0][1]
-            print examples[1][0]
-            print 'eventid:',examples[1][1]
+            # print '\n Printing examples:'
+            # print examples[0][0].shape
+            # print 'eventid:',examples[0][1]
+            # print examples[1][0]
+            # print 'eventid:',examples[1][1]
+
+            print examples[0][1]==examples[1][1]
             #sys.exit(1)

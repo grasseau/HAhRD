@@ -9,11 +9,11 @@ from test import calculate_model_accuracy,calculate_total_loss
 
 
 ################## GLOBAL VARIABLES #######################
-local_directory_path='datacifar/'
-run_number=11                            #for saving the summaries
-train_summary_filename='tmp/cifar/train/%s'%(run_number) #for training set
-test_summary_filename='tmp/cifar/valid/%s'%(run_number)  #For validation set
-checkpoint_filename='tmp/cifar/checkpoint/'
+local_directory_path='/home/abhinav/Desktop/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
+run_number=1                            #for saving the summaries
+train_summary_filename='tmp/hgcal/%s/train/'%(run_number) #for training set
+test_summary_filename='tmp/hgcal/%s/valid/'%(run_number)  #For validation set
+checkpoint_filename='tmp/hgcal/checkpoint/'
 model_function_handle=make_model_conv
 
 ################# HELPER FUNCTIONS ########################
