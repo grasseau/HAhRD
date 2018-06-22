@@ -29,21 +29,21 @@ def calculate_model_accuracy(Z,Y):
                                     Y[:,0],reduction=tf.losses.Reduction.NONE)
         energy_error=(tf.reduce_mean(tf.divide(
                                 energy_abs_diff,Y[:,0]+1e-10)))*100
-        tf.summary.scalar('%_energy_error',energy_error)
+        tf.summary.scalar('percentage_energy_error',energy_error)
 
         #Eta Accuracy/Error
         eta_abs_diff=tf.losses.absolute_difference(Z[:,1],
                                     Y[:,1],reduction=tf.losses.Reduction.NONE)
         eta_error=(tf.reduce_mean(tf.abs(tf.divide(
                                     eta_abs_diff,Y[:,1]+1e-10))))*100
-        tf.summary.scalar('%_eta_error',eta_error)
+        tf.summary.scalar('percentage_eta_error',eta_error)
 
         #Phi Accuracy/Error
         phi_abs_diff=tf.losses.absolute_difference(Z[:,2],
                                     Y[:,2],reduction=tf.losses.Reduction.NONE)
         phi_error=(tf.reduce_mean(tf.abs(tf.divide(
                                     phi_abs_diff,Y[:,2]+1e-10))))*100
-        tf.summary.scalar('%_phi_error',phi_error)
+        tf.summary.scalar('percentage_phi_error',phi_error)
 
 
         #Calculation of Classification error
