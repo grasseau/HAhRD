@@ -1,4 +1,6 @@
 import tensorflow as tf
+import multiprocessing
+ncpu=multiprocessing.cpu_count()
 
 def _binary_parse_function_cifar(serialized_example_protocol):
     '''
@@ -129,9 +131,9 @@ def parse_tfrecords_file(train_image_filename_list,train_label_filename_list,
     comp_type='ZLIB'
     #Reading the training dataset
     train_dataset_image=tf.data.TFRecordDataset(train_image_filename_list,
-                                                compression_type=comp_type)
+                                compression_type=comp_type,num_parallel_reads=ncpu/2)
     train_dataset_label=tf.data.TFRecordDataset(train_label_filename_list,
-                                                compression_type=comp_type)
+                                compression_type=comp_type,num_parallel_reads=ncpu/2)
     #Applying the apropriate transformation to map from binary
     train_dataset_image=train_dataset_image.map(_binary_parse_function_image)
     train_dataset_label=train_dataset_label.map(_binary_parse_function_label)
@@ -147,8 +149,10 @@ def parse_tfrecords_file(train_image_filename_list,train_label_filename_list,
     #print '\ndirect binary'
     #print (train_dataset.output_types,train_dataset.output_shapes)
     #Applying the appropriate transformation to map from binary
-    test_dataset_image=test_dataset_image.map(_binary_parse_function_image)
-    test_dataset_label=test_dataset_label.map(_binary_parse_function_label)
+    test_dataset_image=test_dataset_image.map(_binary_parse_function_image,
+                                        num_parallel_calls=ncpu-2)
+    test_dataset_label=test_dataset_label.map(_binary_parse_function_label,
+                                        num_parallel_calls=ncpu-2)
     #Stitching the image and label together
     test_dataset=tf.data.Dataset.zip((test_dataset_image,
                                         test_dataset_label))
