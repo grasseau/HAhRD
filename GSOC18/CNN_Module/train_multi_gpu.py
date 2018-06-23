@@ -123,7 +123,7 @@ def _compute_average_gradient(all_tower_grad_var):
     return average_grad_var_pair
 
 ####################### MAIN TRAIN FUNCTION ###################
-def create_training_graph(iterator,is_training,global_step):
+def create_training_graph(iterator,is_training,global_step,learning_rate):
     '''
     DESCRIPTION:
         This function will serve the main purpose of training the
@@ -149,18 +149,18 @@ def create_training_graph(iterator,is_training,global_step):
                             Training/Testing
             global_step : a varible which could how many rounds of backpropagation
                             is completed
+            learning_rate: the learning rate with the learning rate decay
+                            applied to it
         OUTPUTS:
             train_track_ops  : the list of op to run of form
                                 [apply_gradient_op,loss1_op,loss2_op.....]
     '''
     #Setting the input placeholders for training mode
     #filename=tf.placeholder
-    #also include learning rate decay here for optimizer using global step
 
 
     #Setting up the optimizer
-    optimizer=tf.train.AdamOptimizer() #learning rate and decay Will
-                                        #be added later
+    optimizer=tf.train.AdamOptimizer(learning_rate=learning_rate)
 
     #Now setting up the graph to train the model on multiple GPUs
     all_gpu_name=_get_available_gpus()  #name of all the visible GPU devices
@@ -211,6 +211,7 @@ def create_training_graph(iterator,is_training,global_step):
 
 
 def train(epochs,mini_batch_size,buffer_size,
+                decay_step,decay_rate,
                 train_image_filename_list,train_label_filename_list,
                 test_image_filename_list,test_label_filename_list):
     '''
@@ -224,6 +225,10 @@ def train(epochs,mini_batch_size,buffer_size,
                                         the dataset
             mini_batch_size           : the size of minibatch for each tower
             buffer_size               : the buffer size to randomly sample minibatch
+            decay_step                : the number of step after which one unit decay
+                                        will be applied to learning_rate
+            decay_rate                : the rate at which the the learning rate
+                                        will be scaled acc to inbuilt formula
             train_image_filename_list : list of all the training image tfrecords
                                         file
             train_label_filename_list : list of the filename of label of the
@@ -241,6 +246,13 @@ def train(epochs,mini_batch_size,buffer_size,
     global_step=tf.get_variable('global_step',shape=[],
                         initializer=tf.constant_initializer(0),
                         trainable=False)
+    init_learning_rate=0.001    #default for Adam
+    learning_rate=tf.train.exponential_decay(init_learning_rate,
+                                            global_step,
+                                            decay_step,
+                                            decay_rate,#lr_decay rate
+                                            staircase=True,
+                                            name='exponential_decay')
 
     #Setting up the input_pipeline
     with tf.name_scope('IO_Pipeline'):
@@ -253,7 +265,8 @@ def train(epochs,mini_batch_size,buffer_size,
                                                     buffer_size=buffer_size)
 
     #Creating the multi-GPU training graph
-    train_track_ops=create_training_graph(iterator,is_training,global_step)
+    train_track_ops=create_training_graph(iterator,is_training,global_step,
+                                            learning_rate)
 
     #Adding saver to create checkpoints for weights
     saver=tf.train.Saver(tf.global_variables(),
@@ -349,9 +362,14 @@ if __name__=='__main__':
     buffer_size=mini_batch_size
     epochs=10
 
+    #Setting up the learning rate Hyperparameter
+    decay_step=46
+    decay_rate=0.9
+
     #parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size)
     train(epochs,
             mini_batch_size,buffer_size,
+            decay_step,decay_rate,
             train_image_filename_list,
             train_label_filename_list,
             test_image_filename_list,
