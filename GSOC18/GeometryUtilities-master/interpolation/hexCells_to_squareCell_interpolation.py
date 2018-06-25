@@ -15,6 +15,10 @@ from shapely.geometry import LineString,Polygon
 from descartes.patch import PolygonPatch
 #Importing custom classes and function
 from sq_Cells import sq_Cells
+#Importing a required function from main file
+#from main import get_subdet as _get_subdet
+#Importing Tensorflow to save the tfRecords
+import tensorflow as tf
 
 
 #################Global Variables#######################
@@ -241,12 +245,12 @@ def calculate_overlap(hex_cells_list,sq_cells_list,search_radius,min_overlap_are
         #Storing the overlap area directly. Normalize later when using O(1)
         overlap_coef_final=overlap_area_final#/np.sum(overlap_area_final)
 
-        #We are using the hex_center's center tuple as the key
-        coef_dict[hex_cell.center.coords[0]]=[]
-        #coef_dict[hex_cell.id]=[]
+        #We are using the hex_cell is as the key instead of cell center
+        #coef_dict[hex_cell.center.coords[0]]=[]
+        coef_dict[hex_cell.id]=[]
         for fid,coef in zip(sq_cell_id_final,overlap_coef_final):
-            coef_dict[hex_cell.center.coords[0]].append((sq_cells_list[fid].id,coef))
-            #coef_dict[hex_cell.id].append((sq_cells_list[fid].id,coef))
+            #coef_dict[hex_cell.center.coords[0]].append((sq_cells_list[fid].id,coef))
+            coef_dict[hex_cell.id].append((sq_cells_list[fid].id,coef))
 
     return coef_dict
 
@@ -350,13 +354,80 @@ def _readCoefFile(filename):
 
     return coef_dict
 
+def _get_layer_number_or_mask_from_detid(detid,mask_layer=None):
+    '''
+    DESCRIPTION:
+        This function will enable us to extract out the layer id from the
+        full detid of hit in the data frame.
+    USAGE:
+        INPUT:
+            detid           : a numpy arry having the detid of the hits
+            mask_layer      : an optional layer-number to be used when
+                              we want to get the layer mask for this given
+                              layer number instead of layers list
+        OUPUT:
+            layer_arr       : a numpy array of unique layers
+    '''
+    #Getting effective layer numebr and the subdet number from the detid
+    layer_arr=(detid>>19)&0x1F
+    subdet_arr=(detid>>25)&0x7
+
+    #Now making the effective layer to the actual number
+    #Fixing subdet 4 layers
+    layer_arr=layer_arr+(subdet_arr==4)*28
+    #Fixing the subdet 5 layers
+    layer_arr=layer_arr+(subdet_arr==5)*40
+
+    #Generating the subdet mask to filter hit of required subdet
+    subdet_mask=(subdet_arr==3) | (subdet_arr==4) | (subdet_arr==5)
+    assert (subdet_mask.shape==layer_arr.shape),'Dim mismatch with mask'
+
+    if mask_layer==None:
+        #Now masking the layers which for the requires subdet
+        return layer_arr[subdet_mask]
+    else:
+        #creating the net mask based on subdet and layer
+        layer_mask=subdet_mask & (layer_arr==mask_layer)
+        return layer_mask
+
+def _get_cellid_energy_array(all_event_hits,layer,zside,event):
+    '''
+    DESCRIPTION:
+        This will create the energy array and cellid whithout the extra memory
+        overhead of mask.
+    '''
+    #getting the cellid by masking detid's last 18 bits
+    detid=all_event_hits.loc[event,'detid']
+    cellid_arr=detid & 0x3FFFF
+
+    layer_mask=_get_layer_number_or_mask_from_detid(detid,layer)
+    zside_mask=((detid>>24) & 0x1)==zside
+    mask=layer_mask & zside_mask    #Final mnet mask
+
+    #Now masking both the energy arr and cellid arr to retreive data of this layer
+    energy_arr=np.squeeze(all_event_hits.loc[event,'energy']).reshape((-1,))
+    #(LC) required for logical error check
+    # z_arr=np.squeeze(all_event_hits.loc[event,'z']).reshape((-1,))
+    # cluster2d_arr=np.squeeze(all_event_hits.loc[event,'cluster2d']).reshape((-1,))
+    # cluster3d_arr=np.squeeze(
+    #     all_event_hits.loc[event,'cluster2d_multicluster'][cluster2d_arr]).reshape((-1,))
+
+    #Masking the array for requred zside->layer->event
+    cellid_arr=cellid_arr[mask]
+    energy_arr=energy_arr[mask]
+    #masking (LC)
+    # z_arr=z_arr[mask]
+    # cluster3d_arr=cluster3d_arr[mask]
+
+    return cellid_arr,energy_arr#,cluster3d_arr,z_arr
+
 def _get_hit_layers(all_event_hits,event_start_no,event_stride):
     '''
     DESCRIPTION:
         This function will collect the set of all the layers which have hits in
         to be interpolated events.
     INPUT:
-        all_event_hits  : the dataframe which contains the hit data
+        all_event_hits  : the dataframe which contains the hit data (minibatch)
         event_start_no  : the starting point of interpolation of event
         event_stride    : the size of the minibatch to create image of
     OUTPUT:
@@ -364,15 +435,24 @@ def _get_hit_layers(all_event_hits,event_start_no,event_stride):
     '''
     layers=np.array([],dtype=np.int64)
     for event in range(event_start_no,event_start_no+event_stride):
-        _layers=np.unique(all_event_hits.loc[event,'layer'])
+        detid=all_event_hits.loc[event,'detid']
+        _layers=np.unique(_get_layer_number_or_mask_from_detid(detid))
         layers=np.append(layers,_layers)
 
     layers=np.unique(layers)
     return layers.tolist()
 
+def _bytes_feature(value):
+    '''
+    DESCRIPTION:
+        Inspired/copied from the usual way to byte to Tensorflow
+        example feature.
+        Dont use it unknowingly.
+    '''
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
-def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
-                    event_stride=8,no_layers=40,precision_adjust=1e-3):
+def compute_energy_map(all_event_hits,event_mask,resolution,edge_length,event_start_no,
+                    event_stride,no_layers,dtype=np.float32):
     '''
     DESCRIPTION:
         This function will finally map the energy deposit recorded in the
@@ -390,7 +470,9 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
     USAGE:
         INPUT:
             all_event_hits  : the dataframe containing all the rechits from
-                                all the events.
+                                all the events (a certain minibatch of events).
+            event_mask      : a mask whether to select an event or not based
+                                on the decision in the label creation function
             resolution      : the current resolution of the interpolation mesh
             event_start_no  : the starting point of event number to create
                                 minibatches.
@@ -398,135 +480,288 @@ def compute_energy_map(all_event_hits,resolution,edge_length,event_start_no,
             no_layers       : the total number of layers to interpolate upto
                                 (current default is 40 since that much coef is
                                 available to us right now)
-            precision_adjust: to take into account that the data file of hgcal
-                                hits are haveing rounded/low precision
-                                position values. So searching the exact point
-                                will not be possible.
+            dtype           : np.float32 is kept as default to save memory
+                                of the model
         OUTPUT:
             energy_map      : a numpy array containing the map/interpolation
                                 of a minibatch of event.
     '''
-    #For logical ERROR check
-    # event_energy_arr=np.zeros((event_stride,),dtype=dtype)
-    # mesh_energy_arr=np.zeros((event_stride,),dtype=dtype)
-    # event_bary_x_arr=np.zeros((event_stride,),dtype=dtype)
-    # mesh_bary_x_arr=np.zeros((event_stride,),dtype=dtype)
-    # event_bary_y_arr=np.zeros((event_stride,),dtype=dtype)
-    # mesh_bary_y_arr=np.zeros((event_stride,),dtype=dtype)
-    #
+    #(LC)For logical ERROR check
+    # energy_diff=[]          #global list for tracking the error in
+    # bary_x_diff=[]          # energy and the barycenter properties
+    # bary_y_diff=[]
+    # bary_z_diff=[]
+    # cluster_properties={}  #For holding the details of cluster and actual data
+
+    #(LC)Loading the sq_cells dict for sq cell pos
     # sq_cells_filename='sq_cells_data/sq_cells_dict_res_%s,%s_len_%s.pkl'%(
     #                             resolution[0],resolution[1],edge_length)
     # sq_cells_dict=_readCoefFile(sq_cells_filename)
 
 
-    #Declaring the image array
-    energy_map=np.zeros((event_stride,resolution[0],resolution[1],
-                                                no_layers),dtype=dtype)
+    #Strating the tfRecord Writer
+    for zside in [0,1]:
+        image_filename=image_basepath+'image%sbatchsize%szside%s.tfrecords'%(
+                                    event_start_no,event_stride,zside)
+        compression_options=tf.python_io.TFRecordOptions(
+                        tf.python_io.TFRecordCompressionType.ZLIB)
 
-    #Starting to interpolate layer by layer for all the events
-    #We dont have to unnecessarily iterate over all events. We could make
-    #set of layers from dataframe
-    layers=range(1,no_layers+1)
-    #layers=_get_hit_layers(all_event_hits,event_start_no,event_stride)
-    for layer in layers:
-        #Loading the interpolation coef for this layer
-        print '\n>>> Reading the layer %s interpolation coefficient'%(layer)
-        coef_filename='sq_cells_data/coef_dict_layer_%s_res_%s,%s_len_%s.pkl'%(
-                                    layer,resolution[0],resolution[1],edge_length)
-        coef_dict=_readCoefFile(coef_filename)
+        with tf.python_io.TFRecordWriter(image_filename,
+                        options=compression_options) as record_writer:
+            #Initializing the numpy matrix to hold the interpolation
+            energy_map=np.zeros((event_stride,resolution[0],resolution[1],
+                                    no_layers),dtype=dtype)
 
-        #Making the KD Tree for the hexagonal cells
-        print '>>> Building the tree of Hexagonal cells for searching'
-        hex_centers=coef_dict.keys()
-        hex_tree=cKDTree(hex_centers,balanced_tree=True)
+            #Starting to interpolate layer by layer for all the events
+            layers=range(1,no_layers+1)
+            #Better iterate only those layers whch are there in hit atleast once (LATER)
+            #layers=_get_hit_layers(all_event_hits,event_start_no,event_stride)
+            for layer in layers:
+                #Loading the interpolation coef for this layer
+                print '\n>>> Reading the layer %s interpolation coefficient'%(layer)
+                coef_filename='sq_cells_data/coef_dict_layer_%s_res_%s,%s_len_%s.pkl'%(
+                                            layer,resolution[0],resolution[1],edge_length)
+                coef_dict=_readCoefFile(coef_filename)
 
-        #Now we will iterate the all the events
+                #(LC)Reading the position filename
+                # pos_fname='hex_pos_data/%s.pkl'%(layer)
+                # hex_pos=_readCoefFile(pos_fname)
+
+                #Now we will iterate the all the events
+                events=range(event_start_no,event_start_no+event_stride)
+                for event in events:
+                    #Filtering the event based on the event_mask
+                    if event_mask[event-event_start_no]=='False':
+                        continue
+
+                    print '>>> Interpolating for Event:%s zside:%s'%(event,zside)
+                    #Retreiving the data for that event of this layer(saving memory also)
+                    print '>>> Masking and retreiving the hit'
+                    hit_cellid_arr,hit_energy_arr=_get_cellid_energy_array(
+                                            all_event_hits,layer,zside,event)
+                    #(LC)
+                    # hit_cellid_arr,hit_energy_arr,hit_cluster3d_arr,hit_z_arr=_get_cellid_energy_array(
+                    #                         all_event_hits,layer,zside,event)
+
+                    #Checking if the event contains no hits in this layer
+                    if hit_energy_arr.shape[0]==0:
+                        print 'Empty Event: ',hit_energy_arr.shape
+                        continue
+
+                    #Now iterating over all the hits of this layer in this event
+                    for hit_id in range(hit_energy_arr.shape[0]):
+                        #Accquiring the hexagonal cell
+                        hex_cell_id=hit_cellid_arr[hit_id]
+
+                        #Retreiving the overlap coef from the dictionary
+                        overlaps=coef_dict[hex_cell_id]
+
+                        #Performing the interpolation
+                        hit_energy=hit_energy_arr[hit_id]
+
+                        #(LC)Adding the new key to multi-cluster properties
+                        # cluster3d=hit_cluster3d_arr[hit_id]
+                        # if (event,cluster3d) not in cluster_properties.keys():
+                        #     init_list=np.array([0,0,0,0],dtype=np.float64)
+                        #     mesh_list=np.array([0,0,0,0],dtype=np.float64)
+                        #     key=(event,cluster3d)
+                        #     cluster_properties[key]=[init_list,mesh_list]
+                        # #(LC)Now adding the hexagonal contribution to initial properties
+                        # hex_cell_center=hex_pos[hex_cell_id]
+                        # hit_Wx=hex_cell_center[0]*hit_energy
+                        # hit_Wy=hex_cell_center[1]*hit_energy
+                        # hit_Wz=hit_z_arr[hit_id]*hit_energy
+                        # init_list=[hit_energy,hit_Wx,hit_Wy,hit_Wz]
+                        # key=(event,cluster3d)
+                        # cluster_properties[key][0]+=init_list
+
+                        norm_coef=np.sum([overlap[1] for overlap in overlaps])
+                        for overlap in overlaps:
+                            #Calculating the interpolated/mesh energy for each overlap
+                            i,j=overlap[0]  #index of square cell
+                            weight=overlap[1]/norm_coef
+                            mesh_energy=hit_energy*weight
+
+                            #(LC) For adding the mesh contribution to mesh properties
+                            # sq_center=sq_cells_dict[(i,j)].center
+                            # mesh_energy=hit_energy*weight
+                            # mesh_Wx=mesh_energy*sq_center.coords[0][0]
+                            # mesh_Wy=mesh_energy*sq_center.coords[0][1]
+                            # mesh_Wz=mesh_energy*hit_z_arr[hit_id]
+                            # mesh_list=[mesh_energy,mesh_Wx,mesh_Wy,mesh_Wz]
+                            # key=(event,cluster3d)
+                            # cluster_properties[key][1]+=mesh_list
+
+                            example_idx=event-event_start_no
+                            energy_map[example_idx,i,j,layer-1]+=mesh_energy
+
+            #Now saving the energy calculated for the particular z-side of event
+            #REMEMBER: we have to retreive in this format only. also check
+            #in what format numpy stores matrix by using tobytes.
+            #(row mojor or column major)
+            for example_idx in range(event_stride):
+                #Not saving the events which were not interpolated
+                if event_mask[example_idx]=='False':
+                    continue
+
+                example=tf.train.Example(features=tf.train.Features(
+                    feature={
+                        'image': _bytes_feature(energy_map[example_idx,:,:,:].tobytes()),
+                        #Adding an event lable to check sequential access
+                        'event': _int64_feature(example_idx+event_start_no)
+                    }
+                ))
+                record_writer.write(example.SerializeToString())
+
+            #Testing the numpy array
+            np.save(image_filename,energy_map)
+
+    #(LC)Appending the properties to the final error list
+    # for key,value in cluster_properties.iteritems():
+    #     #Normalizing the barycenters
+    #     value[0][1:]=value[0][1:]/value[0][0]   #init_properties
+    #     value[1][1:]=value[1][1:]/value[1][0]   #mesh_properties
+    #
+    #     #Appending the difference to the list
+    #     energy_diff.append(np.abs((value[0][0]-value[1][0])))
+    #     bary_x_diff.append(np.abs((value[0][1]-value[1][1])))
+    #     bary_y_diff.append(np.abs((value[0][2]-value[1][2])))
+    #     bary_z_diff.append(np.abs((value[0][3]-value[1][3])))
+    #(LC) Plotting the values
+    # from test_coef_multicluster import plot_error_histogram
+    # plot_error_histogram(energy_diff,bary_x_diff,bary_y_diff,bary_z_diff)
+
+    # We are not returning anything currently, but saving the tf records directly
+    #return energy_map
+
+############### TARGET CRETION FUNCTION################
+def _int64_feature(value):
+    '''
+    DESCRIPTION:
+        This function creates the int64 data to the examples
+        features. If we have bytes which is taken by serializing
+        a numpy array to bytes then used the above defined _bytes_feature.
+
+    '''
+    return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
+
+def compute_target_lable(genpart_df,resolution,edge_length,
+                        event_start_no,event_stride):
+    '''
+    DESCRIPTION:
+        This function will create the target label for the their
+        corresponding energy map for training the CNN.
+        The target label will currently consist the example protocol
+        which will save different field in target label as
+        name-value pair in that protocol. Appropriate restructuring
+        like converting the categorical variables to one-hot will be done
+        while parsing.
+
+    USAGE:
+        INPUT:
+            genpart_df      : dataframe of the events containing the
+                                genpart information of the initial state of
+                                particle.
+            resolution      : the current resolution of interpolation in use
+                                to be used for target representation on a mesh
+            edge_length     : length of the current sq_cells in the mesh
+            event_start_no  : the starting number of event slice from the root
+                                file to be used for the anming convention
+            event_stride    : the event stride i.e the batch size of the this
+                                datafile i.e the number of examples in this data
+                                file.
+        OUTPUT:
+            target_labels   : this will be a file saved in the imag_data directory
+                                with the filename  convention decided inside
+            event_mask      : a mas showing which event to take while Creating
+                                the image to have a sync between the image and
+                                label dataset
+    '''
+    #Reading the sq_cells dict for finding the probable location of
+    #particle to the square layer
+    # sq_cells_filename='sq_cells_data/sq_cells_dict_res_%s,%s_len_%s.pkl'%(
+    #                             resolution[0],resolution[1],edge_length)
+    # sq_cells_dict=_readCoefFile(sq_cells_filename)
+    # sq_cells_center=np.array([cell.center.coords[0]
+    #                     for cell in sq_cells_dict.value()])
+    # #Creating the sq_cells KD-Tree
+    # sq_kd_tree=cKDTree(sq_cells_center)
+
+    #Making a flag for the events which dont have any electron
+    count=0
+    event_mask=[]
+
+    #Setting up the filename and compression options of the target tfrecords
+    label_filename=image_basepath+'label%sbatchsize%s.tfrecords'%(
+                                    event_start_no,event_stride)
+    compression_options=tf.python_io.TFRecordOptions(
+                    tf.python_io.TFRecordCompressionType.ZLIB)
+
+    #Starting the tfrecords
+    with tf.python_io.TFRecordWriter(label_filename,
+                        options=compression_options) as record_writer:
         events=range(event_start_no,event_start_no+event_stride)
         for event in events:
-            # ####For Logical Check #########
-            # cl2d_idx=all_event_hits.loc[event,'cluster2d']
-            # mcl_idx=all_event_hits.loc[event,'cluster2d_multicluster'][cl2d_idx]
-            # cluster_mask=mcl_idx==0
+            print '>>> Creating the target label for event: {}'.format(event)
+            #Creating the mask for filtering the particles (on current requirement)
+            electron_id=11
+            positron_id=-11
+            particles_mask=np.logical_or(genpart_df.loc[event,"pid"]==electron_id,
+                                    genpart_df.loc[event,"pid"]==positron_id)
+            particles_mask &= (genpart_df.loc[event,"gen"]>=0)
+            particles_mask &= (genpart_df.loc[event,"reachedEE"]>1)
+            particles_mask &= ((genpart_df.loc[event,"energy"]/
+                                np.cosh(genpart_df.loc[event,"eta"]))>5)
+            particles_mask &= (genpart_df.loc[event,"eta"])>0
 
-            print '>>> Interpolating for Event:%s'%(event)
-            #Retreiving the data for that event
-            hit_layer_arr=all_event_hits.loc[event,'layer']
-            #Filter out the current layer's data
-            layer_mask=hit_layer_arr==layer
-            hit_energy_arr=all_event_hits.loc[event,'energy'][layer_mask] #& cluster_mask]
-            hit_x_arr=all_event_hits.loc[event,'x'][layer_mask]# & cluster_mask]
-            hit_y_arr=all_event_hits.loc[event,'y'][layer_mask]# & cluster_mask]
-            #Cheking if the event contains no hits in this layer
-            print hit_energy_arr.shape
-            if hit_energy_arr.shape[0]==0:
+            #Now filtering the required features for the target label
+            particles_energy=genpart_df.loc[event,"energy"][particles_mask]
+            particles_phi=genpart_df.loc[event,"phi"][particles_mask]
+            particles_eta=genpart_df.loc[event,"eta"][particles_mask]
+            particles_pid=genpart_df.loc[event,"pid"][particles_mask]
+
+            #Checking if the electron is filtered and we got just one
+            print particles_pid,'\n'
+            if particles_pid.shape!=(1,): #and particles_pid.shape!=(2,):
+                count+=1
+                print 'Multiple/No Electron Detected!!!'
+                event_mask.append('False') #Dont take this event
                 continue
+            else:
+                event_mask.append('True') #Take this event
+            #assert particles_pid.shape==(1,),"Multiple Electrons are detected"
 
-            #Tuplizing the center of hit to search its corresponding hex-cell
-            hit_centers=[(hit_x_arr[i],hit_y_arr[i])
-                            for i in range(hit_energy_arr.shape[0])]
-            #Querying the KDTree for corresponding cells
-            indices=hex_tree.query_ball_point(hit_centers,r=precision_adjust)
+            #Creating the label vector as its easier to manipulate in numpy
+            #format: [pc1(electron),pc2,energy,phi,eta]
+            label=np.empty((5,),dtype=np.float32)
+            #Filling up the target label
+            label[0]=particles_energy[0]
+            label[1]=particles_eta[0]
+            label[2]=particles_phi[0]
+            if particles_pid[0]==11:
+                label[3]=1      #its electron
+                label[4]=0
+            else:
+                label[3]=0
+                label[4]=1      #it not electon(positron ask Florian Sir)
 
-            #Now iterating over all the hits of this layer in this event
-            for hit_id in range(hit_energy_arr.shape[0]):
-                #Accquiring the hexagonal cell
-                hex_cell_index=indices[hit_id]
-                if not len(hex_cell_index)==1:
-                    print 'Multiple/No Hex Cell Matching with hit cell'
-                    sys.exit(1)
-                hex_cell_center=hex_centers[hex_cell_index[0]]
-                overlaps=coef_dict[hex_cell_center]
+            #Creating the example protocol to write to tfrecords
+            #Add the event number later for check of the correspondancce
+            #between the events in the label and image
+            example=tf.train.Example(features=tf.train.Features(
+                    feature={
+                        #Saving each features as the named dict with bytes
+                        'label':_bytes_feature(label.tobytes()),
+                        #extra label of event for seq access check
+                        'event':_int64_feature(event)
+                    }
+                )
+            )
+            #Adding the example to the record writer
+            record_writer.write(example.SerializeToString())
 
-                #Performing the interpolation
-                example_idx=event-event_start_no
-                hit_energy=hit_energy_arr[hit_id]
+    #Seeing the fraction of events which dont have just one electron
+    print 'Total number of events skipped: ',count
 
-                # #logical error check
-                # event_energy_arr[example_idx]+=hit_energy
-                # event_bary_x_arr[example_idx]+=hit_energy*hex_cell_center[0]
-                # event_bary_y_arr[example_idx]+=hit_energy*hex_cell_center[1]
-
-                norm_coef=np.sum([overlap[1] for overlap in overlaps])
-                for overlap in overlaps:
-                    #Calculating the interpolated/mesh energy for each overlap
-                    i,j=overlap[0]  #index of square cell
-                    weight=overlap[1]/norm_coef
-                    mesh_energy=hit_energy*weight
-
-                    # #Logical Error Check
-                    # mesh_energy_arr[example_idx]+=mesh_energy
-                    # sq_center=sq_cells_dict[(i,j)].center
-                    # mesh_bary_x_arr[example_idx]+=mesh_energy*sq_center.coords[0][0]
-                    # mesh_bary_y_arr[example_idx]+=mesh_energy*sq_center.coords[0][1]
-
-                    energy_map[example_idx,i,j,layer]+=mesh_energy
-
-    #We could save the minibatch alternatively here
-    #but we would be combining the input data as well.
-    #(so better saving will be done later). Hust numpy save done here
-    image_filename=image_basepath+'image%sbatchsize%s'%(event_start_no,event_stride)
-    np.save(image_filename,energy_map)
-
-    #Logical Error Check
-    #Printing the total energy of each event its hit and mesh corresp
-    # print event_energy_arr
-    # print mesh_energy_arr
-    # print np.allclose(event_energy_arr,mesh_energy_arr)
-    #
-    # event_bary_x_arr/=event_energy_arr
-    # mesh_bary_x_arr/=mesh_energy_arr
-    #
-    # event_bary_y_arr/=event_energy_arr
-    # mesh_bary_y_arr/=mesh_energy_arr
-    #
-    # print event_bary_x_arr
-    # print mesh_bary_x_arr
-    # print event_bary_x_arr-mesh_bary_x_arr
-    # print np.allclose(event_bary_x_arr,mesh_bary_x_arr)
-    #
-    # print event_bary_y_arr
-    # print mesh_bary_y_arr
-    # print event_bary_y_arr-mesh_bary_y_arr
-    # print np.allclose(event_bary_y_arr,mesh_bary_y_arr)
-
-    return energy_map
+    #Returning the event mask for event selection in image_creation
+    return event_mask

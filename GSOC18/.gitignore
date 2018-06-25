@@ -3,3 +3,7 @@
 *.pyc
 *.txt
 *.npy
+tmp
+datacifar
+*.tfrecords
+*.html

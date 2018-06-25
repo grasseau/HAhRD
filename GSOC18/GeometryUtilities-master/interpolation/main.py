@@ -113,7 +113,7 @@ def interpolate_layer(geometry_fname,sq_cells_dict,edge_length,resolution,layer)
     t1=datetime.datetime.now()
     print 'Pickling completed in: ',t1-t0,' sec\n'
 
-def generate_image(hits_data_filename,resolution=(514,513),edge_length=0.7):
+def generate_training_dataset(event_data_filename,resolution=(514,513),edge_length=0.7):
     #ONGOING
     '''
     DESCRIPTION:
@@ -123,7 +123,7 @@ def generate_image(hits_data_filename,resolution=(514,513),edge_length=0.7):
         per event and finally a 4D dataset for CNN input combining all the event
     USAGE:
         INPUTS:
-            hits_data_filename  : the filename for the hits data to read event
+            event_data_filename  : the filename of the root file to read event
             resolution          : the resolution of current interpolation scheme
             edge_length         : the edge length of the current interpolation
                                     scheme
@@ -132,16 +132,30 @@ def generate_image(hits_data_filename,resolution=(514,513),edge_length=0.7):
     '''
     #Some of the geometry metadata (will be constant)
     no_layers=40
-    #Converting the root file to a data frame
-    all_event_hits=readDataFile_hits(hits_data_filename)
-
     #Specifying the size of minibatch
-    event_stride=10 #seems optimal in terms of memory use.
+    event_stride=20 #seems optimal in terms of memory use.
+    event_start_no=0 #for testing now
+
+    #Creating the corresponding label for out image
+    print '>>> Reading the event dataframe for the groundtruth particles'
+    all_event_particles=readDataFile_genpart(event_data_filename,event_start_no,
+                                            event_stride)
     t0=datetime.datetime.now()
-    compute_energy_map(all_event_hits,resolution,edge_length,0,event_stride,no_layers)
+    event_mask=compute_target_lable(all_event_particles,resolution,edge_length,
+                        event_start_no,event_stride)
+    t1=datetime.datetime.now()
+    print '>>> Label Creation Completed in: ',t1-t0
+
+    #Converting the root file to a data frame
+    print '>>> Reading the event dataframe for the hits'
+    all_event_hits=readDataFile_hits(event_data_filename,event_start_no,
+                                    event_stride)
+
+    t0=datetime.datetime.now()
+    compute_energy_map(all_event_hits,event_mask,resolution,edge_length,
+                        event_start_no,event_stride,no_layers)
     t1=datetime.datetime.now()
     print '>>> Image Creation Completed in: ',t1-t0
-
 
 ################ MAIN FUNCTION DEFINITION ###################
 def readGeometry( input_file,  layer, subdet ):
@@ -200,7 +214,7 @@ def get_subdet(layer):
                                                             layer,eff_layer)
     return subdet,eff_layer
 
-def readDataFile_hits(filename):
+def readDataFile_hits(filename,event_start_no,event_stride):
     '''
     DESCRIPTION:
         This function will read the root file which contains the simulated
@@ -210,45 +224,91 @@ def readDataFile_hits(filename):
         This code is similar to starting code in repo.
     USAGE:
         INPUT:
-            filename    : the name of root file
+            filename        : the name of root file
+            event_start_no  : the starting event number from where we want to
+                                process minibatch.
+            event_stride    : the size of minibatch to process in one go,
+                                (the time cost taken is less than the memory
+                                on increasing the value)
             query_string: this will be used to filter out the events like
                             selecting the hits in EE part with certain energy etc.
         OUTPUT:
             df          : the pandas dataframe of the data in root file
                             with only the recorded hits to convert to image
+                            of the required batch size
     '''
+    print '>>> Reading the root File to get hits dataframe'
     tree=uproot.open(filename)['ana/hgc']
     branches=[]
-    branches += ["genpart_gen","genpart_reachedEE","genpart_energy",
-                "genpart_eta","genpart_phi", "genpart_pid","genpart_posx",
-                "genpart_posy","genpart_posz"]
-    branches += ["rechit_x", "rechit_y", "rechit_z", "rechit_energy",
-                "rechit_layer", 'rechit_flags','rechit_cluster2d',
-                'cluster2d_multicluster']
+    #Just extracting the required attributes to create image
+    branches += ["rechit_detid","rechit_energy"]
+    #Adding the branches for logical Error check (Optional)
+    #branches +=["rechit_z","rechit_cluster2d","cluster2d_multicluster"]
+    #branches +=["rechit_cluster2d","cluster2d_multicluster"]
+
     cache={}
     df=tree.pandas.df(branches,cache=cache,executor=executor)
 
-    #Projecting the dataframe for the required attributes
-    print '>>> Projecting required attributes of hits'
-    rechits_attributes=["rechit_x", "rechit_y", "rechit_z","rechit_energy",
-                    "rechit_layer", 'rechit_flags','rechit_cluster2d',
-                    'cluster2d_multicluster']
-    all_event_hits=df[rechits_attributes]
     #Renaming the attribute in short form
-    col_names={name:name.replace('rechit_','') for name in rechits_attributes}
-    all_event_hits.rename(col_names,inplace=True,axis=1)
+    col_names={name:name.replace('rechit_','') for name in branches}
+    df.rename(col_names,inplace=True,axis=1)
+
+    #Extracting out the minibatch of event to process at a time
+    df=df.iloc[event_start_no:event_start_no+event_stride]
 
     #Do the Filtering here only no need to do it each time for each event
 
     #Printing for sanity check
-    #print all_event_hits.head()
-    #print all_event_hits.dtypes
+    #print df.head()
+    print 'Shape of dataframe: ',df.shape
     # print all_event_hits.loc[0,'energy']
     # print type(all_event_hits.loc[0,'energy'])
     # print all_event_hits.loc[0,'energy'].shape
 
-    return all_event_hits
+    return df
 
+def readDataFile_genpart(filename,event_start_no,event_stride):
+    '''
+    DESCRIPTION:
+        This function is similar to readDataFile_hits but this will
+        read the genpart of the same events as read by the above
+        function to generate the target label for the corresponding
+        image files.
+    USAGE:
+        INPUT:
+            filename        : the name of the root file containing the
+                                events
+            event_start_no  : starting event number in this file to
+                                extract the events from. This Will
+                                be controlled manually while generating the
+                                data for training set.
+            event_stride    : the number of events to be processed in the
+                                in one go.(consider memory cost here than the
+                                time cost.)
+        OUTPUT:
+            df              : returns the data frame containing the particles
+                                whose properties we will need to predict from
+                                the corresponding hit images of events
+    '''
+    #Reading the root file to a dataframe
+    print '>>> Reading the rootfile to get genpart dataframe'
+    tree=uproot.open(filename)['ana/hgc']
+
+    branches =["genpart_energy","genpart_phi","genpart_eta",
+                "genpart_gen","genpart_pid","genpart_reachedEE"]
+    cache={}
+    df=tree.pandas.df(branches,cache=cache,executor=executor)
+
+    #Renaming the attributes in short form
+    col_names={name:name.replace('genpart_','') for name in branches}
+    df.rename(col_names,inplace=True,axis=1)
+
+    #Extracting the dataframe for the required events
+    df=df.iloc[event_start_no:event_start_no+event_stride]
+
+    print '>>> Extraction completed with current shape: ',df.shape
+
+    return df
 
 if __name__=='__main__':
     import sys
@@ -281,4 +341,4 @@ if __name__=='__main__':
     #generate_interpolation(opt.input_file,edge_length=0.7)
 
     #Generating the image
-    generate_image(opt.data_file)
+    generate_training_dataset(opt.data_file)
