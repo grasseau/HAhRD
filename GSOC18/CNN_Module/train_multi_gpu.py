@@ -1,5 +1,6 @@
 import tensorflow as tf
 import datetime
+import sys
 from tensorflow.python.client import device_lib
 
 #import models here(need to be defined separetely in model file)
@@ -12,7 +13,7 @@ from model1_definition import calculate_total_loss
 
 
 ################## GLOBAL VARIABLES #######################
-local_directory_path='/home/abhinav/Desktop/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data/'
+local_directory_path='/home/abhinav/Desktop/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
 run_number=1                            #for saving the summaries
 train_summary_filename='tmp/hgcal/%s/train/'%(run_number) #for training set
 test_summary_filename='tmp/hgcal/%s/valid/'%(run_number)  #For validation set
@@ -318,13 +319,13 @@ def train(epochs,mini_batch_size,buffer_size,
                     train_writer.add_summary(track_results[-1],bno)
                     bno+=1
                 except tf.errors.OutOfRangeError:
-                    print 'Training one epoch completed!!'
+                    print 'Training one epoch completed!!\n'
                     break
 
             #get the validation accuracy,starting the validation/test iterator
             sess.run(test_iter_init_op)
             bno=1
-            while i%1==0:
+            while i%6==0:
                 try:
                     #_,datay=sess.run(next_element)#dont use iterator now
                     #print datay
@@ -337,7 +338,7 @@ def train(epochs,mini_batch_size,buffer_size,
                     test_writer.add_summary(track_results[-1],bno)
                     bno+=1
                 except tf.errors.OutOfRangeError:
-                    print 'Validation check completed!!'
+                    print 'Validation check completed!!\n'
                     break
 
             #Also save the checkpoints (after two every epoch)
@@ -347,24 +348,34 @@ def train(epochs,mini_batch_size,buffer_size,
 
 
 if __name__=='__main__':
+    import optparse
+    usage='usage: %prog[options]'
+    parser=optparse.OptionParser(usage)
+    parser.add_option('--data_dir',dest='data_dir',
+                        help='Directory containing data',
+                        default=local_directory_path)
+    (opt,args)=parser.parse_args()
+    local_directory_path=opt.data_dir
+    if local_directory_path[-1] != '/':
+        local_directory_path=local_directory_path+'/'
 
     #Setting up the name of the filelist of train and test dataset
     #Making the filelist for the train dataset
-    train_image_filename_list=[local_directory_path+'image0batchsize20zside0.tfrecords']
-    train_label_filename_list=[local_directory_path+'label0batchsize20.tfrecords']
+    train_image_filename_list=[local_directory_path+'image0batchsize1000zside0.tfrecords',]
+    train_label_filename_list=[local_directory_path+'label0batchsize1000.tfrecords']
     #Making the filelist for the test datasets
-    test_image_filename_list=[local_directory_path+'image0batchsize20zside0.tfrecords']
-    test_label_filename_list=[local_directory_path+'label0batchsize20.tfrecords']
+    test_image_filename_list=[local_directory_path+'image1000batchsize1000zside0.tfrecords']
+    test_label_filename_list=[local_directory_path+'label1000batchsize1000.tfrecords']
 
 
     #Seting up some metric of dataset and training iteration
-    mini_batch_size=1
-    buffer_size=mini_batch_size
-    epochs=10
+    mini_batch_size=10
+    buffer_size=mini_batch_size*2
+    epochs=30
 
     #Setting up the learning rate Hyperparameter
     decay_step=46
-    decay_rate=0.9
+    decay_rate=0.99
 
     #parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size)
     train(epochs,
