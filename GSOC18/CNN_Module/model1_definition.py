@@ -99,8 +99,17 @@ def calculate_total_loss(Z,Y,scope=None):
         regression_len=3
         regression_output=Z[:,0:regression_len]#0,1,2
         regression_label=Y[:,0:regression_len]#TRUTH
-        regression_loss=tf.losses.mean_squared_error(regression_output,
-                                    regression_label)
+
+        #mean_squared_error Regrassion Loss
+        # regression_loss=tf.losses.mean_squared_error(regression_output,
+        #                             regression_label)
+
+        #Defining new loss based on the Mean Percentage Error
+        absolute_diff=tf.losses.absolute_difference(regression_output,
+                                                    regression_label,
+                                        reduction=tf.losses.Reduction.NONE)
+        regression_loss=tf.reduce_mean(tf.abs(tf.divide(
+                                absolute_diff,regression_label+1e-10)))*100
         tf.summary.scalar('regression_loss',regression_loss)
         all_loss_list.append(regression_loss)
 
