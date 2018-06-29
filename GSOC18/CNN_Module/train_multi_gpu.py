@@ -1,13 +1,14 @@
 import tensorflow as tf
 import datetime
 import sys
+import os
 from tensorflow.python.client import device_lib
 
 #import models here(need to be defined separetely in model file)
 from io_pipeline import parse_tfrecords_file
 # from test import make_model_conv,make_model_conv3d,make_model_linear
 # from test import calculate_model_accuracy,calculate_total_loss
-from model1_definition import model1
+from model1_definition import model2
 from model1_definition import calculate_model_accuracy
 from model1_definition import calculate_total_loss
 
@@ -17,8 +18,12 @@ local_directory_path='/home/abhinav/Desktop/HAhRD/GSOC18/GeometryUtilities-maste
 run_number=13                            #for saving the summaries
 train_summary_filename='tmp/hgcal/%s/train/'%(run_number) #for training set
 test_summary_filename='tmp/hgcal/%s/valid/'%(run_number)  #For validation set
+if os.path.exists(train_summary_filename):
+    os.system('rm -rf ./'+train_summary_filename)
+    os.system('rm -rf ./'+test_summary_filename)
+
 checkpoint_filename='tmp/hgcal/checkpoint/'
-model_function_handle=model1
+model_function_handle=model2
 
 ################# HELPER FUNCTIONS ########################
 def _add_summary(object):
@@ -212,7 +217,7 @@ def create_training_graph(iterator,is_training,global_step,learning_rate):
 
 
 def train(epochs,mini_batch_size,buffer_size,
-                decay_step,decay_rate,
+                init_learning_rate,decay_step,decay_rate,
                 train_image_filename_list,train_label_filename_list,
                 test_image_filename_list,test_label_filename_list):
     '''
@@ -226,6 +231,7 @@ def train(epochs,mini_batch_size,buffer_size,
                                         the dataset
             mini_batch_size           : the size of minibatch for each tower
             buffer_size               : the buffer size to randomly sample minibatch
+            init_learning_rate        : the initial learning rate of the oprimizer
             decay_step                : the number of step after which one unit decay
                                         will be applied to learning_rate
             decay_rate                : the rate at which the the learning rate
@@ -247,13 +253,13 @@ def train(epochs,mini_batch_size,buffer_size,
     global_step=tf.get_variable('global_step',shape=[],
                         initializer=tf.constant_initializer(0),
                         trainable=False)
-    init_learning_rate=0.001    #default for Adam
     learning_rate=tf.train.exponential_decay(init_learning_rate,
                                             global_step,
                                             decay_step,
                                             decay_rate,#lr_decay rate
                                             staircase=True,
                                             name='exponential_decay')
+    tf.summary.scalar('learning_rate',learning_rate)
 
     #Setting up the input_pipeline
     with tf.name_scope('IO_Pipeline'):
@@ -374,13 +380,14 @@ if __name__=='__main__':
     epochs=31
 
     #Setting up the learning rate Hyperparameter
+    init_learning_rate=0.001    #default for Adam
     decay_step=46
     decay_rate=0.99
 
     #parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size)
     train(epochs,
             mini_batch_size,buffer_size,
-            decay_step,decay_rate,
+            init_learning_rate,decay_step,decay_rate,
             train_image_filename_list,
             train_label_filename_list,
             test_image_filename_list,
