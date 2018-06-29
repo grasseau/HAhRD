@@ -305,7 +305,7 @@ def model2(X,is_training):
     '''
     #Model Hyperparameter
     bn_decision=False
-    lambd=True
+    lambd=0.0
     dropout_rate=0.0
 
     #Reshaping the image to add the channel axis
