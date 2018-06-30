@@ -17,9 +17,9 @@ local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/i
 run_number=13
 checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
 #Directory to save the prediction in compressed numpy format
-prediction_basepath='tmp/hgcal/{}/predictions/'.format(run_number)
-if not os.path.exists(prediction_basepath):
-    os.mkdir(prediction_basepath)
+results_basepath='tmp/hgcal/{}/results/'.format(run_number)
+if not os.path.exists(results_basepath):
+    os.mkdir(results_basepath)
 
 
 
@@ -134,7 +134,7 @@ def infer(test_image_filename_list,test_label_filename_list,
     #Creating the graph for inference
     label_pred_ops=create_inference_graph(os_iterator,is_training)
     #Initializing the result array
-    results=None
+    predictions=None
     labels=None
 
     #Starting the saver to load the checkpoints
@@ -162,14 +162,14 @@ def infer(test_image_filename_list,test_label_filename_list,
                 [(Y1,Z1,l1),(Y2,Z2,l2)]=infer_results
                 if bno==1:
                     labels=np.concatenate((Y1,Y2),axis=0)
-                    results=np.concatenate((Z1,Z2),axis=0)
+                    predictions=np.concatenate((Z1,Z2),axis=0)
                 else:
-                    #Joining the results along the batch axis to make one big result
+                    #Joining the predictions along the batch axis to make one big result
                     labels=np.concatenate((labels,Y1,Y2),axis=0)
-                    results=np.concatenate((results,Z1,Z2),axis=0)
+                    predictions=np.concatenate((predictions,Z1,Z2),axis=0)
                 t1=datetime.datetime.now()
                 print 'loss of this minibatch: ',l1,l2
-                print 'Results shape: ',results.shape,labels.shape
+                print 'predictions shape: ',predictions.shape,labels.shape
                 print 'Inference for batch completed in: ',t1-t0,'\n'
                 bno+=1
 
@@ -178,10 +178,10 @@ def infer(test_image_filename_list,test_label_filename_list,
                 break
 
     #Saving the numpy array in compresed format
-    print 'Saving the prediction in ',prediction_basepath
-    prediction_filename=prediction_basepath+'pred'
-    np.savez_compressed(prediction_filename,
-                        results=results,
+    print 'Saving the prediction in ',results_basepath
+    results_filename=results_basepath+'results'
+    np.savez_compressed(results_filename,
+                        predictions=predictions,
                         labels=labels)
 
 
