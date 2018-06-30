@@ -22,7 +22,7 @@ if os.path.exists(train_summary_filename):
     os.system('rm -rf ./'+train_summary_filename)
     os.system('rm -rf ./'+test_summary_filename)
 
-checkpoint_filename='tmp/hgcal/checkpoint/'
+checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
 model_function_handle=model2
 
 ################# HELPER FUNCTIONS ########################

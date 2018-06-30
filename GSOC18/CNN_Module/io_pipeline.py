@@ -131,9 +131,9 @@ def parse_tfrecords_file(train_image_filename_list,train_label_filename_list,
     comp_type='ZLIB'
     #Reading the training dataset
     train_dataset_image=tf.data.TFRecordDataset(train_image_filename_list,
-                                compression_type=comp_type,num_parallel_reads=ncpu/2)
+                                compression_type=comp_type,num_parallel_reads=ncpu-2)
     train_dataset_label=tf.data.TFRecordDataset(train_label_filename_list,
-                                compression_type=comp_type,num_parallel_reads=ncpu/2)
+                                compression_type=comp_type,num_parallel_reads=ncpu-2)
     #Applying the apropriate transformation to map from binary
     train_dataset_image=train_dataset_image.map(_binary_parse_function_image)
     train_dataset_label=train_dataset_label.map(_binary_parse_function_label)
@@ -181,3 +181,50 @@ def parse_tfrecords_file(train_image_filename_list,train_label_filename_list,
 
     #Returning the required elements (dont return next element return iterator)
     return iterator,train_iter_init_op,test_iter_init_op
+
+def parse_tfrecords_file_inference(test_image_filename_list,
+                                    test_label_filename_list,
+                                    mini_batch_size):
+    '''
+    DESCRIPTION:
+        This function will make the one-shot iterator for runnning
+        the imference on the test/validation set ,without any
+        shuffling etc.
+    USAGE:
+        INPUTS:
+            test_image_filename_list : the list of tfrecords containing
+                                        the images for inference
+            test_label_filename_list : the list of tfrecords with
+                                        the labels of the corresponding images
+            mini_batch_size          : since this time no gradient ops
+                                        will be made on graph, we could have
+                                        bigger batch size to parallely make
+                                        inference
+        OUTPUT:
+            one_shot_iterator       : the one-shot iterator for the dataset
+    '''
+    #Reading the tfrecords
+    comp_type='ZLIB'
+    test_dataset_image=tf.data.TFRecordDataset(test_image_filename_list,
+                                    compression_type=comp_type,
+                                    num_parallel_reads=ncpu-2)
+    test_dataset_label=tf.data.TFRecordDataset(test_label_filename_list,
+                                    compression_type=comp_type,
+                                    num_parallel_reads=ncpu-2)
+    #Decoding the binary file to numberical format
+    test_dataset_image=test_dataset_image.map(_binary_parse_function_image,
+                                                num_parallel_calls=ncpu-2)
+    test_dataset_label=test_dataset_label.map(_binary_parse_function_label,
+                                                num_parallel_calls=ncpu-2)
+
+    #Now Zipping them together to make on combined example dataset
+    test_dataset=tf.data.Dataset.zip((test_dataset_image,
+                                    test_dataset_label))
+
+    #Making the batches for parallel inference
+    test_dataset=test_dataset.batch(mini_batch_size)
+
+    #Finally making the one-shot iterator
+    one_shot_iterator=test_dataset.make_one_shot_iterator()
+
+    return one_shot_iterator
