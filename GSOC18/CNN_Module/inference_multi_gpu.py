@@ -8,11 +8,13 @@ from io_pipeline import parse_tfrecords_file_inference
 ################# GLOBAL VARIABLES #####################
 #Getting the model handle
 from model1_definition import model2
+from model1_definition import calculate_total_loss
 model_function_handle=model2
 #default directory path for datasets
 local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
 #Checkpoint file path
-checkpoint_filename='tmp/hgcal/checkpoint/'
+run_number=14
+checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
 
 
 ################# HELPER FUNCTIONS #####################
@@ -81,9 +83,10 @@ def create_inference_graph(iterator,is_training):
 
                     #Now,making the prediction using the model
                     Z=model_function_handle(X,is_training)
+                    total_cost=calculate_total_loss(Z,Y,tower_scope)
 
-                    #Appending the label and prediction
-                    label_pred_ops.append((Y,Z))
+                    #Appending the label and prediction with loss for verification
+                    label_pred_ops.append((Y,Z,total_cost))
 
                     #Making the varible resuse in this variable scope
                     #i.e ultimately having a master copy of variable on cpu
@@ -131,7 +134,9 @@ def infer(test_image_filename_list,test_label_filename_list,
     #Starting the saver to load the checkpoints
     saver=tf.train.Saver()
 
-    with tf.Session() as sess:
+    config=tf.ConfigProto(allow_soft_placement=True,
+                            log_device_placement=False)
+    with tf.Session(config=config) as sess:
         #Directily initializing the variables with the checkpoint file
         checkpoint_path=checkpoint_filename+'model.ckpt-{}'.format(
                                                 checkpoint_epoch_number)
@@ -148,7 +153,7 @@ def infer(test_image_filename_list,test_label_filename_list,
                 #running the inference op (phase: testing automatically given)
                 t0=datetime.datetime.now()
                 infer_results=sess.run(label_pred_ops)
-                [(Y1,Z1),(Y2,Z2)]=infer_results
+                [(Y1,Z1,l1),(Y2,Z2,l2)]=infer_results
                 if bno==1:
                     labels=np.concatenate((Y1,Y2),axis=0)
                     results=np.concatenate((Z1,Z2),axis=0)
@@ -157,8 +162,9 @@ def infer(test_image_filename_list,test_label_filename_list,
                     labels=np.concatenate((labels,Y1,Y2),axis=0)
                     results=np.concatenate((results,Z1,Z2),axis=0)
                 t1=datetime.datetime.now()
+                print 'loss of this minibatch: ',l1,l2
                 print 'Results shape: ',results.shape,labels.shape
-                print 'Inference for batch completed in: ',t1-t0
+                print 'Inference for batch completed in: ',t1-t0,'\n'
                 bno+=1
 
             except tf.errors.OutOfRangeError:
