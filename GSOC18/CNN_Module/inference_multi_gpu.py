@@ -1,11 +1,16 @@
 import tensorflow as tf
 from tensorflow.python.client import device_lib
+import numpy as np
+import datetime
+from io_pipeline import parse_tfrecords_file_inference
 
 
 ################# GLOBAL VARIABLES #####################
 #Getting the model handle
 from model1_definition import model2
 model_function_handle=model2
+#default directory path for datasets
+local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
 #Checkpoint file path
 checkpoint_filename='tmp/hgcal/checkpoint/'
 
@@ -112,20 +117,26 @@ def infer(test_image_filename_list,test_label_filename_list,
     is_training=tf.constant(False,dtype=tf.bool,name='training_flag')
 
     #Getting the one-shot-iterator of the testing dataset
-    os_iterator=parse_tf_records_file_inference(test_image_filename_list,
+    with tf.device('/cpu:0'):
+        os_iterator=parse_tfrecords_file_inference(test_image_filename_list,
                                                 test_label_filename_list,
                                                 mini_batch_size)
 
     #Creating the graph for inference
-    label_pred_ops=create_inference_graph(iterator,is_training)
+    label_pred_ops=create_inference_graph(os_iterator,is_training)
     #Initializing the result array
     results=None
+    labels=None
+
+    #Starting the saver to load the checkpoints
+    saver=tf.train.Saver()
 
     with tf.Session() as sess:
         #Directily initializing the variables with the checkpoint file
         checkpoint_path=checkpoint_filename+'model.ckpt-{}'.format(
                                                 checkpoint_epoch_number)
         #Restoring with the saver
+        print 'Restoring Model'
         saver.restore(sess,checkpoint_path)
 
         #Now running the inference
@@ -134,14 +145,21 @@ def infer(test_image_filename_list,test_label_filename_list,
             #Iterating till the one-shot-iterator get exhausted
             try:
                 print 'Making inference for the batch: {}'.format(bno)
-                bno+=1
                 #running the inference op (phase: testing automatically given)
+                t0=datetime.datetime.now()
                 infer_results=sess.run(label_pred_ops)
-                if results==None:
-                    results=infer_results
+                [(Y1,Z1),(Y2,Z2)]=infer_results
+                if bno==1:
+                    labels=np.concatenate((Y1,Y2),axis=0)
+                    results=np.concatenate((Z1,Z2),axis=0)
                 else:
                     #Joining the results along the batch axis to make one big result
-                    results=np.concatenate((results,infer_results),axis=0)
+                    labels=np.concatenate((labels,Y1,Y2),axis=0)
+                    results=np.concatenate((results,Z1,Z2),axis=0)
+                t1=datetime.datetime.now()
+                print 'Results shape: ',results.shape,labels.shape
+                print 'Inference for batch completed in: ',t1-t0
+                bno+=1
 
             except tf.errors.OutOfRangeError:
                 print 'Inference of Test Dataset Complete'
@@ -177,4 +195,3 @@ if __name__=='__main__':
         test_label_filename_list,
         mini_batch_size=10,
         checkpoint_epoch_number=30)
-    
