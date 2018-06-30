@@ -2,6 +2,7 @@ import tensorflow as tf
 from tensorflow.python.client import device_lib
 import numpy as np
 import datetime
+import os
 from io_pipeline import parse_tfrecords_file_inference
 
 
@@ -13,8 +14,13 @@ model_function_handle=model2
 #default directory path for datasets
 local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
 #Checkpoint file path
-run_number=14
+run_number=13
 checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
+#Directory to save the prediction in compressed numpy format
+prediction_basepath='tmp/hgcal/{}/predictions/'.format(run_number)
+if not os.path.exists(prediction_basepath):
+    os.mkdir(prediction_basepath)
+
 
 
 ################# HELPER FUNCTIONS #####################
@@ -171,15 +177,14 @@ def infer(test_image_filename_list,test_label_filename_list,
                 print 'Inference of Test Dataset Complete'
                 break
 
-    #Now Plotting the results and other furthur visualization of results
-    #plot_results_visualization(results)
+    #Saving the numpy array in compresed format
+    print 'Saving the prediction in ',prediction_basepath
+    prediction_filename=prediction_basepath+'pred'
+    np.savez_compressed(prediction_filename,
+                        results=results,
+                        labels=labels)
 
-def plot_results_visualization(results):
-    '''
-    DESCRIPTION:
-        This function will visualize the results by plotting:
-        1.Prediction
-    '''
+
 
 if __name__=='__main__':
     import optparse
