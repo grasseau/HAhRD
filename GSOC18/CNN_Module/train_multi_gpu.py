@@ -348,7 +348,7 @@ def train(epochs,mini_batch_size,buffer_size,
                     break
 
             #Also save the checkpoints (after two every epoch)
-            if i%2==0:
+            if i%10==0:
                 checkpoint_path=checkpoint_filename+'model.ckpt'
                 saver.save(sess,checkpoint_path,global_step=i)
 
