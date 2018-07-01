@@ -14,7 +14,7 @@ model_function_handle=model2
 #default directory path for datasets
 local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
 #Checkpoint file path
-run_number=13
+run_number=14
 checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
 #Directory to save the prediction in compressed numpy format
 results_basepath='tmp/hgcal/{}/results/'.format(run_number)
