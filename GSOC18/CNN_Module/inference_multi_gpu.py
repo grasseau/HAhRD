@@ -9,7 +9,7 @@ from io_pipeline import parse_tfrecords_file_inference
 ################# GLOBAL VARIABLES #####################
 #Getting the model handle
 from model1_definition import model2
-from model1_definition import calculate_total_loss
+from model1_definition import calculate_total_loss,calculate_model_accuracy
 model_function_handle=model2
 #default directory path for datasets
 local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
@@ -75,6 +75,7 @@ def create_inference_graph(iterator,is_training):
     all_gpu_name=_get_available_gpus()
     num_gpus=len(all_gpu_name)
     label_pred_ops=[]
+    accuracy_ops=[]
 
     with tf.variable_scope(tf.get_variable_scope()):
         #Launching the graph one by one on each device
@@ -90,18 +91,20 @@ def create_inference_graph(iterator,is_training):
                     #Now,making the prediction using the model
                     Z=model_function_handle(X,is_training)
                     total_cost=calculate_total_loss(Z,Y,tower_scope)
+                    accuracy_tuple=calculate_model_accuracy(Z,Y)
 
                     #Appending the label and prediction with loss for verification
                     label_pred_ops.append((Y,Z,total_cost))
+                    accuracy_ops.append(accuracy_tuple)
 
                     #Making the varible resuse in this variable scope
                     #i.e ultimately having a master copy of variable on cpu
                     tf.get_variable_scope().reuse_variables()
 
-    return label_pred_ops
+    return label_pred_ops,accuracy_ops
 
 def infer(test_image_filename_list,test_label_filename_list,
-            mini_batch_size,checkpoint_epoch_number):
+            mode,mini_batch_size,checkpoint_epoch_number):
     '''
     DESCRIPTION:
         This function will now control the whole inference process
@@ -117,6 +120,9 @@ def infer(test_image_filename_list,test_label_filename_list,
                                         of the test "images".
             test_label_filename_list : the filename list for the tfrecords
                                         of the test labels
+            mode                     : to specify whether we are infering
+                                        on valid/train mode. (will be used
+                                        just for naming purpose)
             mini_batch_size          : the size of image to process parallely
             checkpoint_epoch_number  : the checkpoint number of the file
                                         saved at that epoch
@@ -132,10 +138,11 @@ def infer(test_image_filename_list,test_label_filename_list,
                                                 mini_batch_size)
 
     #Creating the graph for inference
-    label_pred_ops=create_inference_graph(os_iterator,is_training)
+    label_pred_ops,accuracy_ops=create_inference_graph(os_iterator,is_training)
     #Initializing the result array
     predictions=None
     labels=None
+    accuracies=None
 
     #Starting the saver to load the checkpoints
     saver=tf.train.Saver()
@@ -159,17 +166,35 @@ def infer(test_image_filename_list,test_label_filename_list,
                 #running the inference op (phase: testing automatically given)
                 t0=datetime.datetime.now()
                 infer_results=sess.run(label_pred_ops)
+                error_results=sess.run(accuracy_ops)
+
+                #Taking out the results (we have to use *zip to make it correct for
+                #variable number of GPUs. Fix it later)
                 [(Y1,Z1,l1),(Y2,Z2,l2)]=infer_results
+                [acc_tup1,acc_tup2]=error_results
+
+                #Making appropriate arrays from the resluts of ops
                 if bno==1:
+                    #making the label-prediction array
                     labels=np.concatenate((Y1,Y2),axis=0)
                     predictions=np.concatenate((Z1,Z2),axis=0)
+                    #making the accuracy array
+                    acc_arr1=np.reshape(np.array(acc_tup1),(1,-1))
+                    acc_arr2=np.reshape(np.array(acc_tup2),(1,-1))
+                    accuracies=np.concatenate((acc_arr1,acc_arr2),axis=0)
                 else:
                     #Joining the predictions along the batch axis to make one big result
                     labels=np.concatenate((labels,Y1,Y2),axis=0)
                     predictions=np.concatenate((predictions,Z1,Z2),axis=0)
+                    #Appending the results to the accuracy array
+                    acc_arr1=np.reshape(np.array(acc_tup1),(1,-1))
+                    acc_arr2=np.reshape(np.array(acc_tup2),(1,-1))
+                    accuracies=np.concatenate((accuracies,acc_arr1,acc_arr2),axis=0)
+
                 t1=datetime.datetime.now()
                 print 'loss of this minibatch: ',l1,l2
                 print 'predictions shape: ',predictions.shape,labels.shape
+                print 'accuracies shape: ',accuracies.shape
                 print 'Inference for batch completed in: ',t1-t0,'\n'
                 bno+=1
 
@@ -183,6 +208,10 @@ def infer(test_image_filename_list,test_label_filename_list,
     np.savez_compressed(results_filename,
                         predictions=predictions,
                         labels=labels)
+
+    #Printing the Error/Accracies collected in accuracies variable
+    average_accuracies=np.mean(accuracies,axis=0)
+    print 'Error/Accuracies in order:\n ',average_accuracies
 
 
 
@@ -198,11 +227,25 @@ if __name__=='__main__':
     if local_directory_path[-1] != '/':
         local_directory_path=local_directory_path+'/'
 
+    #Making the prediction on the Training Set
+    #Setting up the train data directory
+    train_image_filename_list=[local_directory_path+'image0batchsize1000zside0.tfrecords']
+    train_label_filename_list=[local_directory_path+'label0batchsize1000.tfrecords']
+    #Making inference
+    infer(train_image_filename_list,
+            train_label_filename_list,
+            mode='train',
+            mini_batch_size=10,
+            checkpoint_epoch_number=30)
+
+
+    #Making the prediction on Test Set
     #Setting the name of the test data directory
     test_image_filename_list=[local_directory_path+'image1000batchsize1000zside0.tfrecords']
     test_label_filename_list=[local_directory_path+'label1000batchsize1000.tfrecords']
 
     infer(test_image_filename_list,
         test_label_filename_list,
+        mode='valid',
         mini_batch_size=10,
         checkpoint_epoch_number=30)
