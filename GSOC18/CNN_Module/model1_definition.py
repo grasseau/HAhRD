@@ -116,7 +116,7 @@ def calculate_total_loss(Z,Y,scope=None):
 
         #Calculating the x-entropy loss(scalar)
         regression_len=3
-        class_output=Z[:,regression_len:]#3,4,....
+        class_output=Z[:,1:]#3,4,....
         class_label=Y[:,regression_len:]#TRUTH
         categorical_loss=tf.losses.softmax_cross_entropy(class_label,
                                                         class_output)
@@ -417,7 +417,7 @@ def model2(X,is_training):
     #Finally the prediction/output layer
     Z7=simple_fully_connected(A6,
                                 name='fc2',
-                                output_dim=1,
+                                output_dim=3,
                                 is_training=is_training,
                                 dropout_rate=dropout_rate,
                                 apply_batchnorm=False,
