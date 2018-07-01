@@ -48,7 +48,7 @@ def calculate_model_accuracy(Z,Y):
 
         #Calculation of Classification error
         regression_len=3
-        prediction=tf.argmax(Z[:,regression_len:],axis=1)
+        prediction=tf.argmax(Z[:,1:],axis=1)
         label=tf.argmax(Y[:,regression_len:],axis=1)
 
         correct=tf.equal(prediction,label)
