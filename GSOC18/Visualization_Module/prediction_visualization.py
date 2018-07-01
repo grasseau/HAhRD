@@ -1,5 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
+#Adding full screen support based on answer on Stack Overflow
+#https://stackoverflow.com/questions/32428193/
+    #saving-matplotlib-graphs-to-image-as-full-screen?
+    #noredirect=1&lq=1
+# manager = plt.get_current_fig_manager()
+# manager.resize(*manager.window.maxsize())
 
 def load_data(filename):
     '''
@@ -43,6 +49,7 @@ def plot_histogram(predictions,labels):
     plt.xlabel('Energy Error')
     plt.ylabel('Counts (out of total {} test samples)'.format(labels.shape[0]))
     plt.show()
+    #plt.savefig('energy_hist.png',bbox_inches='tight')
     plt.close()
     #Error histogram in Eta prediction
     plt.hist(predictions[:,1]-labels[:,1],ec='k',alpha=0.7,bins=100)
