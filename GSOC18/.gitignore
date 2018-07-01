@@ -7,3 +7,7 @@ tmp
 datacifar
 *.tfrecords
 *.html
+*.npz
+*.png
+*.jpg
+*.jpeg
