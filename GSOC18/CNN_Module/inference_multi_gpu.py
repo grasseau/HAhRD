@@ -154,7 +154,7 @@ def infer(test_image_filename_list,test_label_filename_list,
         checkpoint_path=checkpoint_filename+'model.ckpt-{}'.format(
                                                 checkpoint_epoch_number)
         #Restoring with the saver
-        print 'Restoring Model'
+        print '>>>> Restoring Model from saved checkpoint at: ',checkpoint_path
         saver.restore(sess,checkpoint_path)
 
         #Now running the inference
@@ -162,7 +162,7 @@ def infer(test_image_filename_list,test_label_filename_list,
         while True:
             #Iterating till the one-shot-iterator get exhausted
             try:
-                print 'Making inference for the batch: {}'.format(bno)
+                print '>>>Making inference for the batch: {}'.format(bno)
                 #running the inference op (phase: testing automatically given)
                 t0=datetime.datetime.now()
                 #Running both inference and accuracy in one run. (IMPORTANT)
@@ -183,8 +183,8 @@ def infer(test_image_filename_list,test_label_filename_list,
                     accuracies=np.concatenate(accuracy_results,axis=0)
                 else:
                     #Joining the predictions along the batch axis to make one big result
-                    labels=np.concatenate((labels,tower_labels),axis=0)
-                    predictions=np.concatenate((predictions,tower_predictions),axis=0)
+                    labels=np.concatenate([labels]+list(tower_labels),axis=0)
+                    predictions=np.concatenate([predictions]+list(tower_predictions),axis=0)
                     #Concatenating the accuracy results to the accuracy array
                     accuracies=np.concatenate([accuracies]+accuracy_results,axis=0)
 
@@ -196,11 +196,11 @@ def infer(test_image_filename_list,test_label_filename_list,
                 bno+=1
 
             except tf.errors.OutOfRangeError:
-                print 'Inference of Test Dataset Complete'
+                print '>>>>Inference of Test Dataset Complete'
                 break
 
     #Saving the numpy array in compresed format
-    print 'Saving the prediction in ',results_basepath
+    print '>>>>Saving the prediction in ',results_basepath
     results_filename=results_basepath+'results_mode_{}'.format(inference_mode)
     np.savez_compressed(results_filename,
                         predictions=predictions,
@@ -208,7 +208,7 @@ def infer(test_image_filename_list,test_label_filename_list,
 
     #Printing the Error/Accracies collected in accuracies variable
     average_accuracies=np.mean(accuracies,axis=0)
-    print 'Error/Accuracies in order:\n ',average_accuracies
+    print '>>>>Error/Accuracies in order:\n\n\n ',average_accuracies
 
 
 
@@ -236,6 +236,7 @@ if __name__=='__main__':
             checkpoint_epoch_number=30)
 
     #Now resetting the tf graph to make a new infrence on test image dataset
+    print '>>>>>Resetting the default graph\n\n'
     tf.reset_default_graph()
 
     #Making the prediction on Test Set
