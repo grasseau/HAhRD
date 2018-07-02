@@ -55,7 +55,12 @@ def calculate_model_accuracy(Z,Y):
         classification_accuracy=tf.reduce_mean(tf.cast(correct,'float'))*100
         tf.summary.scalar('percentage_classification_accuracy',classification_accuracy)
 
-    return None,classification_accuracy
+    #Returning the accuracy tuple to be used in inference module
+    accuracy_tuple=(energy_error,
+                    eta_error,
+                    phi_error,
+                    classification_accuracy)
+    return accuracy_tuple
 
 
 def calculate_total_loss(Z,Y,scope=None):

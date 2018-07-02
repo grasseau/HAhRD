@@ -9,7 +9,7 @@ from io_pipeline import parse_tfrecords_file_inference
 ################# GLOBAL VARIABLES #####################
 #Getting the model handle
 from model1_definition import model2
-from model1_definition import calculate_total_loss
+from model1_definition import calculate_total_loss,calculate_model_accuracy
 model_function_handle=model2
 #default directory path for datasets
 local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
@@ -75,6 +75,7 @@ def create_inference_graph(iterator,is_training):
     all_gpu_name=_get_available_gpus()
     num_gpus=len(all_gpu_name)
     label_pred_ops=[]
+    accuracy_ops=[]
 
     with tf.variable_scope(tf.get_variable_scope()):
         #Launching the graph one by one on each device
@@ -90,18 +91,20 @@ def create_inference_graph(iterator,is_training):
                     #Now,making the prediction using the model
                     Z=model_function_handle(X,is_training)
                     total_cost=calculate_total_loss(Z,Y,tower_scope)
+                    accuracy_tuple=calculate_model_accuracy(Z,Y)
 
                     #Appending the label and prediction with loss for verification
                     label_pred_ops.append((Y,Z,total_cost))
+                    accuracy_ops.append(accuracy_tuple)
 
                     #Making the varible resuse in this variable scope
                     #i.e ultimately having a master copy of variable on cpu
                     tf.get_variable_scope().reuse_variables()
 
-    return label_pred_ops
+    return label_pred_ops,accuracy_ops
 
 def infer(test_image_filename_list,test_label_filename_list,
-            mini_batch_size,checkpoint_epoch_number):
+            inference_mode,mini_batch_size,checkpoint_epoch_number):
     '''
     DESCRIPTION:
         This function will now control the whole inference process
@@ -117,6 +120,9 @@ def infer(test_image_filename_list,test_label_filename_list,
                                         of the test "images".
             test_label_filename_list : the filename list for the tfrecords
                                         of the test labels
+            inference_mode           : to specify whether we are infering
+                                        on valid/train mode. (will be used
+                                        just for naming purpose)
             mini_batch_size          : the size of image to process parallely
             checkpoint_epoch_number  : the checkpoint number of the file
                                         saved at that epoch
@@ -132,10 +138,11 @@ def infer(test_image_filename_list,test_label_filename_list,
                                                 mini_batch_size)
 
     #Creating the graph for inference
-    label_pred_ops=create_inference_graph(os_iterator,is_training)
+    label_pred_ops,accuracy_ops=create_inference_graph(os_iterator,is_training)
     #Initializing the result array
     predictions=None
     labels=None
+    accuracies=None
 
     #Starting the saver to load the checkpoints
     saver=tf.train.Saver()
@@ -147,7 +154,7 @@ def infer(test_image_filename_list,test_label_filename_list,
         checkpoint_path=checkpoint_filename+'model.ckpt-{}'.format(
                                                 checkpoint_epoch_number)
         #Restoring with the saver
-        print 'Restoring Model'
+        print '>>>> Restoring Model from saved checkpoint at: ',checkpoint_path
         saver.restore(sess,checkpoint_path)
 
         #Now running the inference
@@ -155,34 +162,53 @@ def infer(test_image_filename_list,test_label_filename_list,
         while True:
             #Iterating till the one-shot-iterator get exhausted
             try:
-                print 'Making inference for the batch: {}'.format(bno)
+                print '\n\n>>>Making inference for the batch: {}'.format(bno)
                 #running the inference op (phase: testing automatically given)
                 t0=datetime.datetime.now()
-                infer_results=sess.run(label_pred_ops)
-                [(Y1,Z1,l1),(Y2,Z2,l2)]=infer_results
+                #Running both inference and accuracy in one run. (IMPORTANT)
+                infer_results,accuracy_results=sess.run([label_pred_ops,accuracy_ops])
+
+                #Unzipping the target,prediction and losses of each tower
+                tower_labels,tower_predictions,tower_losses=zip(*infer_results)
+                #Converting the accuracies tuples of all the tower into numpy array
+                accuracy_results=[np.reshape(np.array(ac_tup),(1,-1))
+                                        for ac_tup in accuracy_results]
+
+                #Making appropriate arrays from the resluts of ops
                 if bno==1:
-                    labels=np.concatenate((Y1,Y2),axis=0)
-                    predictions=np.concatenate((Z1,Z2),axis=0)
+                    #making the label-prediction array
+                    labels=np.concatenate(tower_labels,axis=0)
+                    predictions=np.concatenate(tower_predictions,axis=0)
+                    #Concatenating the accuracies in one row
+                    accuracies=np.concatenate(accuracy_results,axis=0)
                 else:
                     #Joining the predictions along the batch axis to make one big result
-                    labels=np.concatenate((labels,Y1,Y2),axis=0)
-                    predictions=np.concatenate((predictions,Z1,Z2),axis=0)
+                    labels=np.concatenate([labels]+list(tower_labels),axis=0)
+                    predictions=np.concatenate([predictions]+list(tower_predictions),axis=0)
+                    #Concatenating the accuracy results to the accuracy array
+                    accuracies=np.concatenate([accuracies]+accuracy_results,axis=0)
+
                 t1=datetime.datetime.now()
-                print 'loss of this minibatch: ',l1,l2
+                print 'loss of this minibatch: ',tower_losses
                 print 'predictions shape: ',predictions.shape,labels.shape
+                print 'accuracies shape: ',accuracies.shape
                 print 'Inference for batch completed in: ',t1-t0,'\n'
                 bno+=1
 
             except tf.errors.OutOfRangeError:
-                print 'Inference of Test Dataset Complete'
+                print '>>>>Inference of Test Dataset Complete'
                 break
 
     #Saving the numpy array in compresed format
-    print 'Saving the prediction in ',results_basepath
-    results_filename=results_basepath+'results'
+    print '>>>>Saving the prediction in ',results_basepath
+    results_filename=results_basepath+'results_mode_{}'.format(inference_mode)
     np.savez_compressed(results_filename,
                         predictions=predictions,
                         labels=labels)
+
+    #Printing the Error/Accracies collected in accuracies variable
+    average_accuracies=np.mean(accuracies,axis=0)
+    print '>>>>Error/Accuracies in order:\n\n\n ',average_accuracies
 
 
 
@@ -198,11 +224,28 @@ if __name__=='__main__':
     if local_directory_path[-1] != '/':
         local_directory_path=local_directory_path+'/'
 
+    #Making the prediction on the Training Set
+    #Setting up the train data directory
+    train_image_filename_list=[local_directory_path+'image0batchsize1000zside0.tfrecords']
+    train_label_filename_list=[local_directory_path+'label0batchsize1000.tfrecords']
+    #Making inference
+    infer(train_image_filename_list,
+            train_label_filename_list,
+            inference_mode='train',
+            mini_batch_size=10,
+            checkpoint_epoch_number=30)
+
+    #Now resetting the tf graph to make a new infrence on test image dataset
+    print '>>>>>Resetting the default graph\n\n'
+    tf.reset_default_graph()
+
+    #Making the prediction on Test Set
     #Setting the name of the test data directory
     test_image_filename_list=[local_directory_path+'image1000batchsize1000zside0.tfrecords']
     test_label_filename_list=[local_directory_path+'label1000batchsize1000.tfrecords']
 
     infer(test_image_filename_list,
         test_label_filename_list,
+        inference_mode='valid',
         mini_batch_size=10,
         checkpoint_epoch_number=30)
