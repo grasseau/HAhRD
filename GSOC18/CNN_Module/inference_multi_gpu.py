@@ -8,9 +8,9 @@ from io_pipeline import parse_tfrecords_file_inference
 
 ################# GLOBAL VARIABLES #####################
 #Getting the model handle
-from model1_definition import model2
-from model1_definition import calculate_total_loss,calculate_model_accuracy
-model_function_handle=model2
+from model3_definition import model3
+from model3_definition import calculate_total_loss,calculate_model_accuracy
+model_function_handle=model3
 #default directory path for datasets
 local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
 #Checkpoint file path
