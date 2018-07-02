@@ -104,7 +104,7 @@ def create_inference_graph(iterator,is_training):
     return label_pred_ops,accuracy_ops
 
 def infer(test_image_filename_list,test_label_filename_list,
-            mode,mini_batch_size,checkpoint_epoch_number):
+            inference_mode,mini_batch_size,checkpoint_epoch_number):
     '''
     DESCRIPTION:
         This function will now control the whole inference process
@@ -120,7 +120,7 @@ def infer(test_image_filename_list,test_label_filename_list,
                                         of the test "images".
             test_label_filename_list : the filename list for the tfrecords
                                         of the test labels
-            mode                     : to specify whether we are infering
+            inference_mode           : to specify whether we are infering
                                         on valid/train mode. (will be used
                                         just for naming purpose)
             mini_batch_size          : the size of image to process parallely
@@ -165,34 +165,31 @@ def infer(test_image_filename_list,test_label_filename_list,
                 print 'Making inference for the batch: {}'.format(bno)
                 #running the inference op (phase: testing automatically given)
                 t0=datetime.datetime.now()
-                infer_results=sess.run(label_pred_ops)
-                error_results=sess.run(accuracy_ops)
+                #Running both inference and accuracy in one run. (IMPORTANT)
+                infer_results,accuracy_results=sess.run([label_pred_ops,accuracy_ops])
 
-                #Taking out the results (we have to use *zip to make it correct for
-                #variable number of GPUs. Fix it later)
-                [(Y1,Z1,l1),(Y2,Z2,l2)]=infer_results
-                [acc_tup1,acc_tup2]=error_results
+                #Unzipping the target,prediction and losses of each tower
+                tower_labels,tower_predictions,tower_losses=zip(*infer_results)
+                #Converting the accuracies tuples of all the tower into numpy array
+                accuracy_results=[np.reshape(np.array(ac_tup),(1,-1))
+                                        for ac_tup in accuracy_results]
 
                 #Making appropriate arrays from the resluts of ops
                 if bno==1:
                     #making the label-prediction array
-                    labels=np.concatenate((Y1,Y2),axis=0)
-                    predictions=np.concatenate((Z1,Z2),axis=0)
-                    #making the accuracy array
-                    acc_arr1=np.reshape(np.array(acc_tup1),(1,-1))
-                    acc_arr2=np.reshape(np.array(acc_tup2),(1,-1))
-                    accuracies=np.concatenate((acc_arr1,acc_arr2),axis=0)
+                    labels=np.concatenate(tower_labels,axis=0)
+                    predictions=np.concatenate(tower_predictions,axis=0)
+                    #Concatenating the accuracies in one row
+                    accuracies=np.concatenate(accuracy_results,axis=0)
                 else:
                     #Joining the predictions along the batch axis to make one big result
-                    labels=np.concatenate((labels,Y1,Y2),axis=0)
-                    predictions=np.concatenate((predictions,Z1,Z2),axis=0)
-                    #Appending the results to the accuracy array
-                    acc_arr1=np.reshape(np.array(acc_tup1),(1,-1))
-                    acc_arr2=np.reshape(np.array(acc_tup2),(1,-1))
-                    accuracies=np.concatenate((accuracies,acc_arr1,acc_arr2),axis=0)
+                    labels=np.concatenate((labels,tower_labels),axis=0)
+                    predictions=np.concatenate((predictions,tower_predictions),axis=0)
+                    #Concatenating the accuracy results to the accuracy array
+                    accuracies=np.concatenate([accuracies]+accuracy_results,axis=0)
 
                 t1=datetime.datetime.now()
-                print 'loss of this minibatch: ',l1,l2
+                print 'loss of this minibatch: ',tower_losses
                 print 'predictions shape: ',predictions.shape,labels.shape
                 print 'accuracies shape: ',accuracies.shape
                 print 'Inference for batch completed in: ',t1-t0,'\n'
@@ -204,7 +201,7 @@ def infer(test_image_filename_list,test_label_filename_list,
 
     #Saving the numpy array in compresed format
     print 'Saving the prediction in ',results_basepath
-    results_filename=results_basepath+'results'
+    results_filename=results_basepath+'results_mode_{}'.format(inference_mode)
     np.savez_compressed(results_filename,
                         predictions=predictions,
                         labels=labels)
@@ -234,10 +231,12 @@ if __name__=='__main__':
     #Making inference
     infer(train_image_filename_list,
             train_label_filename_list,
-            mode='train',
+            inference_mode='train',
             mini_batch_size=10,
             checkpoint_epoch_number=30)
 
+    #Now resetting the tf graph to make a new infrence on test image dataset
+    tf.reset_default_graph()
 
     #Making the prediction on Test Set
     #Setting the name of the test data directory
@@ -246,6 +245,6 @@ if __name__=='__main__':
 
     infer(test_image_filename_list,
         test_label_filename_list,
-        mode='valid',
+        inference_mode='valid',
         mini_batch_size=10,
         checkpoint_epoch_number=30)
