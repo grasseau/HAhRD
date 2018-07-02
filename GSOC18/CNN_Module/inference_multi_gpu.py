@@ -162,7 +162,7 @@ def infer(test_image_filename_list,test_label_filename_list,
         while True:
             #Iterating till the one-shot-iterator get exhausted
             try:
-                print '>>>Making inference for the batch: {}'.format(bno)
+                print '\n\n>>>Making inference for the batch: {}'.format(bno)
                 #running the inference op (phase: testing automatically given)
                 t0=datetime.datetime.now()
                 #Running both inference and accuracy in one run. (IMPORTANT)

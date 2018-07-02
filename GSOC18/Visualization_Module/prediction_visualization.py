@@ -44,8 +44,9 @@ def plot_histogram(predictions,labels):
     labels=labels[perm,:]
 
     #Plotting the error histogram in Energy
-    plt.hist(predictions[:,0]-labels[:,0],ec='k',alpha=0.7,bins=100)
-    plt.title('Energy Error Histogram: [prediction-labels] ')
+    plt.hist(((predictions[:,0]-labels[:,0])/labels[:,0])*100,
+                    ec='k',alpha=0.7,bins=100)
+    plt.title('Energy Percentage Error Histogram: [(prediction-labels)/labels*100] ')
     plt.xlabel('Energy Error')
     plt.ylabel('Counts (out of total {} test samples)'.format(labels.shape[0]))
     plt.show()
@@ -85,11 +86,12 @@ def plot_histogram(predictions,labels):
     ax1.set_title('Bar Graph: Prediction and Label overlayed')
     #Plotting the corresponding difference
     ax2=fig.add_subplot(212)
-    ax2.bar(x,predictions[:,0]-labels[:,0],alpha=0.7,color='r',label='Error')
+    ax2.bar(x,((predictions[:,0]-labels[:,0])/labels[:,0])*100,
+                        alpha=0.7,color='r',label='Error')
     ax2.set_xlabel('Same random Sample as above')
-    ax2.set_ylabel('Error')
+    ax2.set_ylabel('Percentage Error')
     ax2.legend()
-    ax2.set_title('Prediction-Label')
+    ax2.set_title('(Prediction-Label)/Label*100')
     plt.show()
     plt.close()
 
@@ -140,7 +142,7 @@ def plot_histogram(predictions,labels):
 
 if __name__=='__main__':
     #Loading the prediction and label data
-    filename='results.npz'
+    filename='results_mode_valid.npz'
     data=load_data(filename)
     predictions=data['predictions']
     labels=data['labels']
