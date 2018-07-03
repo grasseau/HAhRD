@@ -8,14 +8,14 @@ from tensorflow.python.client import device_lib
 from io_pipeline import parse_tfrecords_file
 # from test import make_model_conv,make_model_conv3d,make_model_linear
 # from test import calculate_model_accuracy,calculate_total_loss
-from model3_definition import model3
-from model3_definition import calculate_model_accuracy
-from model3_definition import calculate_total_loss
+from model1_definition import model4
+from model1_definition import calculate_model_accuracy
+from model1_definition import calculate_total_loss
 
 
 ################## GLOBAL VARIABLES #######################
 local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
-run_number=16                            #for saving the summaries
+run_number=17                            #for saving the summaries
 train_summary_filename='tmp/hgcal/%s/train/'%(run_number) #for training set
 test_summary_filename='tmp/hgcal/%s/valid/'%(run_number)  #For validation set
 if os.path.exists(train_summary_filename):
@@ -23,7 +23,7 @@ if os.path.exists(train_summary_filename):
     os.system('rm -rf ./'+test_summary_filename)
 
 checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
-model_function_handle=model3
+model_function_handle=model4
 
 ################# HELPER FUNCTIONS ########################
 def _add_summary(object):
