@@ -43,6 +43,21 @@ def variance_aggregate_function(bin_values):
 
     return std  #scalar values
 
+def get_rms(bin_values):
+    '''
+    DESCRIPTION:
+        This function will be used as an aggregation function to calculate
+        the bin statistics to get the RMS value of that bin
+    '''
+    #Returning the nan values if the array is empty
+    if bin_values.shape[0]==0:
+        return np.nan
+
+    #Calculating the RMS value
+    rms=np.power(np.mean(np.power(bin_values,2)),0.5)
+
+    return rms  #scalar values
+
 
 def plot_histogram(predictions,labels):
     '''
@@ -74,29 +89,29 @@ def plot_histogram(predictions,labels):
     ax1.set_xlabel('Relative Energy Error')
     ax1.set_ylabel('Counts (out of total {} test samples)'.format(labels.shape[0]))
     #Plotting the Profile-Histogram for the Energy Prediction
-    #Specifying the data (relative) to bin over
+    #Specifying the data (Energy) to bin over
     ax2=fig.add_subplot(122)
-    x=((predictions[:,0]-labels[:,0])/labels[:,0])
+    x=labels[:,0]
     #Specifying the values to calculate the statistics on, in that bin
-    values=labels[:,0]
+    values=((predictions[:,0]-labels[:,0])/labels[:,0])
     #Calculating the bin statistics
     mean,bin_edges,_=stats.binned_statistic(x,values,
                                                     statistic='mean',
                                                     bins=bins)
-    std,_,_=stats.binned_statistic(x,values,
-                                        statistic=variance_aggregate_function,
+    rms,_,_=stats.binned_statistic(x,values,
+                                        statistic=get_rms,
                                         bins=bins)
     #Now calculating the midpoint of the bins to plot the profile
     bin_length=bin_edges[1]-bin_edges[0]
     midpoints=bin_edges[1:]-bin_length
     #now plotting the bin_statistics at the midpoints
-    print mean
-    print std
-    ax2.errorbar(midpoints,mean,yerr=std,fmt='b.-',
+    # print mean
+    # print std
+    ax2.errorbar(midpoints,mean,yerr=rms,fmt='b.-',
                 mfc='r',mec='r',ecolor='y')
     ax2.set_title('Profile Histogram')
-    ax2.set_xlabel('Relative Energy Error')
-    ax2.set_ylabel('Mean  Value of Labels (in bins)')
+    ax2.set_xlabel('Energy of Examples')
+    ax2.set_ylabel('Mean Value of Relative Error (in bins)')
     plt.show()
     #plt.savefig('energy_hist.png',bbox_inches='tight')
     plt.close()
