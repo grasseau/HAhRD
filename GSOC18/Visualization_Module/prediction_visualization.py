@@ -1,5 +1,7 @@
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
+from scipy import stats
 #Adding full screen support based on answer on Stack Overflow
 #https://stackoverflow.com/questions/32428193/
     #saving-matplotlib-graphs-to-image-as-full-screen?
@@ -25,6 +27,23 @@ def load_data(filename):
     data=np.load(filename)
     return data
 
+def variance_aggregate_function(bin_values):
+    '''
+    DESCRIPTION:
+        This function is an aggregation function of the values present
+        in the bins to calculate the standard deviation of the labels
+        in the specific bins
+    '''
+    #Returning the nan values if the array is empty
+    if bin_values.shape[0]==0:
+        return np.nan
+
+    #Calculating the aggregate value with degree of freedom=0
+    std=np.std(bin_values,ddof=0)
+
+    return std  #scalar values
+
+
 def plot_histogram(predictions,labels):
     '''
     DESCRIPTION:
@@ -42,25 +61,54 @@ def plot_histogram(predictions,labels):
     #Shuffling the array based on above permutation
     predictions=predictions[perm,:]
     labels=labels[perm,:]
-
-    #Plotting the error histogram in Energy
-    plt.hist(((predictions[:,0]-labels[:,0])/labels[:,0])*100,
-                    ec='k',alpha=0.7,bins=100)
-    plt.title('Energy Percentage Error Histogram: [(prediction-labels)/labels*100] ')
-    plt.xlabel('Energy Error')
-    plt.ylabel('Counts (out of total {} test samples)'.format(labels.shape[0]))
+    #Specifying the number of bins
+    bins=50
+    #Plotting the Histogram in Energy
+    fig=plt.figure()
+    fig.suptitle('Relative Error Histogram and Profile Histogram: Energy')
+    #plotting the Relative Error Histogram
+    ax1=fig.add_subplot(121)
+    ax1.hist(((predictions[:,0]-labels[:,0])/labels[:,0]),
+                    ec='k',alpha=0.7,bins=bins)
+    ax1.set_title('Relative Energy Error Histogram: [(prediction-labels)/labels] ')
+    ax1.set_xlabel('Relative Energy Error')
+    ax1.set_ylabel('Counts (out of total {} test samples)'.format(labels.shape[0]))
+    #Plotting the Profile-Histogram for the Energy Prediction
+    #Specifying the data (relative) to bin over
+    ax2=fig.add_subplot(122)
+    x=((predictions[:,0]-labels[:,0])/labels[:,0])
+    #Specifying the values to calculate the statistics on, in that bin
+    values=labels[:,0]
+    #Calculating the bin statistics
+    mean,bin_edges,_=stats.binned_statistic(x,values,
+                                                    statistic='mean',
+                                                    bins=bins)
+    std,_,_=stats.binned_statistic(x,values,
+                                        statistic=variance_aggregate_function,
+                                        bins=bins)
+    #Now calculating the midpoint of the bins to plot the profile
+    bin_length=bin_edges[1]-bin_edges[0]
+    midpoints=bin_edges[1:]-bin_length
+    #now plotting the bin_statistics at the midpoints
+    print mean
+    print std
+    ax2.errorbar(midpoints,mean,yerr=std,fmt='b.-',
+                mfc='r',mec='r',ecolor='y')
+    ax2.set_title('Profile Histogram')
+    ax2.set_xlabel('Relative Energy Error')
+    ax2.set_ylabel('Mean  Value of Labels (in bins)')
     plt.show()
     #plt.savefig('energy_hist.png',bbox_inches='tight')
     plt.close()
     #Error histogram in Eta prediction
-    plt.hist(predictions[:,1]-labels[:,1],ec='k',alpha=0.7,bins=100)
+    plt.hist(predictions[:,1]-labels[:,1],ec='k',alpha=0.7,bins=bins)
     plt.title('Eta Error Histogram: [prediction-labels] ')
     plt.xlabel('Eta Error')
     plt.ylabel('Counts (out of total {} test samples)'.format(labels.shape[0]))
     plt.show()
     plt.close()
     #Error histogram in Phi prediction
-    plt.hist(predictions[:,2]-labels[:,2],ec='k',alpha=0.7,bins=100)
+    plt.hist(predictions[:,2]-labels[:,2],ec='k',alpha=0.7,bins=bins)
     plt.title('Phi Error Histogram: [prediction-labels] ')
     plt.xlabel('Phi Error')
     plt.ylabel('Counts (out of total {} test samples)'.format(labels.shape[0]))
@@ -86,12 +134,12 @@ def plot_histogram(predictions,labels):
     ax1.set_title('Bar Graph: Prediction and Label overlayed')
     #Plotting the corresponding difference
     ax2=fig.add_subplot(212)
-    ax2.bar(x,((predictions[:,0]-labels[:,0])/labels[:,0])*100,
+    ax2.bar(x,((predictions[:,0]-labels[:,0])/labels[:,0]),
                         alpha=0.7,color='r',label='Error')
     ax2.set_xlabel('Same random Sample as above')
     ax2.set_ylabel('Percentage Error')
     ax2.legend()
-    ax2.set_title('(Prediction-Label)/Label*100')
+    ax2.set_title('(Prediction-Label)/Label')
     plt.show()
     plt.close()
 
