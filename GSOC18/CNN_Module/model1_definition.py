@@ -702,4 +702,3 @@ def model5(X,is_training):
                                 flatten_first=False, #default
                                 apply_relu=False)#unnormalized
     return Z7
-    
