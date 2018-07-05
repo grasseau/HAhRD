@@ -569,3 +569,137 @@ def model4(X,is_training):
                                 apply_relu=False)#unnormalized
 
     return Z7
+
+def model5(X,is_training):
+    '''
+    DESCRIPTION:
+        This layer will now implement the barnd new global inception
+        layer in the first layer, thus extracting the global view
+        of detector hits with various receptive fields.
+        Rest of the architecture will remain same as the previous
+        model in this script.
+    USAGE:
+        INPUT:
+            X           :The input to "image" of the detector
+            is_training :the flag to specify whether we are in training
+                            or testing mode
+        OUTPUT:
+            Zx          : the final un normalized activation of this
+                        layer
+    '''
+    #Model Hyperparameter
+    bn_decision=False
+    lambd=0.0
+    dropout_rate=0.0
+
+    #Reshaping the image to add the channel dimension
+    X_img=tf.expand_dims(X,axis=-1,name='add_channel_dim')
+
+    #Staring the definition of model with the inception global layer
+    A1=inception_global_filter_layer(X_img,
+                                    name='inception_global_filter',
+                                    first_filter_shape=(3,3,40),
+                                    first_filter_stride=(1,1,1),
+                                    second_filter_shape=(5,5,40),
+                                    second_filter_stride=(1,1,1),
+                                    final_channel_list=[20,10],
+                                    is_training=is_training,
+                                    dropout_rate=dropout_rate,
+                                    apply_batchnorm=bn_decision,
+                                    weight_decay=lambd)
+    #Leaving the maxpooling layer for right now
+    #Defining the second layer
+    A2=rectified_conv3d(A1,
+                        name='conv3d2',
+                        filter_shape=(3,3,1),
+                        output_channel=20,
+                        stride=(1,1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+    A2Mp=max_pooling3d(A2,
+                        name='mpool2',
+                        filter_shape=(2,2,1),
+                        stride=(2,2,1),
+                        padding_type='VALID')
+
+    #Adding the third layer
+    A3=rectified_conv3d(A2Mp,
+                        name='conv3d3',
+                        filter_shape=(3,3,1),
+                        output_channel=30,
+                        stride=(1,1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+    A3Mp=max_pooling3d(A3,
+                        name='mpool3',
+                        filter_shape=(2,2,1),
+                        stride=(2,2,1),
+                        padding_type='VALID')
+
+    #Adding the fourth layer (repeating the same patter as above)
+    A4=rectified_conv3d(A3Mp,
+                        name='conv3d4',
+                        filter_shape=(3,3,1),
+                        output_channel=40,
+                        stride=(1,1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+    A4Mp=max_pooling3d(A4,
+                        name='mpool4',
+                        filter_shape=(2,2,1),
+                        stride=(2,2,1),
+                        padding_type='VALID')
+
+    #Adding the fifth layer (repeating the same pattern)
+    A5=rectified_conv3d(A4Mp,
+                        name='conv3d5',
+                        filter_shape=(3,3,1),
+                        output_channel=40,
+                        stride=(1,1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+    A5Mp=max_pooling3d(A5,
+                        name='mpool5',
+                        filter_shape=(2,2,1),
+                        stride=(2,2,1),
+                        padding_type='VALID')
+
+    #Finally flattening and adding a fully connected layer
+    A6=simple_fully_connected(A5Mp,
+                                name='fc1',
+                                output_dim=50,
+                                is_training=is_training,
+                                dropout_rate=dropout_rate,
+                                apply_batchnorm=bn_decision,
+                                weight_decay=lambd,
+                                flatten_first=True,
+                                apply_relu=True)
+
+    #Finally the prediction/output layer
+    Z7=simple_fully_connected(A6,
+                                name='fc2',
+                                output_dim=5,
+                                is_training=is_training,
+                                dropout_rate=dropout_rate,
+                                apply_batchnorm=False,
+                                weight_decay=lambd,
+                                flatten_first=False, #default
+                                apply_relu=False)#unnormalized
+    return Z7
+    
