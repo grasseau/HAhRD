@@ -479,19 +479,19 @@ def inception_global_filter_layer(X,name,
         initializer         : the initializer for the variables
     '''
     with tf.variable_scope(name):
-        with tf.name_scope('{}'.format(first_filter_shape)):
+        with tf.name_scope('first_global_filter'):
             #Defining the first layer convolution steps
             #Creating the appropriate padding in the spatial dimension
             fx,fy,_=first_filter_shape
             px=(fx-1)/2     #if integer division is possible it will give int
             py=(fy-1)/2
-            padding=[[px,px],[py,py],[0,0]] #leaving the padding in last dimension
+            padding=[[0,0],[px,px],[py,py],[0,0],[0,0]] #leaving the padding in last dimension
             #Padding the input activation/image
-            padded_X1=tf.pad(X,padding=padding,mode='CONSTANT',
-                            name='spatial_same_pad',constant_value=0)
+            padded_X1=tf.pad(X,paddings=padding,mode='CONSTANT',
+                            name='spatial_same_pad',constant_values=0)
             #Now applying the usual convolution
             A1=rectified_conv3d(padded_X1,
-                                name='conv3d',
+                                name='conv3d1',
                                 filter_shape=first_filter_shape,
                                 output_channel=final_channel_list[0],
                                 stride=first_filter_stride,
@@ -503,19 +503,19 @@ def inception_global_filter_layer(X,name,
                                 apply_relu=True,
                                 initializer=initializer)
 
-        with tf.name_scope('{}'.format(second_filter_shape))
+        with tf.name_scope('second_global_filter'):
             #Now defining the computation of the second filter
             #Creatign the appropriate padding for the spatial dimension
             fx,fy,_=second_filter_shape
             px=(fx-1)/2
             py=(fy-1)/2
-            padding=[[px,px],[py,py],[0,0]]
+            padding=[[0,0],[px,px],[py,py],[0,0],[0,0]]
             #Applying the padding to the input image
-            padded_X2=tf.pad(X,padding=padding,mode='CONSTANT',
-                            name='spatial_same_pad',constant_value=0)
+            padded_X2=tf.pad(X,paddings=padding,mode='CONSTANT',
+                            name='spatial_same_pad',constant_values=0)
             #Now applying the usual convolution with appropriate stride
             A2=rectified_conv3d(padded_X2,
-                                name='conv3d',
+                                name='conv3d2',
                                 filter_shape=second_filter_shape,
                                 output_channel=final_channel_list[1],
                                 stride=second_filter_stride,
