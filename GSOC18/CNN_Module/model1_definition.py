@@ -588,7 +588,7 @@ def model5(X,is_training):
                         layer
     '''
     #Model Hyperparameter
-    bn_decision=False
+    bn_decision=True
     lambd=0.0
     dropout_rate=0.0
 

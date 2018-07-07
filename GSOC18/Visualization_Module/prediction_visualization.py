@@ -77,12 +77,14 @@ def plot_histogram(predictions,labels):
     predictions=predictions[perm,:]
     labels=labels[perm,:]
     #Specifying the number of bins
-    bins=50
+    bins=25
+
+
     #Plotting the Histogram in Energy
     fig=plt.figure()
     fig.suptitle('Relative Error Histogram and Profile Histogram: Energy')
     #plotting the Relative Error Histogram
-    ax1=fig.add_subplot(121)
+    ax1=fig.add_subplot(131)
     ax1.hist(((predictions[:,0]-labels[:,0])/labels[:,0]),
                     ec='k',alpha=0.7,bins=bins)
     ax1.set_title('Relative Energy Error Histogram: [(prediction-labels)/labels] ')
@@ -90,7 +92,7 @@ def plot_histogram(predictions,labels):
     ax1.set_ylabel('Counts (out of total {} test samples)'.format(labels.shape[0]))
     #Plotting the Profile-Histogram for the Energy Prediction
     #Specifying the data (Energy) to bin over
-    ax2=fig.add_subplot(122)
+    ax2=fig.add_subplot(132)
     x=labels[:,0]
     #Specifying the values to calculate the statistics on, in that bin
     values=((predictions[:,0]-labels[:,0])/labels[:,0])
@@ -105,16 +107,24 @@ def plot_histogram(predictions,labels):
     bin_length=bin_edges[1]-bin_edges[0]
     midpoints=bin_edges[1:]-bin_length
     #now plotting the bin_statistics at the midpoints
-    # print mean
-    # print std
     ax2.errorbar(midpoints,mean,yerr=rms,fmt='b.-',
                 mfc='r',mec='r',ecolor='y')
     ax2.set_title('Profile Histogram')
     ax2.set_xlabel('Energy of Examples')
     ax2.set_ylabel('Mean Value of Relative Error (in bins)')
-    plt.show()
+    #Plotting the RMS values of the relative Error in energy bins
+    ax3=fig.add_subplot(133)
+    #print midpoints,rms
+    #ax3.bar(midpoints,rms,bin_length,ec='k',color='y')
+    ax3.plot(midpoints,rms,'b.-',mfc='r',mec='r')
+    ax3.set_title('RMS of Relative Error in Energy Bins')
+    ax3.set_xlabel('Energy of Examples')
+    ax3.set_ylabel('RMS of Relative Error')
     #plt.savefig('energy_hist.png',bbox_inches='tight')
+    plt.show()
     plt.close()
+
+
     #Error histogram in Eta prediction
     plt.hist(predictions[:,1]-labels[:,1],ec='k',alpha=0.7,bins=bins)
     plt.title('Eta Error Histogram: [prediction-labels] ')
@@ -122,6 +132,7 @@ def plot_histogram(predictions,labels):
     plt.ylabel('Counts (out of total {} test samples)'.format(labels.shape[0]))
     plt.show()
     plt.close()
+
     #Error histogram in Phi prediction
     plt.hist(predictions[:,2]-labels[:,2],ec='k',alpha=0.7,bins=bins)
     plt.title('Phi Error Histogram: [prediction-labels] ')
