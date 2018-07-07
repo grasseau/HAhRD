@@ -3,6 +3,7 @@ import datetime
 import sys
 import os
 from tensorflow.python.client import device_lib
+from tensorflow.python.client import timeline
 
 #import models here(need to be defined separetely in model file)
 from io_pipeline import parse_tfrecords_file
@@ -24,6 +25,9 @@ if os.path.exists(train_summary_filename):
 
 checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
 #model_function_handle=model2
+timeline_filename='tmp/hgcal/{}/timeline/'.format(run_number)
+if not os.path.exists(timeline_filename):
+    os.mkdir(timeline_filename)
 
 ################# HELPER FUNCTIONS ########################
 def _add_summary(object):
@@ -331,6 +335,15 @@ def train(epochs,mini_batch_size,buffer_size,
                                                 run_metadata=run_metadata)
                         #Adding the run matedata to the tensorboard summary writer
                         train_writer.add_run_metadata(run_metadata,'step%dbatch%d'%(i,bno))
+
+                        #Creating the Timeline object and saving it to the json
+                        tline=timeline.Timeline(run_metadata.step_stats)
+                        #Creating the chrome trace
+                        ctf=tline.generate_chrome_trace_format()
+                        timeline_path=timeline_filename+'timeline_step%dbatch%d.json'%(i,bno)
+                        with open(timeline_path,'w') as f:
+                            f.write(ctf)
+
                     else:
                         track_results=sess.run(train_track_ops,
                                                 feed_dict={is_training:True},
@@ -362,8 +375,6 @@ def train(epochs,mini_batch_size,buffer_size,
                     print 'Testing loss @epoch: ',i,' @minibatch: ',bno,track_results[0:-1],'in ',t1-t0
                     #Again write the evaluated summary to file
                     test_writer.add_summary(track_results[-1],bno)
-                    #Writing the run metadata to the summary
-
                     bno+=1
                 except tf.errors.OutOfRangeError:
                     print 'Validation check completed!!\n'
