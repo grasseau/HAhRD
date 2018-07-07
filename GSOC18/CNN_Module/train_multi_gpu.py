@@ -314,11 +314,28 @@ def train(epochs,mini_batch_size,buffer_size,
             bno=1                        #writing the batch number
             while True:
                 try:
+                    #Starting the timer
                     t0=datetime.datetime.now()
                     #_,datay=sess.run(next_element)
                     #print datax.shape
                     #print datay
-                    track_results=sess.run(train_track_ops,feed_dict={is_training:True})
+                    if bno==5 and i%10==0:
+                        #Adding the runtime statisctics (memory and execution time)
+                        run_options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                        run_metadata=tf.RunMetadata()
+
+                        #Running the op
+                        track_results=sess.run(train_track_ops,
+                                                feed_dict={is_training:True},
+                                                options=run_options,
+                                                run_metadata=run_metadata)
+                        #Adding the run matedata to the tensorboard summary writer
+                        train_writer.add_run_metadata(run_metadata,'step%dbatch%d'%(i,bno))
+                    else:
+                        track_results=sess.run(train_track_ops,
+                                                feed_dict={is_training:True},
+                                                )
+
                     t1=datetime.datetime.now()
                     print 'Training loss @epoch: ',i,' @minibatch: ',bno,track_results[1:-1],'in ',t1-t0
                     #Now the last op has the merged_summary evaluated.So, write it.
@@ -335,13 +352,18 @@ def train(epochs,mini_batch_size,buffer_size,
                 try:
                     #_,datay=sess.run(next_element)#dont use iterator now
                     #print datay
+                    #Running the op
                     t0=datetime.datetime.now()
                     #Run the summary also for the validation set.just leave the train op
-                    track_results=sess.run(train_track_ops[1:],feed_dict={is_training:False})
+                    track_results=sess.run(train_track_ops[1:],
+                                            feed_dict={is_training:False},
+                                            )
                     t1=datetime.datetime.now()
                     print 'Testing loss @epoch: ',i,' @minibatch: ',bno,track_results[0:-1],'in ',t1-t0
                     #Again write the evaluated summary to file
                     test_writer.add_summary(track_results[-1],bno)
+                    #Writing the run metadata to the summary
+
                     bno+=1
                 except tf.errors.OutOfRangeError:
                     print 'Validation check completed!!\n'
@@ -349,6 +371,7 @@ def train(epochs,mini_batch_size,buffer_size,
 
             #Also save the checkpoints (after two every epoch)
             if i%10==0:
+                #Saving the checkpoints
                 checkpoint_path=checkpoint_filename+'model.ckpt'
                 saver.save(sess,checkpoint_path,global_step=i)
 
@@ -367,15 +390,15 @@ if __name__=='__main__':
 
     #Setting up the name of the filelist of train and test dataset
     #Making the filelist for the train dataset
-    train_image_filename_list=[local_directory_path+'image0batchsize1000zside0.tfrecords',]
-    train_label_filename_list=[local_directory_path+'label0batchsize1000.tfrecords']
+    train_image_filename_list=[local_directory_path+'image0batchsize20zside0.tfrecords',]
+    train_label_filename_list=[local_directory_path+'label0batchsize20.tfrecords']
     #Making the filelist for the test datasets
-    test_image_filename_list=[local_directory_path+'image1000batchsize1000zside0.tfrecords']
-    test_label_filename_list=[local_directory_path+'label1000batchsize1000.tfrecords']
+    test_image_filename_list=[local_directory_path+'image0batchsize20zside0.tfrecords']
+    test_label_filename_list=[local_directory_path+'label0batchsize20.tfrecords']
 
 
     #Seting up some metric of dataset and training iteration
-    mini_batch_size=10
+    mini_batch_size=1
     buffer_size=mini_batch_size*2
     epochs=31
 

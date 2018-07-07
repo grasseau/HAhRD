@@ -226,13 +226,13 @@ if __name__=='__main__':
 
     #Making the prediction on the Training Set
     #Setting up the train data directory
-    train_image_filename_list=[local_directory_path+'image0batchsize1000zside0.tfrecords']
-    train_label_filename_list=[local_directory_path+'label0batchsize1000.tfrecords']
+    train_image_filename_list=[local_directory_path+'image0batchsize20zside0.tfrecords']
+    train_label_filename_list=[local_directory_path+'label0batchsize20.tfrecords']
     #Making inference
     infer(train_image_filename_list,
             train_label_filename_list,
             inference_mode='train',
-            mini_batch_size=10,
+            mini_batch_size=1,
             checkpoint_epoch_number=30)
 
     #Now resetting the tf graph to make a new infrence on test image dataset
@@ -241,11 +241,11 @@ if __name__=='__main__':
 
     #Making the prediction on Test Set
     #Setting the name of the test data directory
-    test_image_filename_list=[local_directory_path+'image1000batchsize1000zside0.tfrecords']
-    test_label_filename_list=[local_directory_path+'label1000batchsize1000.tfrecords']
+    test_image_filename_list=[local_directory_path+'image0batchsize20zside0.tfrecords']
+    test_label_filename_list=[local_directory_path+'label0batchsize20.tfrecords']
 
     infer(test_image_filename_list,
         test_label_filename_list,
         inference_mode='valid',
-        mini_batch_size=10,
+        mini_batch_size=1,
         checkpoint_epoch_number=30)
