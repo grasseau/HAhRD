@@ -8,14 +8,14 @@ from tensorflow.python.client import device_lib
 from io_pipeline import parse_tfrecords_file
 # from test import make_model_conv,make_model_conv3d,make_model_linear
 # from test import calculate_model_accuracy,calculate_total_loss
-from model1_definition import model5 as model_function_handle
+from model1_definition import model2 as model_function_handle
 from model1_definition import calculate_model_accuracy
 from model1_definition import calculate_total_loss
 
 
 ################## GLOBAL VARIABLES #######################
 local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
-run_number=26                            #for saving the summaries
+run_number=27                            #for saving the summaries
 train_summary_filename='tmp/hgcal/%s/train/'%(run_number) #for training set
 test_summary_filename='tmp/hgcal/%s/valid/'%(run_number)  #For validation set
 if os.path.exists(train_summary_filename):
@@ -375,12 +375,12 @@ if __name__=='__main__':
 
 
     #Seting up some metric of dataset and training iteration
-    mini_batch_size=10
-    buffer_size=mini_batch_size*2
+    mini_batch_size=20
+    buffer_size=30#mini_batch_size*2
     epochs=31
 
     #Setting up the learning rate Hyperparameter
-    init_learning_rate=1.0    #0.001 default for Adam
+    init_learning_rate=0.1    #0.001 default for Adam
     decay_step=46
     decay_rate=0.95
 
