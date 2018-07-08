@@ -3,6 +3,7 @@ import datetime
 import sys
 import os
 from tensorflow.python.client import device_lib
+from tensorflow.python.client import timeline
 
 #import models here(need to be defined separetely in model file)
 from io_pipeline import parse_tfrecords_file
@@ -24,6 +25,9 @@ if os.path.exists(train_summary_filename):
 
 checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
 #model_function_handle=model2
+timeline_filename='tmp/hgcal/{}/timeline/'.format(run_number)
+if not os.path.exists(timeline_filename):
+    os.mkdir(timeline_filename)
 
 ################# HELPER FUNCTIONS ########################
 def _add_summary(object):
@@ -314,11 +318,37 @@ def train(epochs,mini_batch_size,buffer_size,
             bno=1                        #writing the batch number
             while True:
                 try:
+                    #Starting the timer
                     t0=datetime.datetime.now()
                     #_,datay=sess.run(next_element)
                     #print datax.shape
                     #print datay
-                    track_results=sess.run(train_track_ops,feed_dict={is_training:True})
+                    if bno==5 and i%10==0:
+                        #Adding the runtime statisctics (memory and execution time)
+                        run_options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                        run_metadata=tf.RunMetadata()
+
+                        #Running the op
+                        track_results=sess.run(train_track_ops,
+                                                feed_dict={is_training:True},
+                                                options=run_options,
+                                                run_metadata=run_metadata)
+                        #Adding the run matedata to the tensorboard summary writer
+                        train_writer.add_run_metadata(run_metadata,'step%dbatch%d'%(i,bno))
+
+                        #Creating the Timeline object and saving it to the json
+                        tline=timeline.Timeline(run_metadata.step_stats)
+                        #Creating the chrome trace
+                        ctf=tline.generate_chrome_trace_format()
+                        timeline_path=timeline_filename+'timeline_step%dbatch%d.json'%(i,bno)
+                        with open(timeline_path,'w') as f:
+                            f.write(ctf)
+
+                    else:
+                        track_results=sess.run(train_track_ops,
+                                                feed_dict={is_training:True},
+                                                )
+
                     t1=datetime.datetime.now()
                     print 'Training loss @epoch: ',i,' @minibatch: ',bno,track_results[1:-1],'in ',t1-t0
                     #Now the last op has the merged_summary evaluated.So, write it.
@@ -335,9 +365,12 @@ def train(epochs,mini_batch_size,buffer_size,
                 try:
                     #_,datay=sess.run(next_element)#dont use iterator now
                     #print datay
+                    #Running the op
                     t0=datetime.datetime.now()
                     #Run the summary also for the validation set.just leave the train op
-                    track_results=sess.run(train_track_ops[1:],feed_dict={is_training:False})
+                    track_results=sess.run(train_track_ops[1:],
+                                            feed_dict={is_training:False},
+                                            )
                     t1=datetime.datetime.now()
                     print 'Testing loss @epoch: ',i,' @minibatch: ',bno,track_results[0:-1],'in ',t1-t0
                     #Again write the evaluated summary to file
@@ -349,6 +382,7 @@ def train(epochs,mini_batch_size,buffer_size,
 
             #Also save the checkpoints (after two every epoch)
             if i%10==0:
+                #Saving the checkpoints
                 checkpoint_path=checkpoint_filename+'model.ckpt'
                 saver.save(sess,checkpoint_path,global_step=i)
 
