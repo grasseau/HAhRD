@@ -135,13 +135,17 @@ def generate_training_dataset(event_data_filename,event_file_no,
     #Some of the geometry metadata (will be constant)
     no_layers=40
     #Specifying the size of minibatch
-    event_stride=100 #seems optimal in terms of memory use.
+    event_stride='upto_end' #seems optimal in terms of memory use.
     event_start_no=0 #for testing now
 
     #Creating the corresponding label for out image
     print '>>> Reading the event dataframe for the groundtruth particles'
     all_event_particles=readDataFile_genpart(event_data_filename,event_start_no,
                                             event_stride)
+    #Setting up the correct value of stride for upto end case
+    if event_stride=='upto_end':
+        event_stride=all_event_particles.shape[0]
+
     t0=datetime.datetime.now()
     event_mask,target_len=compute_target_lable(all_event_particles,resolution,edge_length,
                         event_file_no,event_start_no,event_stride)
