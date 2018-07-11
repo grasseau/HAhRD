@@ -113,7 +113,8 @@ def interpolate_layer(geometry_fname,sq_cells_dict,edge_length,resolution,layer)
     t1=datetime.datetime.now()
     print 'Pickling completed in: ',t1-t0,' sec\n'
 
-def generate_training_dataset(event_data_filename,resolution=(514,513),edge_length=0.7):
+def generate_training_dataset(event_data_filename,event_file_no,
+                            resolution=(514,513),edge_length=0.7):
     #ONGOING
     '''
     DESCRIPTION:
@@ -124,6 +125,7 @@ def generate_training_dataset(event_data_filename,resolution=(514,513),edge_leng
     USAGE:
         INPUTS:
             event_data_filename  : the filename of the root file to read event
+            event_file_no        : this will be used to uniquely name the dataset
             resolution          : the resolution of current interpolation scheme
             edge_length         : the edge length of the current interpolation
                                     scheme
@@ -133,7 +135,7 @@ def generate_training_dataset(event_data_filename,resolution=(514,513),edge_leng
     #Some of the geometry metadata (will be constant)
     no_layers=40
     #Specifying the size of minibatch
-    event_stride=20 #seems optimal in terms of memory use.
+    event_stride=100 #seems optimal in terms of memory use.
     event_start_no=0 #for testing now
 
     #Creating the corresponding label for out image
@@ -141,8 +143,8 @@ def generate_training_dataset(event_data_filename,resolution=(514,513),edge_leng
     all_event_particles=readDataFile_genpart(event_data_filename,event_start_no,
                                             event_stride)
     t0=datetime.datetime.now()
-    event_mask=compute_target_lable(all_event_particles,resolution,edge_length,
-                        event_start_no,event_stride)
+    event_mask,target_len=compute_target_lable(all_event_particles,resolution,edge_length,
+                        event_file_no,event_start_no,event_stride)
     t1=datetime.datetime.now()
     print '>>> Label Creation Completed in: ',t1-t0
 
@@ -153,9 +155,13 @@ def generate_training_dataset(event_data_filename,resolution=(514,513),edge_leng
 
     t0=datetime.datetime.now()
     compute_energy_map(all_event_hits,event_mask,resolution,edge_length,
-                        event_start_no,event_stride,no_layers)
+                        event_file_no,event_start_no,event_stride,no_layers)
     t1=datetime.datetime.now()
     print '>>> Image Creation Completed in: ',t1-t0
+
+    #Merging the dataset together as one example protocol
+    print 'Merging the Image and label'
+    merge_image_and_label(event_file_no,event_start_no,event_stride)
 
 ################ MAIN FUNCTION DEFINITION ###################
 def readGeometry( input_file,  layer, subdet ):
@@ -254,7 +260,10 @@ def readDataFile_hits(filename,event_start_no,event_stride):
     df.rename(col_names,inplace=True,axis=1)
 
     #Extracting out the minibatch of event to process at a time
-    df=df.iloc[event_start_no:event_start_no+event_stride]
+    if event_stride=='upto_end':
+        df=df.iloc[event_start_no:]
+    else:
+        df=df.iloc[event_start_no:event_start_no+event_stride]
 
     #Do the Filtering here only no need to do it each time for each event
 
@@ -295,7 +304,8 @@ def readDataFile_genpart(filename,event_start_no,event_stride):
     tree=uproot.open(filename)['ana/hgc']
 
     branches =["genpart_energy","genpart_phi","genpart_eta",
-                "genpart_gen","genpart_pid","genpart_reachedEE"]
+                "genpart_gen","genpart_pid","genpart_reachedEE",
+                "genpart_posx","genpart_posy","genpart_posz"]
     cache={}
     df=tree.pandas.df(branches,cache=cache,executor=executor)
 
@@ -304,9 +314,16 @@ def readDataFile_genpart(filename,event_start_no,event_stride):
     df.rename(col_names,inplace=True,axis=1)
 
     #Extracting the dataframe for the required events
-    df=df.iloc[event_start_no:event_start_no+event_stride]
+    if event_stride=='upto_end':
+        df=df.iloc[event_start_no:]
+    else:
+        df=df.iloc[event_start_no:event_start_no+event_stride]
 
     print '>>> Extraction completed with current shape: ',df.shape
+    # print df.dtypes
+    # print type(df.loc[0,'posx'])
+    # print df.loc[0,'posx']
+    # sys.exit(1)
 
     return df
 
@@ -323,6 +340,8 @@ if __name__=='__main__':
                 help='Layer to be mapped', type='int', default=1)
     parser.add_option('--subdet', dest='subdet',
                 help='Subdet', type='int', default=3)
+    parser.add_option('--data_file_no',dest='data_file_no',
+                    help='The event file number for naming dataset')
     parser.add_option('--data_file',dest='data_file',
                 help='Ground Truth and Recorded Hits',default=data_default_file)
     (opt, args) = parser.parse_args()
@@ -341,4 +360,4 @@ if __name__=='__main__':
     #generate_interpolation(opt.input_file,edge_length=0.7)
 
     #Generating the image
-    generate_training_dataset(opt.data_file)
+    generate_training_dataset(opt.data_file,opt.data_file_no)

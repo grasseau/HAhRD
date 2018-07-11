@@ -451,8 +451,8 @@ def _bytes_feature(value):
     '''
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
-def compute_energy_map(all_event_hits,event_mask,resolution,edge_length,event_start_no,
-                    event_stride,no_layers,dtype=np.float32):
+def compute_energy_map(all_event_hits,event_mask,resolution,edge_length,event_file_no,
+                    event_start_no,event_stride,no_layers,dtype=np.float32):
     '''
     DESCRIPTION:
         This function will finally map the energy deposit recorded in the
@@ -474,6 +474,8 @@ def compute_energy_map(all_event_hits,event_mask,resolution,edge_length,event_st
             event_mask      : a mask whether to select an event or not based
                                 on the decision in the label creation function
             resolution      : the current resolution of the interpolation mesh
+            event_file_no   : the file number of event which was used to generate
+                                this (will give unique name to dataset)
             event_start_no  : the starting point of event number to create
                                 minibatches.
             event_stride    : the size of minibatch to generate
@@ -501,8 +503,9 @@ def compute_energy_map(all_event_hits,event_mask,resolution,edge_length,event_st
 
     #Strating the tfRecord Writer
     for zside in [0,1]:
-        image_filename=image_basepath+'image%sbatchsize%szside%s.tfrecords'%(
-                                    event_start_no,event_stride,zside)
+        image_filename=image_basepath+\
+                    'image_event_file_%s_start_%s_stride_%s_zside_%s.tfrecords'%(
+                                event_file_no,event_start_no,event_stride,zside)
         compression_options=tf.python_io.TFRecordOptions(
                         tf.python_io.TFRecordCompressionType.ZLIB)
 
@@ -614,7 +617,7 @@ def compute_energy_map(all_event_hits,event_mask,resolution,edge_length,event_st
                 record_writer.write(example.SerializeToString())
 
             #Testing the numpy array
-            np.save(image_filename,energy_map)
+            #np.save(image_filename,energy_map)
 
     #(LC)Appending the properties to the final error list
     # for key,value in cluster_properties.iteritems():
@@ -646,7 +649,7 @@ def _int64_feature(value):
     return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
 def compute_target_lable(genpart_df,resolution,edge_length,
-                        event_start_no,event_stride):
+                        event_file_no,event_start_no,event_stride):
     '''
     DESCRIPTION:
         This function will create the target label for the their
@@ -665,6 +668,7 @@ def compute_target_lable(genpart_df,resolution,edge_length,
             resolution      : the current resolution of interpolation in use
                                 to be used for target representation on a mesh
             edge_length     : length of the current sq_cells in the mesh
+            event_file_no   : the number on the event file to uniquely name dataset
             event_start_no  : the starting number of event slice from the root
                                 file to be used for the anming convention
             event_stride    : the event stride i.e the batch size of the this
@@ -692,8 +696,8 @@ def compute_target_lable(genpart_df,resolution,edge_length,
     event_mask=[]
 
     #Setting up the filename and compression options of the target tfrecords
-    label_filename=image_basepath+'label%sbatchsize%s.tfrecords'%(
-                                    event_start_no,event_stride)
+    label_filename=image_basepath+'label_event_file_%s_start_%s_stride_%s.tfrecords'%(
+                                    event_file_no,event_start_no,event_stride)
     compression_options=tf.python_io.TFRecordOptions(
                     tf.python_io.TFRecordCompressionType.ZLIB)
 
@@ -719,6 +723,13 @@ def compute_target_lable(genpart_df,resolution,edge_length,
             particles_phi=genpart_df.loc[event,"phi"][particles_mask]
             particles_eta=genpart_df.loc[event,"eta"][particles_mask]
             particles_pid=genpart_df.loc[event,"pid"][particles_mask]
+            #Getting the barycenter location form the position array
+            particles_posx=np.array(genpart_df.loc[event,"posx"],
+                                dtype=object)[particles_mask]
+            particles_posy=np.array(genpart_df.loc[event,"posy"],
+                                dtype=object)[particles_mask]
+            particles_posz=np.array(genpart_df.loc[event,"posz"],
+                                dtype=object)[particles_mask]
 
             #Checking if the electron is filtered and we got just one
             print particles_pid,'\n'
@@ -732,18 +743,22 @@ def compute_target_lable(genpart_df,resolution,edge_length,
             #assert particles_pid.shape==(1,),"Multiple Electrons are detected"
 
             #Creating the label vector as its easier to manipulate in numpy
-            #format: [pc1(electron),pc2,energy,phi,eta]
-            label=np.empty((5,),dtype=np.float32)
+            #format: [energy,bary_posx,bary_posy,bary_posz,pc1(electron),pc2]
+            #Target Metadata
+            target_len=6
+            label=np.empty((target_len,),dtype=np.float32)
+            barycenter_depth=10 #as recommended by Florian and Arthur Sir
             #Filling up the target label
             label[0]=particles_energy[0]
-            label[1]=particles_eta[0]
-            label[2]=particles_phi[0]
+            label[1]=particles_posx[0][barycenter_depth-1]
+            label[2]=particles_posy[0][barycenter_depth-1]
+            label[3]=particles_posz[0][barycenter_depth-1]
             if particles_pid[0]==11:
-                label[3]=1      #its electron
-                label[4]=0
+                label[4]=1      #its electron
+                label[5]=0
             else:
-                label[3]=0
-                label[4]=1      #it not electon(positron ask Florian Sir)
+                label[4]=0
+                label[5]=1      #it not electon(positron ask Florian Sir)
 
             #Creating the example protocol to write to tfrecords
             #Add the event number later for check of the correspondancce
@@ -764,4 +779,152 @@ def compute_target_lable(genpart_df,resolution,edge_length,
     print 'Total number of events skipped: ',count
 
     #Returning the event mask for event selection in image_creation
-    return event_mask
+    return event_mask,target_len
+
+################## MERGING IMAGE & LABELS ####################
+def _binary_parse_function_image(serialized_example_protocol):
+    '''
+    DESCRIPTION:
+        This furnction will be similar to the the parser function
+        used in io pipeline but general purpose in termos of
+        parameter which are hard coded there which need to be changed
+        based on the resolution and the target/label length.
+    USAGE:
+        serialized_example_protocol : the binary serialized data
+                                        in example protocol
+
+    DONT use it directly. This will  be called internally
+    while decoding the tf records.
+    '''
+    features={
+        'image':tf.FixedLenFeature((),tf.string),
+        'event':tf.FixedLenFeature((),tf.int64)
+    }
+    parsed_feature=tf.parse_single_example(
+                    serialized_example_protocol,features)
+
+    #Just returning the byte string so no need to convert again
+    image=parsed_feature['image']
+    #Reading the event id for matching and then removing it from examples
+    event_id=tf.cast(parsed_feature['event'],tf.int32)
+
+    return image,event_id
+
+def _binary_parse_function_label(serialized_example_protocol):
+    '''
+    DESCRIPTION:
+        This function will read the example feature and return the
+        label as a byte string as it was saved during the tfrecords
+        creation. So just directly save it as a features without the
+        tobytes conversion.
+    USAGE:
+        serialized_example_protocol : the example protocoled version of our
+                                        target label.
+    DONT use it directly. THis will be passed a function to the dataset.map
+    function.
+    '''
+    features={
+        'label': tf.FixedLenFeature((),tf.string),
+        'event': tf.FixedLenFeature((),tf.int64)
+    }
+    parsed_feature=tf.parse_single_example(
+                    serialized_example_protocol,features)
+
+    #Returing the byte string of the label
+    label=parsed_feature['label']
+    #Reading the event id to match with the corresponding image
+    event_id=tf.cast(parsed_feature['event'],tf.int32)
+
+    return label,event_id
+
+
+def merge_image_and_label(event_file_no,event_start_no,event_stride):
+    '''
+    DESCRIPTION:
+        This function will merge the image and the label together
+        to give a dataset with image and label stitched together.
+        Also, we need not shard the data cuz the approximate size of
+        1000 images dataset is ~100 Mb so these files would be good
+        to act as different shard.
+
+        (TO Do Later)
+        Later we wll migrate to the distributed setting then we will have
+        tf.data inbuilt shard strategy wrt to the answer at:
+
+        1.https://stackoverflow.com/questions/
+                    48768206/how-to-use-dataset-shard-in-tensorflow
+        2.https://www.tensorflow.org/deploy/distributed
+    USAGE:
+        INPUT:
+            event_file_no   : the event file number from which the data is
+                                extracted.
+            event_start_no  : the starting event number from which the data
+                                was extracted from the current event.
+            event_stride    : the total number of events processed in this file
+                                (just giving the range from the start point,
+                                some of the events will be left based on filter mask)
+    '''
+    t0=datetime.datetime.now()
+    for zside in [0,1]:
+        image_filename=image_basepath+\
+                    'image_event_file_%s_start_%s_stride_%s_zside_%s.tfrecords'%(
+                                event_file_no,event_start_no,event_stride,zside)
+        label_filename=image_basepath+\
+                    'label_event_file_%s_start_%s_stride_%s.tfrecords'%(
+                                        event_file_no,event_start_no,event_stride)
+
+        #Specifying the compression type
+        comp_type='ZLIB'
+        #Reading the image and label dataset dataset
+        dataset_image=tf.data.TFRecordDataset(image_filename,
+                            compression_type=comp_type)
+        dataset_label=tf.data.TFRecordDataset(label_filename,
+                            compression_type=comp_type)
+
+        #Mapping the serialized eample protocol to get the required elements
+        dataset_image=dataset_image.map(_binary_parse_function_image)
+        dataset_label=dataset_label.map(_binary_parse_function_label)
+
+        dataset_both=tf.data.Dataset.zip((dataset_image,dataset_label))
+
+        #Making the one shot iterator
+        one_shot_iterator=dataset_both.make_one_shot_iterator()
+
+        #Now saving the merged examples on by on in tfrecords
+        compression_options=tf.python_io.TFRecordOptions(
+                        tf.python_io.TFRecordCompressionType.ZLIB)
+        merged_record_filename=image_basepath+\
+                    'event_file_%s_start_%s_stride_%s_zside_%s.tfrecords'%(
+                        event_file_no,event_start_no,event_stride,zside)
+
+        with tf.python_io.TFRecordWriter(merged_record_filename,
+                            options=compression_options) as record_writer:
+
+            with tf.Session() as sess:
+                while True:
+                    try:
+                        t_alpha=datetime.datetime.now()
+                        ((image,image_event_id),
+                            (label,label_event_id))=sess.run(one_shot_iterator.get_next())
+                        t_beta=datetime.datetime.now()
+                        assert (image_event_id==label_event_id),'Event_id mismatch'
+
+                        print 'Creating the example for event id:',image_event_id,\
+                                    'read in: ',t_beta-t_alpha
+                        example=tf.train.Example(features=tf.train.Features(
+                                feature={
+                                    #Saving the image as a feature in this protocol
+                                    'image':_bytes_feature(image),
+                                    #Saving label for that image
+                                    'label':_bytes_feature(label)
+                                }
+                            )
+                        )
+                        #Adding the example to the record writer
+                        record_writer.write(example.SerializeToString())
+                    except tf.errors.OutOfRangeError:
+                        print 'Completed the merging for zside ',zside
+                        break
+
+    t1=datetime.datetime.now()
+    print 'Merging Completed',t1-t0
