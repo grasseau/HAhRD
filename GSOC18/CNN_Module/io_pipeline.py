@@ -105,7 +105,43 @@ def _binary_parse_function_label(serialized_example_protocol):
 
     return label,event
 
-def parse_tfrecords_file(train_image_filename_list,train_label_filename_list,
+def _binary_parse_function_example(serialized_example_protocol):
+    '''
+    DESCRIPTION:
+        This function will deserialize, decompress and then transform
+        the image and label in the appropriate shape based on the (new) merged
+        structure of the dataset.
+    '''
+    #Parsing the exampe from the binary format
+    features={
+        'image':    tf.FixedlenFeature((),tf.string),
+        'label':    tf.FixedLenFeature((),tf.string)
+    }
+    parsed_feature=tf.parse_single_example(serialized_example_protocol,
+                                            features)
+
+    #Now setting the appropriate tranformation (decoding and reshape)
+    height=514
+    width=513
+    depth=40
+    #Decoding the image from biary
+    image=tf.decode_raw(parsed_feature['image'],tf.float32)#BEWARE of dtype
+    image.set_shape([depth*height*width])
+    #Now reshape in usual way since reshape automatically read in c-order
+    image=tf.reshape(image,[height,width,depth])
+
+    #Now decoding the label
+    target_len=6
+    label=tf.decode_raw(parsed_feature['label'],tf.float32)
+    label.set_shape([target_len])
+    #Reshaping appropriately
+    label=tf.reshape(label,[target_len,])
+
+    #Returing the example tuple finally
+    return image,label
+
+################# TRAIN DATASET PIPELINE #####################
+def parse_tfrecords_file_v1(train_image_filename_list,train_label_filename_list,
                         test_image_filename_list,test_label_filename_list,
                         mini_batch_size,buffer_size=5000):
     '''
@@ -188,6 +224,51 @@ def parse_tfrecords_file(train_image_filename_list,train_label_filename_list,
     #Returning the required elements (dont return next element return iterator)
     return iterator,train_iter_init_op,test_iter_init_op
 
+def parse_tf_record_file(train_filename_list,test_filename_list,
+                        mini_batch_size,shuffle_buffer_size):
+    '''
+    DESCRIPTION:
+        This function will create the piepline based on the merged example
+        format where a single file contains both labels and images.
+    USAGE:
+        INPUT:
+            train_filename_list : the list of filename to create training
+                                    dataset
+            test_filename_list  : the list of the filename to create test
+                                    dataset
+            mini_batch_size     : the batch size of the dataset
+            shuffle_buffer_size : the buffere size to shuffle data from
+                                    (here shuffling will be donr on the filename)
+        OUTPUT:
+
+    '''
+    comp_type='ZLIB'
+    #Creating the training dataset
+    train_dataset=tf.data.TFRecordDataset(train_filename_list,
+                                        compression_type=comp_type,
+                                        num_parallel_reads=20)
+    #Shuffling the file list
+    train_dataset=train_dataset.shuffle(buffer_size=shuffle_buffer_size)
+    #Mapping the parser function on file on each element to decode them
+    train_dataset=train_dataset.map(_binary_parse_function_example,
+                                    num_parallel_calls=ncpu)
+    #Batching the dataset
+    train_dataset=train_dataset.batch(mini_batch_size)
+    #Prefetching the batches
+    train_dataset=train_dataset.prefetch(4)
+
+
+    #Now making the re-initializable iterator
+    iterator=tf.data.Iterator.from_structure(
+                                        train_dataset.output_types,
+                                        train_dataset.output_shapes)
+    train_iter_init_op=iterator.make_initializer(train_dataset)
+
+    return iterator,train_iter_init_op
+
+
+
+################ INFERENCE DATASET PIPELINE #################
 def parse_tfrecords_file_inference(test_image_filename_list,
                                     test_label_filename_list,
                                     mini_batch_size):
