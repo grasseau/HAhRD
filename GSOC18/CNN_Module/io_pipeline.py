@@ -224,7 +224,7 @@ def parse_tfrecords_file_v1(train_image_filename_list,train_label_filename_list,
     #Returning the required elements (dont return next element return iterator)
     return iterator,train_iter_init_op,test_iter_init_op
 
-def parse_tfrecords_file(train_filename_list,test_filename_list,
+def parse_tfrecords_file_v2(train_filename_pattern,test_filename_pattern,
                         mini_batch_size,shuffle_buffer_size):
     '''
     DESCRIPTION:
@@ -232,19 +232,20 @@ def parse_tfrecords_file(train_filename_list,test_filename_list,
         format where a single file contains both labels and images.
     USAGE:
         INPUT:
-            train_filename_list : the list of filename to create training
-                                    dataset
-            test_filename_list  : the list of the filename to create test
-                                    dataset
-            mini_batch_size     : the batch size of the dataset
-            shuffle_buffer_size : the buffere size to shuffle data from
-                                    (here shuffling will be donr on the filename)
+            train_filename_pattern : the filename  pattern to create training
+                                        dataset
+            test_filename_pattern  :  the filename pattern to create test
+                                        dataset
+            mini_batch_size        : the batch size of the dataset
+            shuffle_buffer_size    : the buffere size to shuffle data from
+                                    (here shuffling will be done on the filename)
         OUTPUT:
 
     '''
     comp_type='ZLIB'
     #Creating the training dataset
-    train_dataset=tf.data.TFRecordDataset(train_filename_list,
+    files=tf.data.Dataset.list_files(train_filename_pattern)
+    train_dataset=tf.data.TFRecordDataset(files,
                                         compression_type=comp_type,
                                         num_parallel_reads=20)
     #Shuffling the file list
@@ -266,6 +267,38 @@ def parse_tfrecords_file(train_filename_list,test_filename_list,
 
     return iterator,train_iter_init_op,None
 
+def parse_tfrecords_file(train_filename_pattern,test_filename_pattern,
+                        mini_batch_size,shuffle_buffer_size):
+    '''
+    DESCRIPTION:
+        This will be the new version of the io pipeline based on the
+        the the suggestion mentioned in the input pipeline performance
+        guide.
+    '''
+    comp_type='ZLIB'
+    #Giving the file pattern to read the dataset from
+    files=tf.data.Dataset.list_files(train_filename_pattern)
+    train_dataset=files.apply(tf.contrib.data.parallel_interleave(lambda x:tf.data.TFRecordDataset(x,
+                                            compression_type=comp_type),
+                                            cycle_length=20,
+                                            sloppy=True))
+    train_dataset=train_dataset.shuffle(buffer_size=shuffle_buffer_size)
+
+    #Mapping the examples to decode the binary
+    train_dataset=train_dataset.map(_binary_parse_function_example,
+                                    num_parallel_calls=ncpu)
+    train_dataset=train_dataset.batch(mini_batch_size)
+
+    #Prefetching the dataset
+    train_dataset=train_dataset.prefetch(4)
+
+    #Now making the re-initializable iterator
+    iterator=tf.data.Iterator.from_structure(
+                                        train_dataset.output_types,
+                                        train_dataset.output_shapes)
+    train_iter_init_op=iterator.make_initializer(train_dataset)
+
+    return iterator,train_iter_init_op,None
 
 
 ################ INFERENCE DATASET PIPELINE #################

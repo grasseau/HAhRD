@@ -317,10 +317,7 @@ def train(epochs,mini_batch_size,buffer_size,
                 try:
                     #Starting the timer
                     t0=datetime.datetime.now()
-                    #_,datay=sess.run(next_element)
-                    #print datax.shape
-                    #print datay
-                    if i%10==0:
+                    if bno%10==0 and i%10==0:
                         #Adding the runtime statisctics (memory and execution time)
                         run_options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                         run_metadata=tf.RunMetadata()
@@ -398,30 +395,13 @@ if __name__=='__main__':
 
     #Setting up the name of the filelist of train and test dataset
     #Making the filelist for the train dataset
-    train_filename_list=[
-        local_directory_path+'event_file_1_start_0_stride_1000_zside_0.tfrecords',
-        local_directory_path+'event_file_1_start_0_stride_1000_zside_1.tfrecords',
-        local_directory_path+'event_file_1_start_1000_stride_1000_zside_0.tfrecords',
-        local_directory_path+'event_file_1_start_1000_stride_1000_zside_1.tfrecords',
-        local_directory_path+'event_file_1_start_2000_stride_1000_zside_0.tfrecords',
-        local_directory_path+'event_file_1_start_2000_stride_1000_zside_1.tfrecords',
-        local_directory_path+'event_file_1_start_3000_stride_1000_zside_0.tfrecords',
-        local_directory_path+'event_file_1_start_3000_stride_1000_zside_1.tfrecords',
-        local_directory_path+'event_file_1_start_4000_stride_1000_zside_0.tfrecords',
-        local_directory_path+'event_file_1_start_4000_stride_1000_zside_1.tfrecords',
-        local_directory_path+'event_file_1_start_5000_stride_1000_zside_0.tfrecords',
-        local_directory_path+'event_file_1_start_5000_stride_1000_zside_1.tfrecords',
-        local_directory_path+'event_file_1_start_6000_stride_880_zside_0.tfrecords',
-        local_directory_path+'event_file_1_start_6000_stride_880_zside_1.tfrecords',
-        local_directory_path+'event_file_2_start_0_stride_1000_zside_0.tfrecords',
-        local_directory_path+'event_file_2_start_0_stride_1000_zside_1.tfrecords',
-                    ]
+    train_filename_pattern=local_directory_path+'event_file_*.tfrecords'
     #Making the filelist for the test datasets
-    test_filename_list=[local_directory_path+'image1000batchsize1000zside0.tfrecords']
+    test_filename_pattern=[local_directory_path+'event_file_*.tfrecords']
 
 
     #Seting up some metric of dataset and training iteration
-    mini_batch_size=10
+    mini_batch_size=20
     buffer_size=mini_batch_size*2
     epochs=1
 
@@ -434,5 +414,5 @@ if __name__=='__main__':
     train(epochs,
             mini_batch_size,buffer_size,
             init_learning_rate,decay_step,decay_rate,
-            train_filename_list,
-            test_filename_list)
+            train_filename_pattern,
+            test_filename_pattern)
