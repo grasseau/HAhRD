@@ -185,7 +185,7 @@ def create_training_graph(iterator,is_training,global_step,learning_rate):
             with tf.device(all_gpu_name[i]):
                 with tf.name_scope('tower%s'%(i)) as tower_scope:
                     #Getting the next batch of the dataset from the iterator
-                    ((X,_),(Y,_))=iterator.get_next() #'element' referes to on minibatch
+                    X,Y=iterator.get_next() #'element' referes to on minibatch
 
                     #Create a graph on the GPU and get the gradient back
                     tower_grad_var_pair,total_cost=_get_GPU_gradient(X,Y,
@@ -222,8 +222,7 @@ def create_training_graph(iterator,is_training,global_step,learning_rate):
 
 def train(epochs,mini_batch_size,buffer_size,
                 init_learning_rate,decay_step,decay_rate,
-                train_image_filename_list,train_label_filename_list,
-                test_image_filename_list,test_label_filename_list):
+                train_filename_list,test_filename_list):
     '''
     DESCRIPTION:
         This function will finally take the graph created for training
@@ -268,12 +267,10 @@ def train(epochs,mini_batch_size,buffer_size,
     #Setting up the input_pipeline
     with tf.name_scope('IO_Pipeline'):
         iterator,train_iter_init_op,test_iter_init_op=parse_tfrecords_file(
-                                                    train_image_filename_list,
-                                                    train_label_filename_list,
-                                                    test_image_filename_list,
-                                                    test_label_filename_list,
+                                                    train_filename_list,
+                                                    test_filename_list,
                                                     mini_batch_size,
-                                                    buffer_size=buffer_size)
+                                                    shuffle_buffer_size=buffer_size)
 
     #Creating the multi-GPU training graph
     train_track_ops=create_training_graph(iterator,is_training,global_step,
@@ -323,7 +320,7 @@ def train(epochs,mini_batch_size,buffer_size,
                     #_,datay=sess.run(next_element)
                     #print datax.shape
                     #print datay
-                    if bno==5 and i%10==0:
+                    if i%10==0:
                         #Adding the runtime statisctics (memory and execution time)
                         run_options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                         run_metadata=tf.RunMetadata()
@@ -401,17 +398,32 @@ if __name__=='__main__':
 
     #Setting up the name of the filelist of train and test dataset
     #Making the filelist for the train dataset
-    train_image_filename_list=[local_directory_path+'image0batchsize1000zside0.tfrecords',]
-    train_label_filename_list=[local_directory_path+'label0batchsize1000.tfrecords']
+    train_filename_list=[
+        local_directory_path+'event_file_1_start_0_stride_1000_zside_0.tfrecords',
+        local_directory_path+'event_file_1_start_0_stride_1000_zside_1.tfrecords',
+        local_directory_path+'event_file_1_start_1000_stride_1000_zside_0.tfrecords',
+        local_directory_path+'event_file_1_start_1000_stride_1000_zside_1.tfrecords',
+        local_directory_path+'event_file_1_start_2000_stride_1000_zside_0.tfrecords',
+        local_directory_path+'event_file_1_start_2000_stride_1000_zside_1.tfrecords',
+        local_directory_path+'event_file_1_start_3000_stride_1000_zside_0.tfrecords',
+        local_directory_path+'event_file_1_start_3000_stride_1000_zside_1.tfrecords',
+        local_directory_path+'event_file_1_start_4000_stride_1000_zside_0.tfrecords',
+        local_directory_path+'event_file_1_start_4000_stride_1000_zside_1.tfrecords',
+        local_directory_path+'event_file_1_start_5000_stride_1000_zside_0.tfrecords',
+        local_directory_path+'event_file_1_start_5000_stride_1000_zside_1.tfrecords',
+        local_directory_path+'event_file_1_start_6000_stride_880_zside_0.tfrecords',
+        local_directory_path+'event_file_1_start_6000_stride_880_zside_1.tfrecords',
+        local_directory_path+'event_file_2_start_0_stride_1000_zside_0.tfrecords',
+        local_directory_path+'event_file_2_start_0_stride_1000_zside_1.tfrecords',
+                    ]
     #Making the filelist for the test datasets
-    test_image_filename_list=[local_directory_path+'image1000batchsize1000zside0.tfrecords']
-    test_label_filename_list=[local_directory_path+'label1000batchsize1000.tfrecords']
+    test_filename_list=[local_directory_path+'image1000batchsize1000zside0.tfrecords']
 
 
     #Seting up some metric of dataset and training iteration
-    mini_batch_size=20
-    buffer_size=30#mini_batch_size*2
-    epochs=31
+    mini_batch_size=10
+    buffer_size=mini_batch_size*2
+    epochs=1
 
     #Setting up the learning rate Hyperparameter
     init_learning_rate=0.1    #0.001 default for Adam
@@ -422,7 +434,5 @@ if __name__=='__main__':
     train(epochs,
             mini_batch_size,buffer_size,
             init_learning_rate,decay_step,decay_rate,
-            train_image_filename_list,
-            train_label_filename_list,
-            test_image_filename_list,
-            test_label_filename_list)
+            train_filename_list,
+            test_filename_list)

@@ -421,7 +421,7 @@ def model2(X,is_training):
     #Finally the prediction/output layer
     Z7=simple_fully_connected(A6,
                                 name='fc2',
-                                output_dim=5,
+                                output_dim=6,
                                 is_training=is_training,
                                 dropout_rate=dropout_rate,
                                 apply_batchnorm=False,

@@ -114,7 +114,7 @@ def _binary_parse_function_example(serialized_example_protocol):
     '''
     #Parsing the exampe from the binary format
     features={
-        'image':    tf.FixedlenFeature((),tf.string),
+        'image':    tf.FixedLenFeature((),tf.string),
         'label':    tf.FixedLenFeature((),tf.string)
     }
     parsed_feature=tf.parse_single_example(serialized_example_protocol,
@@ -224,7 +224,7 @@ def parse_tfrecords_file_v1(train_image_filename_list,train_label_filename_list,
     #Returning the required elements (dont return next element return iterator)
     return iterator,train_iter_init_op,test_iter_init_op
 
-def parse_tf_record_file(train_filename_list,test_filename_list,
+def parse_tfrecords_file(train_filename_list,test_filename_list,
                         mini_batch_size,shuffle_buffer_size):
     '''
     DESCRIPTION:
@@ -264,7 +264,7 @@ def parse_tf_record_file(train_filename_list,test_filename_list,
                                         train_dataset.output_shapes)
     train_iter_init_op=iterator.make_initializer(train_dataset)
 
-    return iterator,train_iter_init_op
+    return iterator,train_iter_init_op,None
 
 
 
