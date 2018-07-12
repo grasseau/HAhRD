@@ -135,7 +135,7 @@ def generate_training_dataset(event_data_filename,event_file_no,
     #Some of the geometry metadata (will be constant)
     no_layers=40
     #Specifying the size of minibatch
-    event_stride='upto_end' #seems optimal in terms of memory use.
+    event_stride=1000 #seems optimal in terms of memory use.
     event_start_no=0 #for testing now
 
     #Creating the corresponding label for out image

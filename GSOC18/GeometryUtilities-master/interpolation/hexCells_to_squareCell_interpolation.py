@@ -606,7 +606,7 @@ def compute_energy_map(all_event_hits,event_mask,resolution,edge_length,event_fi
                 #Not saving the events which were not interpolated
                 if event_mask[example_idx]=='False':
                     continue
-
+                print 'Making example for: ',example_idx
                 example=tf.train.Example(features=tf.train.Features(
                     feature={
                         'image': _bytes_feature(energy_map[example_idx,:,:,:].tobytes()),
