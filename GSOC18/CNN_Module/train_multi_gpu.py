@@ -317,7 +317,7 @@ def train(epochs,mini_batch_size,buffer_size,
             while True:
                 try:
                     #Running the train op and optionally the tracer bullet
-                    if bno%20==0 and i%10==0:
+                    if bno%20==0 and i%5==0:
                         #Adding the runtime statisctics (memory and execution time)
                         run_options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                         run_metadata=tf.RunMetadata()
@@ -384,7 +384,7 @@ def train(epochs,mini_batch_size,buffer_size,
                     break
 
             #Also save the checkpoints (after two every epoch)
-            if i%5==0:
+            if i%6==0:
                 #Saving the checkpoints
                 checkpoint_path=checkpoint_filename+'model.ckpt'
                 saver.save(sess,checkpoint_path,global_step=i)
@@ -404,20 +404,20 @@ if __name__=='__main__':
 
     #Setting up the name of the filelist of train and test dataset
     #Making the filelist for the train dataset
-    train_filename_pattern=local_directory_path+'event_file_*.tfrecords'
+    train_filename_pattern=local_directory_path+'event_file_1_*.tfrecords'
     #Making the filelist for the test datasets
-    test_filename_pattern=[local_directory_path+'event_file_*.tfrecords']
+    test_filename_pattern=local_directory_path+'event_file_2_*.tfrecords'
 
 
     #Seting up some metric of dataset and training iteration
     mini_batch_size=20
     buffer_size=mini_batch_size*2
-    epochs=21
+    epochs=25
 
     #Setting up the learning rate Hyperparameter
     init_learning_rate=0.1    #0.001 default for Adam
-    decay_step=46
-    decay_rate=0.95
+    decay_step=360
+    decay_rate=0.9
 
     #parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size)
     train(epochs,
