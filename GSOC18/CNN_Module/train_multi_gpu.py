@@ -313,20 +313,24 @@ def train(epochs,mini_batch_size,buffer_size,
             #initializing the training iterator
             sess.run(train_iter_init_op) #we need the is_training placeholder
             bno=1                        #writing the batch number
+            t_epoch_start=datetime.datetime.now()
             while True:
                 try:
-                    #Starting the timer
-                    t0=datetime.datetime.now()
+                    #Running the train op and optionally the tracer bullet
                     if bno%10==0 and i%10==0:
                         #Adding the runtime statisctics (memory and execution time)
                         run_options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                         run_metadata=tf.RunMetadata()
 
+                        #Starting the timer
+                        t0=datetime.datetime.now()
                         #Running the op
                         track_results=sess.run(train_track_ops,
                                                 feed_dict={is_training:True},
                                                 options=run_options,
                                                 run_metadata=run_metadata)
+                        t1=datetime.datetime.now()
+
                         #Adding the run matedata to the tensorboard summary writer
                         train_writer.add_run_metadata(run_metadata,'step%dbatch%d'%(i,bno))
 
@@ -339,17 +343,22 @@ def train(epochs,mini_batch_size,buffer_size,
                             f.write(ctf)
 
                     else:
+                        #Starting the timer
+                        t0=datetime.datetime.now()
+                        #Running the op to train
                         track_results=sess.run(train_track_ops,
                                                 feed_dict={is_training:True},
                                                 )
+                        t1=datetime.datetime.now()
 
-                    t1=datetime.datetime.now()
                     print 'Training loss @epoch: ',i,' @minibatch: ',bno,track_results[1:-1],'in ',t1-t0
                     #Now the last op has the merged_summary evaluated.So, write it.
                     train_writer.add_summary(track_results[-1],bno)
                     bno+=1
                 except tf.errors.OutOfRangeError:
-                    print 'Training one epoch completed!!\n'
+                    t_epoch_end=datetime.datetime.now()
+                    print 'Training one epoch completed in: {}\n'.format(
+                                    t_epoch_end-t_epoch_start)
                     break
 
             #get the validation accuracy,starting the validation/test iterator

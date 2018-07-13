@@ -103,8 +103,8 @@ def create_inference_graph(iterator,is_training):
 
     return label_pred_ops,accuracy_ops
 
-def infer(test_image_filename_list,test_label_filename_list,
-            inference_mode,mini_batch_size,checkpoint_epoch_number):
+def infer(infer_filename_pattern,inference_mode,
+            mini_batch_size,checkpoint_epoch_number):
     '''
     DESCRIPTION:
         This function will now control the whole inference process
@@ -116,10 +116,8 @@ def infer(test_image_filename_list,test_label_filename_list,
         6. Calling the plotting and other functions for visualization
     USAGE:
         INPUT:
-            test_image_filename_list : the filename list of the tfrecords
-                                        of the test "images".
-            test_label_filename_list : the filename list for the tfrecords
-                                        of the test labels
+            test_filename_pattern    : the file pattern on which we have to
+                                        make the inference.
             inference_mode           : to specify whether we are infering
                                         on valid/train mode. (will be used
                                         just for naming purpose)
@@ -133,8 +131,7 @@ def infer(test_image_filename_list,test_label_filename_list,
 
     #Getting the one-shot-iterator of the testing dataset
     with tf.device('/cpu:0'):
-        os_iterator=parse_tfrecords_file_inference(test_image_filename_list,
-                                                test_label_filename_list,
+        os_iterator=parse_tfrecords_file_inference(infer_filename_pattern
                                                 mini_batch_size)
 
     #Creating the graph for inference
@@ -226,11 +223,9 @@ if __name__=='__main__':
 
     #Making the prediction on the Training Set
     #Setting up the train data directory
-    train_image_filename_list=[local_directory_path+'image0batchsize1000zside0.tfrecords']
-    train_label_filename_list=[local_directory_path+'label0batchsize1000.tfrecords']
+    train_filename_pattern=local_directory_path+'event_file_*.tfrecords'
     #Making inference
-    infer(train_image_filename_list,
-            train_label_filename_list,
+    infer(train_filename_pattern,
             inference_mode='train',
             mini_batch_size=10,
             checkpoint_epoch_number=30)
@@ -241,11 +236,9 @@ if __name__=='__main__':
 
     #Making the prediction on Test Set
     #Setting the name of the test data directory
-    test_image_filename_list=[local_directory_path+'image1000batchsize1000zside0.tfrecords']
-    test_label_filename_list=[local_directory_path+'label1000batchsize1000.tfrecords']
-
-    infer(test_image_filename_list,
-        test_label_filename_list,
+    test_filename_pattern=local_directory_path+'event_file_*.tfrecords'
+    #Making the inference
+    infer(test_filename_pattern,
         inference_mode='valid',
         mini_batch_size=10,
         checkpoint_epoch_number=30)
