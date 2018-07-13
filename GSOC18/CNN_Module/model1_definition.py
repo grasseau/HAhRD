@@ -50,7 +50,7 @@ def calculate_model_accuracy(Z,Y):
                                     Y[:,3],reduction=tf.losses.Reduction.NONE)
         posz_error=(tf.reduce_mean(tf.abs(tf.divide(
                                     posz_abs_diff,Y[:,3]+1e-10))))*100
-
+        tf.summary.scalar('percentage_posy_error',posz_error)
 
 
         #Calculation of Classification error
@@ -64,8 +64,9 @@ def calculate_model_accuracy(Z,Y):
 
     #Returning the accuracy tuple to be used in inference module
     accuracy_tuple=(energy_error,
-                    eta_error,
-                    phi_error,
+                    posx_error,
+                    posy_error,
+                    posz_error,
                     classification_accuracy)
     return accuracy_tuple
 
