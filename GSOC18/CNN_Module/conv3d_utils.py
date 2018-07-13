@@ -444,6 +444,7 @@ def inception3d_block(X,name,final_channel_list,compress_channel_list,
 
     return A
 
+
 def inception_global_filter_layer(X,name,
                                     first_filter_shape,first_filter_stride,
                                     second_filter_shape,second_filter_stride,
@@ -534,3 +535,4 @@ def inception_global_filter_layer(X,name,
         A=tf.concat(concat_list,axis=axis,name='concat')
 
     return A
+

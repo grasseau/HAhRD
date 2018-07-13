@@ -105,6 +105,7 @@ def _binary_parse_function_label(serialized_example_protocol):
 
     return label,event
 
+
 def _binary_parse_function_example(serialized_example_protocol):
     '''
     DESCRIPTION:
@@ -188,6 +189,7 @@ def parse_tfrecords_file_v1(train_image_filename_list,train_label_filename_list,
     #print (train_dataset.output_types,train_dataset.output_shapes)
     #Applying the appropriate transformation to map from binary
     test_dataset_image=test_dataset_image.map(_binary_parse_function_image,
+
                                         num_parallel_calls=ncpu/2)
     test_dataset_label=test_dataset_label.map(_binary_parse_function_label,
                                         num_parallel_calls=ncpu/2)
