@@ -27,7 +27,7 @@ checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
 #model_function_handle=model2
 timeline_filename='tmp/hgcal/{}/timeline/'.format(run_number)
 if not os.path.exists(timeline_filename):
-    os.mkdir(timeline_filename)
+    os.makedirs(timeline_filename)
 
 ################# HELPER FUNCTIONS ########################
 def _add_summary(object):
