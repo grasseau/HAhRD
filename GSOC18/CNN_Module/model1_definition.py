@@ -31,23 +31,30 @@ def calculate_model_accuracy(Z,Y):
                                 energy_abs_diff,Y[:,0]+1e-10)))*100
         tf.summary.scalar('percentage_energy_error',energy_error)
 
-        #Eta Accuracy/Error
-        eta_abs_diff=tf.losses.absolute_difference(Z[:,1],
+        #posx Accuracy/Error
+        posx_abs_diff=tf.losses.absolute_difference(Z[:,1],
                                     Y[:,1],reduction=tf.losses.Reduction.NONE)
-        eta_error=(tf.reduce_mean(tf.abs(tf.divide(
-                                    eta_abs_diff,Y[:,1]+1e-10))))*100
-        tf.summary.scalar('percentage_eta_error',eta_error)
+        posx_error=(tf.reduce_mean(tf.abs(tf.divide(
+                                    posx_abs_diff,Y[:,1]+1e-10))))*100
+        tf.summary.scalar('percentage_posx_error',posx_error)
 
-        #Phi Accuracy/Error
-        phi_abs_diff=tf.losses.absolute_difference(Z[:,2],
+        #posy Accuracy/Error
+        posy_abs_diff=tf.losses.absolute_difference(Z[:,2],
                                     Y[:,2],reduction=tf.losses.Reduction.NONE)
-        phi_error=(tf.reduce_mean(tf.abs(tf.divide(
-                                    phi_abs_diff,Y[:,2]+1e-10))))*100
-        tf.summary.scalar('percentage_phi_error',phi_error)
+        posy_error=(tf.reduce_mean(tf.abs(tf.divide(
+                                    posy_abs_diff,Y[:,2]+1e-10))))*100
+        tf.summary.scalar('percentage_posy_error',posy_error)
+
+        #posz Accuracy/Error
+        posz_abs_diff=tf.losses.absolute_difference(Z[:,3],
+                                    Y[:,3],reduction=tf.losses.Reduction.NONE)
+        posz_error=(tf.reduce_mean(tf.abs(tf.divide(
+                                    posz_abs_diff,Y[:,3]+1e-10))))*100
+
 
 
         #Calculation of Classification error
-        regression_len=3
+        regression_len=4
         prediction=tf.argmax(Z[:,regression_len:],axis=1)
         label=tf.argmax(Y[:,regression_len:],axis=1)
 
@@ -101,8 +108,8 @@ def calculate_total_loss(Z,Y,scope=None):
 
         #Calculating the model loss
         #Calculating the regression loss(scalar)
-        regression_len=3
-        regression_output=Z[:,0:regression_len]#0,1,2
+        regression_len=4
+        regression_output=Z[:,0:regression_len]#0,1,2,3
         regression_label=Y[:,0:regression_len]#TRUTH
 
         #mean_squared_error Regrassion Loss
@@ -120,7 +127,7 @@ def calculate_total_loss(Z,Y,scope=None):
         all_loss_list.append(regression_loss)
 
         #Calculating the x-entropy loss(scalar)
-        class_output=Z[:,regression_len:]#3,4,....
+        class_output=Z[:,regression_len:]#4,....
         class_label=Y[:,regression_len:]#TRUTH
         categorical_loss=tf.losses.softmax_cross_entropy(class_label,
                                                         class_output)

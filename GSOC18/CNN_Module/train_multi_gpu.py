@@ -16,7 +16,7 @@ from model1_definition import calculate_total_loss
 
 ################## GLOBAL VARIABLES #######################
 local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
-run_number=27                            #for saving the summaries
+run_number=28                            #for saving the summaries
 train_summary_filename='tmp/hgcal/%s/train/'%(run_number) #for training set
 test_summary_filename='tmp/hgcal/%s/valid/'%(run_number)  #For validation set
 if os.path.exists(train_summary_filename):
@@ -317,7 +317,7 @@ def train(epochs,mini_batch_size,buffer_size,
             while True:
                 try:
                     #Running the train op and optionally the tracer bullet
-                    if bno%10==0 and i%10==0:
+                    if bno%20==0 and i%10==0:
                         #Adding the runtime statisctics (memory and execution time)
                         run_options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                         run_metadata=tf.RunMetadata()
@@ -384,7 +384,7 @@ def train(epochs,mini_batch_size,buffer_size,
                     break
 
             #Also save the checkpoints (after two every epoch)
-            if i%10==0:
+            if i%5==0:
                 #Saving the checkpoints
                 checkpoint_path=checkpoint_filename+'model.ckpt'
                 saver.save(sess,checkpoint_path,global_step=i)
@@ -412,7 +412,7 @@ if __name__=='__main__':
     #Seting up some metric of dataset and training iteration
     mini_batch_size=20
     buffer_size=mini_batch_size*2
-    epochs=1
+    epochs=21
 
     #Setting up the learning rate Hyperparameter
     init_learning_rate=0.1    #0.001 default for Adam

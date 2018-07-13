@@ -86,7 +86,7 @@ def create_inference_graph(iterator,is_training):
                 #of this device (for for naming purpose)
                 with tf.name_scope('tower{}'.format(i)) as tower_scope:
                     #Fetching the (image,target) batch for prediction
-                    ((X,_),(Y,_))=iterator.get_next()
+                    X,Y=iterator.get_next()
 
                     #Now,making the prediction using the model
                     Z=model_function_handle(X,is_training)
