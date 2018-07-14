@@ -131,7 +131,7 @@ def infer(infer_filename_pattern,inference_mode,
 
     #Getting the one-shot-iterator of the testing dataset
     with tf.device('/cpu:0'):
-        os_iterator=parse_tfrecords_file_inference(infer_filename_pattern
+        os_iterator=parse_tfrecords_file_inference(infer_filename_pattern,
                                                 mini_batch_size)
 
     #Creating the graph for inference

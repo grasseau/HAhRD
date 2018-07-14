@@ -50,7 +50,7 @@ def calculate_model_accuracy(Z,Y):
                                     Y[:,3],reduction=tf.losses.Reduction.NONE)
         posz_error=(tf.reduce_mean(tf.abs(tf.divide(
                                     posz_abs_diff,Y[:,3]+1e-10))))*100
-        tf.summary.scalar('percentage_posy_error',posz_error)
+        tf.summary.scalar('percentage_posz_error',posz_error)
 
 
         #Calculation of Classification error
@@ -317,7 +317,7 @@ def model2(X,is_training):
                             of the defined model
     '''
     #Model Hyperparameter
-    bn_decision=True
+    bn_decision=False
     lambd=0.0
     dropout_rate=0.0
 

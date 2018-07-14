@@ -408,7 +408,7 @@ def parse_tfrecords_file_inference(infer_filename_pattern,
                                     )
 
     #Now mapping and then making the batches in fused form
-    infer_dataset=infer_dataset(
+    infer_dataset=infer_dataset.apply(
             tf.contrib.data.map_and_batch(_binary_parse_function_example,
                                         mini_batch_size,
                                         num_parallel_batches=4)

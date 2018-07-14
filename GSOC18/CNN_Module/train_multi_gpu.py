@@ -415,9 +415,9 @@ if __name__=='__main__':
     epochs=25
 
     #Setting up the learning rate Hyperparameter
-    init_learning_rate=0.1    #0.001 default for Adam
-    decay_step=360
-    decay_rate=0.9
+    init_learning_rate=0.001    #0.001 default for Adam
+    decay_step=100
+    decay_rate=0.95
 
     #parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size)
     train(epochs,
