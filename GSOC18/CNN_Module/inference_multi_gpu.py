@@ -14,7 +14,7 @@ from model1_definition import calculate_total_loss,calculate_model_accuracy
 #default directory path for datasets
 local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
 #Checkpoint file path
-run_number=28
+run_number=29
 checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
 #Directory to save the prediction in compressed numpy format
 results_basepath='tmp/hgcal/{}/results/'.format(run_number)
@@ -228,7 +228,7 @@ if __name__=='__main__':
     infer(train_filename_pattern,
             inference_mode='train',
             mini_batch_size=20,
-            checkpoint_epoch_number=24)
+            checkpoint_epoch_number=30)
 
     #Now resetting the tf graph to make a new infrence on test image dataset
     print '>>>>>Resetting the default graph\n\n'
@@ -236,9 +236,9 @@ if __name__=='__main__':
 
     #Making the prediction on Test Set
     #Setting the name of the test data directory
-    test_filename_pattern=local_directory_path+'event_file_2_*.tfrecords'
+    test_filename_pattern=local_directory_path+'event_file_2_start_0*.tfrecords'
     #Making the inference
     infer(test_filename_pattern,
         inference_mode='valid',
         mini_batch_size=20,
-        checkpoint_epoch_number=24)
+        checkpoint_epoch_number=30)
