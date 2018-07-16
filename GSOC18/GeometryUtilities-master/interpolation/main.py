@@ -113,7 +113,7 @@ def interpolate_layer(geometry_fname,sq_cells_dict,edge_length,resolution,layer)
     t1=datetime.datetime.now()
     print 'Pickling completed in: ',t1-t0,' sec\n'
 
-def generate_training_dataset(event_data_filename,event_file_no,
+def generate_training_dataset(event_data_filename,event_file_no,mode,merge_zside=[0,1],
                             resolution=(514,513),edge_length=0.7):
     #ONGOING
     '''
@@ -126,6 +126,8 @@ def generate_training_dataset(event_data_filename,event_file_no,
         INPUTS:
             event_data_filename  : the filename of the root file to read event
             event_file_no        : this will be used to uniquely name the dataset
+            mode                 : whether we want to just merge or interpolate also
+            merge_zside          : which zside we want to merge, default both
             resolution          : the resolution of current interpolation scheme
             edge_length         : the edge length of the current interpolation
                                     scheme
@@ -135,8 +137,8 @@ def generate_training_dataset(event_data_filename,event_file_no,
     #Some of the geometry metadata (will be constant)
     no_layers=40
     #Specifying the size of minibatch
-    event_stride=1000 #seems optimal in terms of memory use.
-    event_start_no=0 #for testing now
+    event_stride='upto_end' #seems optimal in terms of memory use.
+    event_start_no=1000 #for testing now
 
     #Creating the corresponding label for out image
     print '>>> Reading the event dataframe for the groundtruth particles'
@@ -146,26 +148,27 @@ def generate_training_dataset(event_data_filename,event_file_no,
     if event_stride=='upto_end':
         event_stride=all_event_particles.shape[0]
 
-    t0=datetime.datetime.now()
-    event_mask,target_len=compute_target_lable(all_event_particles,resolution,edge_length,
-                        event_file_no,event_start_no,event_stride)
-    t1=datetime.datetime.now()
-    print '>>> Label Creation Completed in: ',t1-t0
+    if not mode=='just_merge':
+        t0=datetime.datetime.now()
+        event_mask,target_len=compute_target_lable(all_event_particles,resolution,edge_length,
+                            event_file_no,event_start_no,event_stride)
+        t1=datetime.datetime.now()
+        print '>>> Label Creation Completed in: ',t1-t0
 
-    #Converting the root file to a data frame
-    print '>>> Reading the event dataframe for the hits'
-    all_event_hits=readDataFile_hits(event_data_filename,event_start_no,
-                                    event_stride)
+        #Converting the root file to a data frame
+        print '>>> Reading the event dataframe for the hits'
+        all_event_hits=readDataFile_hits(event_data_filename,event_start_no,
+                                        event_stride)
 
-    t0=datetime.datetime.now()
-    compute_energy_map(all_event_hits,event_mask,resolution,edge_length,
-                        event_file_no,event_start_no,event_stride,no_layers)
-    t1=datetime.datetime.now()
-    print '>>> Image Creation Completed in: ',t1-t0
+        t0=datetime.datetime.now()
+        compute_energy_map(all_event_hits,event_mask,resolution,edge_length,
+                            event_file_no,event_start_no,event_stride,no_layers)
+        t1=datetime.datetime.now()
+        print '>>> Image Creation Completed in: ',t1-t0
 
     #Merging the dataset together as one example protocol
     print 'Merging the Image and label'
-    merge_image_and_label(event_file_no,event_start_no,event_stride)
+    merge_image_and_label(event_file_no,event_start_no,event_stride,merge_zside)
 
 ################ MAIN FUNCTION DEFINITION ###################
 def readGeometry( input_file,  layer, subdet ):
@@ -364,4 +367,6 @@ if __name__=='__main__':
     #generate_interpolation(opt.input_file,edge_length=0.7)
 
     #Generating the image
-    generate_training_dataset(opt.data_file,opt.data_file_no)
+    generate_training_dataset(opt.data_file,opt.data_file_no,
+                                mode='just_merge',
+                                merge_zside=[1])

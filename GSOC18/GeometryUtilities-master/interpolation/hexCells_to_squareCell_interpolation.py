@@ -838,7 +838,7 @@ def _binary_parse_function_label(serialized_example_protocol):
     return label,event_id
 
 
-def merge_image_and_label(event_file_no,event_start_no,event_stride):
+def merge_image_and_label(event_file_no,event_start_no,event_stride,merge_zside):
     '''
     DESCRIPTION:
         This function will merge the image and the label together
@@ -863,9 +863,10 @@ def merge_image_and_label(event_file_no,event_start_no,event_stride):
             event_stride    : the total number of events processed in this file
                                 (just giving the range from the start point,
                                 some of the events will be left based on filter mask)
+            merge_zside     :the data from which zside we ant to merge
     '''
     t0=datetime.datetime.now()
-    for zside in [0,1]:
+    for zside in merge_zside:
         image_filename=image_basepath+\
                     'image_event_file_%s_start_%s_stride_%s_zside_%s.tfrecords'%(
                                 event_file_no,event_start_no,event_stride,zside)
@@ -886,6 +887,8 @@ def merge_image_and_label(event_file_no,event_start_no,event_stride):
         dataset_label=dataset_label.map(_binary_parse_function_label)
 
         dataset_both=tf.data.Dataset.zip((dataset_image,dataset_label))
+
+        dataset_both=dataset_both.prefetch(10)
 
         #Making the one shot iterator
         one_shot_iterator=dataset_both.make_one_shot_iterator()
