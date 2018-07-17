@@ -368,5 +368,5 @@ if __name__=='__main__':
 
     #Generating the image
     generate_training_dataset(opt.data_file,opt.data_file_no,
-                                mode='just_merge',
-                                merge_zside=[1])
+                                mode='',
+                                merge_zside=[0,1])

@@ -19,12 +19,12 @@ checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
 #Directory to save the prediction in compressed numpy format
 results_basepath='tmp/hgcal/{}/results/'.format(run_number)
 if not os.path.exists(results_basepath):
-    os.mkdir(results_basepath)
+    os.makedirs(results_basepath)
 
 
 
 ################# HELPER FUNCTIONS #####################
-def _get_available_gpus():
+def get_available_gpus():
     '''
     DESCRIPTION:
         This function is same as that used in train_multi_gpu
@@ -72,7 +72,7 @@ def create_inference_graph(iterator,is_training):
                                 [Z1,Z2,....]
                                 (losses could also be included later)
     '''
-    all_gpu_name=_get_available_gpus()
+    all_gpu_name=get_available_gpus()
     num_gpus=len(all_gpu_name)
     label_pred_ops=[]
     accuracy_ops=[]
