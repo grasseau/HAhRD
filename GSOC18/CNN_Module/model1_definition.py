@@ -710,3 +710,173 @@ def model5(X,is_training):
                                 flatten_first=False, #default
                                 apply_relu=False)#unnormalized
     return Z7
+
+
+def model6(X,is_training):
+    '''
+    DESCRIPTION:
+        This model is diretly based on the AlexNet. The only difference
+        is that in the depth/layer dimension we are taking the global
+        view whereas in the spatial x/y dimension we are almost following
+        the Alex-Net pattern.
+
+        This model is using urely convolution and fc layers without
+        any residual or inception layers.
+        Tha main difference of this model from the previous ones are that
+        it is bigger in depth which might be a overclock for the current
+        12k dataset.
+    USAGE:
+        INPUT:
+            as usual
+    '''
+    #Model Hyperparameter
+    bn_decision=False
+    lambd=0.0
+    dropout_rate=0.0
+
+    #Reshaping the image to add the channel dimension
+    X_img=tf.expand_dims(X,axis=-1,name='add_channel_dim')
+
+    #Starting the first layer
+    A1=rectified_conv3d(X_img,
+                        name='conv3d1',
+                        filter_shape=(11,11,40),
+                        output_channel=96,
+                        stride=(4,4,1),
+                        padding_type='VALID',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)#it is default no need to write
+    A1Mp=max_pooling3d(A1,
+                        name='mpool1',
+                        filter_shape=(3,3,1),
+                        stride=(2,2,1),
+                        padding_type='VALID')
+
+    #Defining the second layer
+    A2=rectified_conv3d(A1Mp,
+                        name='conv3d2',
+                        filter_shape=(5,5,1),
+                        output_channel=256,
+                        stride=(1,1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)#it is default no need to write
+    A2Mp=max_pooling3d(A2,
+                        name='mpool2',
+                        filter_shape=(3,3,1),
+                        stride=(2,2,1),
+                        padding_type='VALID')
+
+    #Defining the thord layer
+    A3=rectified_conv3d(A2Mp,
+                        name='conv3d3',
+                        filter_shape=(3,3,1),
+                        output_channel=256,
+                        stride=(1,1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)#it is default no need to write
+    A3Mp=max_pooling3d(A3,
+                        name='mpool3',
+                        filter_shape=(3,3,1),
+                        stride=(2,2,1),
+                        padding_type='VALID')
+
+    #Definign the fourth layer
+    A4=rectified_conv3d(A3Mp,
+                        name='conv3d4',
+                        filter_shape=(3,3,1),
+                        output_channel=384,
+                        stride=(1,1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+
+    #Defining the fifth layer
+    A5=rectified_conv3d(A4,
+                        name='conv3d5',
+                        filter_shape=(3,3,1),
+                        output_channel=384,
+                        stride=(1,1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+
+    #Adding the sixth layer
+    A6=rectified_conv3d(A5,
+                        name='conv3d6',
+                        filter_shape=(3,3,1),
+                        output_channel=384,
+                        stride=(1,1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+
+    #Defining the seventh layer
+    A7=rectified_conv3d(A6,
+                        name='conv3d7',
+                        filter_shape=(3,3,1),
+                        output_channel=256,
+                        stride=(1,1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+    A7Mp=max_pooling3d(A7,
+                        name='mpool3',
+                        filter_shape=(3,3,1),
+                        stride=(2,2,1),
+                        padding_type='VALID')
+
+    #Now flattening and making fully connected layers
+    A8=simple_fully_connected(A7Mp,
+                                name='fc1',
+                                output_dim=1024,
+                                is_training=is_training,
+                                dropout_rate=dropout_rate,
+                                apply_batchnorm=bn_decision,
+                                weight_decay=lambd,
+                                flatten_first=True,
+                                apply_relu=True)
+
+    #Now making the socnd fully connected layer
+    A9=simple_fully_connected(A8,
+                                name='fc2',
+                                output_dim=1024,
+                                is_training=is_training,
+                                dropout_rate=dropout_rate,
+                                apply_batchnorm=bn_decision,
+                                weight_decay=lambd,
+                                apply_relu=True)
+
+    #Now making the final layer (un-rectified version)
+    Z10=simple_fully_connected(A9,
+                                name='fc3',
+                                output_dim=6,
+                                is_training=is_training,
+                                dropout_rate=dropout_rate,
+                                apply_batchnorm=bn_decision,
+                                weight_decay=lambd,
+                                apply_relu=False)
+
+    return Z10
