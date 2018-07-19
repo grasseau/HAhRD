@@ -16,7 +16,7 @@ from model1_definition import calculate_total_loss
 
 ################## GLOBAL VARIABLES #######################
 local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
-run_number=30                            #for saving the summaries
+run_number=31                            #for saving the summaries
 train_summary_filename='tmp/hgcal/%s/train/'%(run_number) #for training set
 test_summary_filename='tmp/hgcal/%s/valid/'%(run_number)  #For validation set
 if os.path.exists(train_summary_filename):
@@ -222,7 +222,8 @@ def create_training_graph(iterator,is_training,global_step,learning_rate):
 
 def train(epochs,mini_batch_size,buffer_size,
                 init_learning_rate,decay_step,decay_rate,
-                train_filename_list,test_filename_list):
+                train_filename_list,test_filename_list,
+                restore_epoch_number=None):
     '''
     DESCRIPTION:
         This function will finally take the graph created for training
@@ -247,6 +248,8 @@ def train(epochs,mini_batch_size,buffer_size,
                                         tfrecords file
             test_label_filename_list  : the list of the filename having
                                         corresponding labels for the images
+            restore_epoch_number      : the number if given will be used for
+                                        restoring the training.
         OUTPUT:
             nothing
             later checkpoints saving will be added
@@ -296,12 +299,13 @@ def train(epochs,mini_batch_size,buffer_size,
     config=tf.ConfigProto(allow_soft_placement=True,
                           log_device_placement=False)
     with tf.Session(config=config) as sess:
-        #initializing the global variables
-        sess.run(init)
-        #Restoring the saved model if possible
-        # last_epoch_number=8
-        # checkpoint_path=checkpoint_filename+'model.ckpt-%s'%(last_epoch_number)
-        # saver.restore(sess,checkpoint_path)
+        if restore_epoch_number==None:
+            #initializing the global variables
+            sess.run(init)
+        else:
+            #Restoring the saved model if possible
+            checkpoint_path=checkpoint_filename+'model.ckpt-%s'%(restore_epoch_number)
+            saver.restore(sess,checkpoint_path)
 
         #Adding the graph to tensorborad
         train_writer.add_graph(sess.graph)
@@ -404,9 +408,9 @@ if __name__=='__main__':
 
     #Setting up the name of the filelist of train and test dataset
     #Making the filelist for the train dataset
-    train_filename_pattern=local_directory_path+'event_file_1_*.tfrecords'
+    train_filename_pattern=local_directory_path+'event_file_1*zside_0.tfrecords'
     #Making the filelist for the test datasets
-    test_filename_pattern=local_directory_path+'event_file_2_start_0*.tfrecords'
+    test_filename_pattern=local_directory_path+'event_file_2_start_0*zside_0.tfrecords'
 
 
     #Seting up some metric of dataset and training iteration
@@ -424,4 +428,5 @@ if __name__=='__main__':
             mini_batch_size,buffer_size,
             init_learning_rate,decay_step,decay_rate,
             train_filename_pattern,
-            test_filename_pattern)
+            test_filename_pattern,
+            restore_epoch_number=None)

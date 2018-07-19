@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 import datetime
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d.axes3d import Axes3D, get_test_data
+from mpl_toolkits.mplot3d.axes3d import Axes3D
 
 #Importing the required moduels from the CNN_module
 import sys,os
@@ -16,7 +16,7 @@ from io_pipeline import parse_tfrecords_file_inference
 from inference_multi_gpu import get_available_gpus
 
 #Retreiving the checkpoints
-run_number=30
+run_number=32
 checkpoint_filename=os.path.join(
             os.path.dirname(sys.path[0]),'CNN_Module/')+\
             'tmp/hgcal/{}/checkpoint/'.format(run_number)
@@ -150,15 +150,27 @@ def create_layerwise_saliency_map(input_img,gradient):
         fig.suptitle('Image and corresponding Saliency Map(gradient)')
 
         #Making the image axes
-        ax1=fig.add_subplot(121,projection='3d')
+        ax1=fig.add_subplot(121)
         # x=range(input_img.shape[1])
         # y=range(input_img.shape[0])
         # xx,yy=np.meshgrid(x,y)
 
         image=input_img[:,:,i]
-        #ax1.imshow(image,cmap='jet',interpolation='nearest')
-        print xx.shape,yy.shape,image.shape
-        ax1.plot_surface(xx,yy,image)
+        #ax1.imshow(image,cmap='Dark2',interpolation='nearest')
+        #Trying the 3d Surface PLot
+        # print xx.shape,yy.shape,image.shape
+        # ax1.plot_surface(xx,yy,image)
+        #Trying the scatter plot
+        x=[]
+        y=[]
+        for ix in range(image.shape[0]):
+            for jy in range(image.shape[1]):
+                if not image[ix,jy]==0:
+                    y.append(ix)
+                    x.append(jy)
+        ax1.scatter(x,y,alpha=0.25)
+        ax1.set_xlim(0,514)
+        ax1.set_ylim(514,0)
 
         ax2=fig.add_subplot(122)
         map=gradient[:,:,i]
@@ -168,28 +180,98 @@ def create_layerwise_saliency_map(input_img,gradient):
         #plt.close()
 
 
+def create_3d_scatter_saliency_map(input_img,gradient):
+    '''
+    DESCRIPTION:
+        This function will try to visualize the gradient and hits as
+        a 3d scatter plot.
+        This will give us the global view of the positional location
+        of the hit and the important region in 3d scatter plot.
+
+        This will loose the relative importance (could be colored later)
+        but show us the global 3d view of hits and important region.
+    USAGE:
+        INPUT:
+            input    : the input "image" to the CNN
+            gradient : the gradient with respect to the map dimension
+                        in the image space
+    '''
+    #Squezzing the inputs
+    input_img=np.squeeze(input_img)
+    gradient=np.squeeze(gradient)
+
+    #Starting the plot
+    fig=plt.figure()
+    fig.suptitle('3D scater of hits and it imporance in prediction')
+
+    #Plottig the hits
+    ax1=fig.add_subplot(121,projection='3d')
+    x=[]
+    y=[]
+    z=[]
+    for ix in range(input_img.shape[0]):
+        for iy in range(input_img.shape[1]):
+            for layer in range(input_img.shape[2]):
+                if not input_img[ix,iy,layer]==0:
+                    x.append(ix)
+                    y.append(iy)
+                    z.append(layer)
+    ax1.scatter(x,y,z)
+
+    #plotting the important region
+    ax2=fig.add_subplot(122,projection='3d')
+    x2=[]
+    y2=[]
+    z2=[]
+    for ix in range(gradient.shape[0]):
+        for iy in range(gradient.shape[1]):
+            for layer in range(gradient.shape[2]):
+                if not gradient[ix,iy,layer]==0:
+                    x2.append(ix)
+                    y2.append(iy)
+                    z2.append(gradient[ix,iy,layer])
+    ax2.scatter(x2,y2,z2)
+
+
+    plt.show()
+
+
+
 if __name__=='__main__':
-    # checkpoint_epoch_number=30
-    # map_dimension=0
-    # infer_filename_pattern=local_directory_path+\
-    #             'event_file_1*.tfrecords'
+    import optparse
+    usage='usage: %prog[option]'
+    parser=optparse.OptionParser(usage)
+    parser.add_option('--mode',dest='mode',
+                     help='create or visual mode',
+                    default='')
+    (opt,args)=parser.parse_args()
 
-    #Calling the function to get the gradient
-    # get_gradient(infer_filename_pattern,
-    #                         checkpoint_epoch_number,
-    #                         map_dimension)
+    if opt.mode=='create':
+        #Setting up the data and checkpoint file
+        checkpoint_epoch_number=30
+        map_dimension=0
+        infer_filename_pattern=local_directory_path+\
+                    'event_file_1*zside_1.tfrecords'
 
-    #Loading the data from the npz file
-    filename='saliency_map_arrays.npz'
-    #Getting the required variable
-    data=np.load(filename)
-    gradient=data['gradient']
-    input=data['input']
-    pred=data['pred']
-    label=data['label']
+        #Calling the function to get the gradient
+        get_gradient(infer_filename_pattern,
+                                checkpoint_epoch_number,
+                                map_dimension)
+    else:
+        #Loading the data from the npz file
+        filename='saliency_map_arrays.npz'
+        #Getting the required variable
+        data=np.load(filename)
+        gradient=data['gradient']
+        input=data['input']
+        pred=data['pred']
+        label=data['label']
 
-    print 'label: ',label
-    print 'pred: ',pred
+        print 'label: ',label
+        print 'pred: ',pred
 
-    #Calling the plotting function
-    create_layerwise_saliency_map(input,gradient)
+        #Calling the plotting function
+        create_layerwise_saliency_map(input,gradient)
+
+        #Creating the scatter 3d representation of the saliency map
+        #create_3d_scatter_saliency_map(input,gradient)
