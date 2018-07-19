@@ -1,6 +1,8 @@
 import tensorflow as tf
 import numpy as np
 import datetime
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d.axes3d import Axes3D, get_test_data
 
 #Importing the required moduels from the CNN_module
 import sys,os
@@ -107,13 +109,87 @@ def get_gradient(infer_filename_pattern,checkpoint_epoch_number,map_dimension):
         #(run it in bigger batch cuz it takes lot of time to use tf.gradient
         #see the answer by mmry)
         gradient,input,pred,label=sess.run(saliency_ops)
-        print gradient[0].shape
+        print 'Gradient Shape: ',gradient[0].shape
+        print 'Label: ',label
+        print 'Prediction: ',pred
+
+        print '>>> Saving the data for map creation in results folder'
+        results_filename=os.path.join(
+                    os.path.dirname(sys.path[0]),'CNN_Module/')+\
+                    'tmp/hgcal/{}/results/'.format(run_number)+\
+                    'saliency_map_arrays'
+        np.savez_compressed(results_filename,
+                            gradient=gradient,
+                            input=input,
+                            pred=pred,
+                            label=label)
+        print 'Saved the saliency map creation data at: ',results_filename
+
+def create_layerwise_saliency_map(input_img,gradient):
+    '''
+    DESCRIPTION:
+        This function creates the saliency map finally along side the
+        layer hits for all the layers.
+    USAGE:
+        INPUT:
+            input_img  : the input image to the CNN Module
+            gradient   : the gradient of the map_dimension on the image
+                        space
+        OUTPUT:
+
+    '''
+    #Removing the unnecessary batch dimension which will be 1
+    input_img=np.squeeze(input_img)
+    gradient=np.squeeze(gradient)
+
+    #Now plotting the image layer wise
+    layers=input_img.shape[2]
+    for i in range(layers):
+        #Plotting the image and corresponding gradient
+        fig=plt.figure()
+        fig.suptitle('Image and corresponding Saliency Map(gradient)')
+
+        #Making the image axes
+        ax1=fig.add_subplot(121,projection='3d')
+        # x=range(input_img.shape[1])
+        # y=range(input_img.shape[0])
+        # xx,yy=np.meshgrid(x,y)
+
+        image=input_img[:,:,i]
+        #ax1.imshow(image,cmap='jet',interpolation='nearest')
+        print xx.shape,yy.shape,image.shape
+        ax1.plot_surface(xx,yy,image)
+
+        ax2=fig.add_subplot(122)
+        map=gradient[:,:,i]
+        ax2.imshow(map,cmap='jet',interpolation='nearest')
+
+        plt.show()
+        #plt.close()
+
 
 if __name__=='__main__':
-    checkpoint_epoch_number=30
-    map_dimension=0
-    infer_filename_pattern=local_directory_path+\
-                'event_file_1*.tfrecords'
+    # checkpoint_epoch_number=30
+    # map_dimension=0
+    # infer_filename_pattern=local_directory_path+\
+    #             'event_file_1*.tfrecords'
 
     #Calling the function to get the gradient
-    get_gradient(infer_filename_pattern,checkpoint_epoch_number,map_dimension)
+    # get_gradient(infer_filename_pattern,
+    #                         checkpoint_epoch_number,
+    #                         map_dimension)
+
+    #Loading the data from the npz file
+    filename='saliency_map_arrays.npz'
+    #Getting the required variable
+    data=np.load(filename)
+    gradient=data['gradient']
+    input=data['input']
+    pred=data['pred']
+    label=data['label']
+
+    print 'label: ',label
+    print 'pred: ',pred
+
+    #Calling the plotting function
+    create_layerwise_saliency_map(input,gradient)
