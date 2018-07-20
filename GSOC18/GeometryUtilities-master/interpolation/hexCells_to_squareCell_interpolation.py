@@ -892,6 +892,7 @@ def merge_image_and_label(event_file_no,event_start_no,event_stride,merge_zside)
 
         #Making the one shot iterator
         one_shot_iterator=dataset_both.make_one_shot_iterator()
+        next_element=one_shot_iterator.get_next()
 
         #Now saving the merged examples on by on in tfrecords
         compression_options=tf.python_io.TFRecordOptions(
@@ -908,7 +909,7 @@ def merge_image_and_label(event_file_no,event_start_no,event_stride,merge_zside)
                     try:
                         t_alpha=datetime.datetime.now()
                         ((image,image_event_id),
-                            (label,label_event_id))=sess.run(one_shot_iterator.get_next())
+                            (label,label_event_id))=sess.run(next_element)
                         t_beta=datetime.datetime.now()
                         assert (image_event_id==label_event_id),'Event_id mismatch'
 
