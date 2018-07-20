@@ -350,10 +350,11 @@ def create_layerwise_saliency_map(input_img,gradient):
         hit_x_all.append(hit_x)
         hit_y_all.append(hit_y)
         hit_color_all.append(hit_color)
-    #Creating the image Frame
-    image_frames=[
+    #Creating the  Frame
+    img_grad_frames=[
         {
             "data":[
+                #Defining the plot to go on the image side for this frame
                 go.Scatter(
                     x=hit_x_all[layer_i],
                     y=hit_y_all[layer_i],
@@ -369,21 +370,13 @@ def create_layerwise_saliency_map(input_img,gradient):
                                     # len=0.8
                         )
                     ),
-                    text=['energy: '+str(hit_color[j])
-                                for j in range(len(hit_color))],
+                    text=['energy: '+str((hit_color_all[layer_i])[j])
+                                for j in range(len(hit_color_all[layer_i]))],
+                    #hoverinfo='text',
                     xaxis='x1',
                     yaxis='y1'
-                )
-            ],
-            "name":'frame{}'.format(layer_i+1)
-        }
-        for layer_i in range(layers)
-    ]
-
-    #Defining the gradient frames
-    gradient_frames=[
-        {
-            "data":[
+                ),
+                #Defining the plot to go in the gradient side for this frame
                 go.Heatmap(
                     z=gradient[:,:,layer_i].T,
                     xaxis='x2',
@@ -396,7 +389,7 @@ def create_layerwise_saliency_map(input_img,gradient):
                     )
                 )
             ],
-            "name":'frame{}'.format(layer_i+1),
+            "name":'frame{}'.format(layer_i+1)
         }
         for layer_i in range(layers)
     ]
@@ -463,7 +456,7 @@ def create_layerwise_saliency_map(input_img,gradient):
                 sliders=sliders
     )
     fig['layout']=layout
-    fig['frames']=image_frames#+gradient_frames
+    fig['frames']=img_grad_frames
     plotly.offline.plot(fig,filename=save_dir+'map.html')
 
 

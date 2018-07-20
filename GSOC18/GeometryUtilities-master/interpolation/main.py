@@ -138,7 +138,7 @@ def generate_training_dataset(event_data_filename,event_file_no,mode,merge_zside
     no_layers=40
     #Specifying the size of minibatch
     event_stride='upto_end' #seems optimal in terms of memory use.
-    event_start_no=1000 #for testing now
+    event_start_no=0 #for testing now
 
     #Creating the corresponding label for out image
     print '>>> Reading the event dataframe for the groundtruth particles'
