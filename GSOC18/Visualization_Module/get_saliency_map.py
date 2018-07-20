@@ -358,6 +358,7 @@ def create_layerwise_saliency_map(input_img,gradient):
                 go.Scatter(
                     x=hit_x_all[layer_i],
                     y=hit_y_all[layer_i],
+                    name='hits',
                     mode='markers',
                     marker=dict(
                         color=hit_color_all[layer_i],
@@ -374,11 +375,12 @@ def create_layerwise_saliency_map(input_img,gradient):
                                 for j in range(len(hit_color_all[layer_i]))],
                     #hoverinfo='text',
                     xaxis='x1',
-                    yaxis='y1'
+                    yaxis='y1',
                 ),
                 #Defining the plot to go in the gradient side for this frame
                 go.Heatmap(
                     z=gradient[:,:,layer_i].T,
+                    name='gradient',
                     xaxis='x2',
                     yaxis='y2',
                     colorscale='Virdis',
@@ -386,7 +388,7 @@ def create_layerwise_saliency_map(input_img,gradient):
                                 x=1.02,
                                 # y=0.8,
                                 # len=0.8
-                    )
+                    ),
                 )
             ],
             "name":'frame{}'.format(layer_i+1)
@@ -453,7 +455,7 @@ def create_layerwise_saliency_map(input_img,gradient):
                 yaxis2=dict(range=[0,input_img.shape[1]],
                             #domain=[0.6,1],
                             anchor='x2'),
-                sliders=sliders
+                sliders=sliders,
     )
     fig['layout']=layout
     fig['frames']=img_grad_frames
