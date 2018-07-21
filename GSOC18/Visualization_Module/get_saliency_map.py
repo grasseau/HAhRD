@@ -177,40 +177,69 @@ def create_layerwise_saliency_map_matplot(input_img,gradient):
 
     #Now plotting the image layer wise
     layers=input_img.shape[2]
-    for i in range(layers):
-        #Plotting the image and corresponding gradient
-        fig=plt.figure()
-        fig.suptitle('Image and corresponding Saliency Map(gradient)')
+    # for i in range(layers):
+    #     #Plotting the image and corresponding gradient
+    #     fig=plt.figure()
+    #     fig.suptitle('Image and corresponding Saliency Map(gradient)')
+    #
+    #     #Making the image axes
+    #     ax1=fig.add_subplot(121)
+    #     # x=range(input_img.shape[1])
+    #     # y=range(input_img.shape[0])
+    #     # xx,yy=np.meshgrid(x,y)
+    #
+    #     image=input_img[:,:,i]
+    #     #ax1.imshow(image,cmap='Dark2',interpolation='nearest')
+    #     #Trying the 3d Surface PLot
+    #     # print xx.shape,yy.shape,image.shape
+    #     # ax1.plot_surface(xx,yy,image)
+    #     #Trying the scatter plot
+    #     x=[]
+    #     y=[]
+    #     for ix in range(image.shape[0]):
+    #         for jy in range(image.shape[1]):
+    #             if not image[ix,jy]==0:
+    #                 y.append(ix)
+    #                 x.append(jy)
+    #     ax1.scatter(x,y,alpha=0.25)
+    #     ax1.set_xlim(0,514)
+    #     ax1.set_ylim(514,0)
+    #
+    #     ax2=fig.add_subplot(122)
+    #     map=gradient[:,:,i]
+    #     ax2.imshow(map,cmap='jet',interpolation='nearest')
+    #
+    #     plt.show()
+    #     #plt.close()
 
-        #Making the image axes
-        ax1=fig.add_subplot(121)
-        # x=range(input_img.shape[1])
-        # y=range(input_img.shape[0])
-        # xx,yy=np.meshgrid(x,y)
+    #Adding the gradient to show per layer activation (i.e importance)
+    all_hit_sum=[]
+    all_gradient_sum=[]
+    for layer in range(layers):
+        hit_sum=np.sum(input_img[:,:,layer])
+        gradient_sum=np.sum(gradient[:,:,layer])
 
-        image=input_img[:,:,i]
-        #ax1.imshow(image,cmap='Dark2',interpolation='nearest')
-        #Trying the 3d Surface PLot
-        # print xx.shape,yy.shape,image.shape
-        # ax1.plot_surface(xx,yy,image)
-        #Trying the scatter plot
-        x=[]
-        y=[]
-        for ix in range(image.shape[0]):
-            for jy in range(image.shape[1]):
-                if not image[ix,jy]==0:
-                    y.append(ix)
-                    x.append(jy)
-        ax1.scatter(x,y,alpha=0.25)
-        ax1.set_xlim(0,514)
-        ax1.set_ylim(514,0)
+        all_hit_sum.append(hit_sum)
+        all_gradient_sum.append(gradient_sum)
 
-        ax2=fig.add_subplot(122)
-        map=gradient[:,:,i]
-        ax2.imshow(map,cmap='jet',interpolation='nearest')
+    fig=plt.figure()
+    fig.suptitle('Variation of Sum of Hits and Gradient with layer')
 
-        plt.show()
-        #plt.close()
+    #The hit plots
+    ax1=fig.add_subplot(121)
+    ax1.plot(all_hit_sum)
+    ax1.set_title('Variation of Sum of Hits Energy with layer')
+    ax1.set_xlabel('Layer')
+    ax1.set_ylabel('Sum of Ennergy of Hits')
+
+    #The gradient plots
+    ax2=fig.add_subplot(122)
+    ax2.plot(all_gradient_sum)
+    ax2.set_title('Sum of gradient with layer')
+    ax2.set_xlabel('Layer')
+    ax2.set_ylabel('Sum of Gradient for Energy Prediction')
+
+    plt.show()
 
 
 def create_3d_scatter_saliency_map_matplot(input_img,gradient):
@@ -496,7 +525,7 @@ if __name__=='__main__':
         print 'pred: ',pred
 
         #Calling the plotting function
-        #create_layerwise_saliency_map(input,gradient)
+        create_layerwise_saliency_map_matplot(input,gradient)
 
         #Creating the scatter 3d representation of the saliency map
         #create_3d_scatter_saliency_map(input,gradient)

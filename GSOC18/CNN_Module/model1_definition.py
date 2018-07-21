@@ -914,9 +914,9 @@ def model7(X,is_training):
     #Defining the input layer to the CNN
     A1=rectified_conv3d(X_img,
                         name='conv3d1',
-                        filter_shape=(11,11,3),
+                        filter_shape=(11,11,11),
                         output_channel=96,
-                        stride=(4,4,1),
+                        stride=(4,4,4),
                         padding_type='VALID',
                         is_training=is_training,
                         dropout_rate=dropout_rate,
@@ -926,7 +926,7 @@ def model7(X,is_training):
     A1Mp=max_pooling3d(A1,
                         name='mpool1',
                         filter_shape=(3,3,3),
-                        stride=(2,2,2),
+                        stride=(2,2,1),
                         padding_type='VALID')
 
     #Defining the second layer
@@ -943,8 +943,8 @@ def model7(X,is_training):
                         apply_relu=True)
     A2Mp=max_pooling3d(A2,
                         name='mpool2',
-                        filter_shape=(3,3,3),
-                        stride=(2,2,2),
+                        filter_shape=(3,3,1),
+                        stride=(2,2,1),
                         padding_type='VALID')
 
     #Defining the third layer
@@ -961,8 +961,8 @@ def model7(X,is_training):
                         apply_relu=True)
     A3Mp=max_pooling3d(A3,
                         name='mpool3',
-                        filter_shape=(3,3,3),
-                        stride=(2,2,2),
+                        filter_shape=(3,3,1),
+                        stride=(2,2,1),
                         padding_type='VALID')
 
     #Defingin the layer 4
@@ -1018,14 +1018,14 @@ def model7(X,is_training):
                         apply_relu=True)
     A7Mp=max_pooling3d(A7,
                         name='mpool7',
-                        filter_shape=(3,3,2),
-                        stride=(2,2,1),
+                        filter_shape=(3,3,3),
+                        stride=(2,2,2),
                         padding_type='VALID')
 
     #Now we will flatten and put it to fully connected layers
     A8=simple_fully_connected(A7Mp,
                                 name='fc1',
-                                output_dim=512,
+                                output_dim=1024,
                                 is_training=is_training,
                                 dropout_rate=dropout_rate,
                                 apply_batchnorm=bn_decision,
@@ -1036,7 +1036,7 @@ def model7(X,is_training):
     #Defining the ninth layer
     A9=simple_fully_connected(A8,
                                 name='fc2',
-                                output_dim=512,
+                                output_dim=1024,
                                 is_training=is_training,
                                 dropout_rate=dropout_rate,
                                 apply_batchnorm=bn_decision,
