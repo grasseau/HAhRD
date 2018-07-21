@@ -880,3 +880,177 @@ def model6(X,is_training):
                                 apply_relu=False)
 
     return Z10
+
+def model7(X,is_training):
+    '''
+    DESCRIPTION:
+        This function is similar to the the model6 AlexNet-global model.
+        But now we want to see the effect local filter in the channel
+        dimension.
+
+        Current Hypothesis of this local Filter:
+                This will be useful in the determination of the features
+                of shower like curvature,torsion etc which could be useful in
+                the prediciton of the barycenter output which depend on the
+                direction of shower.
+                Due to the lower receptive fields of the local filters they
+                could be sensitive to the effect present locally which might
+                get averaged out by the global filters.
+
+                But this could have adverse effect on the prediciton of the
+                energy. Let's see.
+    USAGE:
+        As per the previous models. as usual
+    '''
+    #Model Hyperparameter
+    bn_decision=False
+    lambd=0.0
+    dropout_rate=0.0
+
+    #Reshaping the image to add the channel dimension
+    X_img=tf.expand_dims(X,axis=-1,name='add_channel_dim')
+
+    #Now we will start defining the CNN architecture
+    #Defining the input layer to the CNN
+    A1=rectified_conv3d(X_img,
+                        name='conv3d1',
+                        filter_shape=(11,11,3),
+                        output_channel=96,
+                        stride=(4,4,1),
+                        padding_type='VALID',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+    A1Mp=max_pooling3d(A1,
+                        name='mpool1',
+                        filter_shape=(3,3,3),
+                        stride=(2,2,2),
+                        padding_type='VALID')
+
+    #Defining the second layer
+    A2=rectified_conv3d(A1Mp,
+                        name='conv3d2',
+                        filter_shape=(5,5,5),
+                        output_channel=256,
+                        stride=(1,1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+    A2Mp=max_pooling3d(A2,
+                        name='mpool2',
+                        filter_shape=(3,3,3),
+                        stride=(2,2,2),
+                        padding_type='VALID')
+
+    #Defining the third layer
+    A3=rectified_conv3d(A2Mp,
+                        name='conv3d3',
+                        filter_shape=(3,3,3),
+                        output_channel=256,
+                        stride=(1,1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+    A3Mp=max_pooling3d(A3,
+                        name='mpool3',
+                        filter_shape=(3,3,3),
+                        stride=(2,2,2),
+                        padding_type='VALID')
+
+    #Defingin the layer 4
+    A4=rectified_conv3d(A3Mp,
+                        name='conv3d4',
+                        filter_shape=(3,3,3),
+                        output_channel=384,
+                        stride=(1,1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+
+    #Applying the layer 5 without maxpooling
+    A5=rectified_conv3d(A4,
+                        name='conv3d5',
+                        filter_shape=(3,3,3),
+                        output_channel=384,
+                        stride=(1,1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+
+    #Defining the layer 6
+    A6=rectified_conv3d(A5,
+                        name='conv3d6',
+                        filter_shape=(3,3,3),
+                        output_channel=384,
+                        stride=(1,1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+
+    #Defining the layer 7 after the expansion of the channel
+    A7=rectified_conv3d(A6,
+                        name='conv3d7',
+                        filter_shape=(3,3,3),
+                        output_channel=256,
+                        stride=(1,1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+    A7Mp=max_pooling3d(A7,
+                        name='mpool7',
+                        filter_shape=(3,3,2),
+                        stride=(2,2,1),
+                        padding_type='VALID')
+
+    #Now we will flatten and put it to fully connected layers
+    A8=simple_fully_connected(A7Mp,
+                                name='fc1',
+                                output_dim=512,
+                                is_training=is_training,
+                                dropout_rate=dropout_rate,
+                                apply_batchnorm=bn_decision,
+                                weight_decay=lambd,
+                                flatten_first=True,
+                                apply_relu=True)
+
+    #Defining the ninth layer
+    A9=simple_fully_connected(A8,
+                                name='fc2',
+                                output_dim=512,
+                                is_training=is_training,
+                                dropout_rate=dropout_rate,
+                                apply_batchnorm=bn_decision,
+                                weight_decay=lambd,
+                                apply_relu=True)
+
+    #Defining the last layer
+    Z10=simple_fully_connected(A9,
+                                name='fc3',
+                                output_dim=6,
+                                is_training=is_training,
+                                dropout_rate=dropout_rate,
+                                apply_batchnorm=bn_decision,
+                                weight_decay=lambd,
+                                apply_relu=False)#not normalized
+
+    return Z10
