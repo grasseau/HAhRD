@@ -712,6 +712,7 @@ def compute_target_lable(genpart_df,resolution,edge_length,
     #                 tf.python_io.TFRecordCompressionType.ZLIB)
 
     events=range(event_start_no,event_start_no+event_stride)
+    firsttime_flag=1
     for event in events:
         print '>>> Creating the target label for event: {}'.format(event)
         #Creating the mask for filtering the particles (on current requirement)
@@ -784,8 +785,9 @@ def compute_target_lable(genpart_df,resolution,edge_length,
 
         #Now instead of creating the tfrecords we will store
         #the labels in the array
-        if all_labels==None:
+        if firsttime_flag==1:
             all_labels=label
+            firsttime_flag=0
         else:
             all_labels=np.vstack((all_labels,label))
 
