@@ -375,6 +375,10 @@ if __name__=='__main__':
 
     #Generating the image and label dataset (combined)
     no_layers=40
+    try:
+        event_stride=int(opt.event_stride)
+    except:
+        event_stride=opt.event_stride
     generate_training_dataset(opt.data_file,opt.data_file_no,
-                                int(opt.event_start_no),opt.event_stride,
+                                int(opt.event_start_no),event_stride,
                                 no_layers,interpolate_zside=[0,])
