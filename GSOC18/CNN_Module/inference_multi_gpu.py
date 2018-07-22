@@ -14,7 +14,7 @@ from model1_definition import calculate_total_loss,calculate_model_accuracy
 #default directory path for datasets
 local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
 #Checkpoint file path
-run_number=34
+run_number=35
 checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
 #Directory to save the prediction in compressed numpy format
 results_basepath='tmp/hgcal/{}/results/'.format(run_number)
