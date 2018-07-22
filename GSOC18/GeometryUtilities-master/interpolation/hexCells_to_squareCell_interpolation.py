@@ -451,8 +451,10 @@ def _bytes_feature(value):
     '''
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
-def compute_energy_map(all_event_hits,event_mask,resolution,edge_length,event_file_no,
-                    event_start_no,event_stride,no_layers,dtype=np.float32):
+def compute_energy_map(all_event_hits,event_labels,event_mask,
+                    interpolate_zside,resolution,edge_length,
+                    event_file_no,event_start_no,event_stride,
+                    no_layers,dtype=np.float32):
     '''
     DESCRIPTION:
         This function will finally map the energy deposit recorded in the
@@ -471,8 +473,13 @@ def compute_energy_map(all_event_hits,event_mask,resolution,edge_length,event_fi
         INPUT:
             all_event_hits  : the dataframe containing all the rechits from
                                 all the events (a certain minibatch of events).
+            event_labels    : the corresponding labels to the images to
+                                create the full data set here only
             event_mask      : a mask whether to select an event or not based
                                 on the decision in the label creation function
+            interpolate_zside: the zside we want to create the data set of
+                                since sometime we could want to create the dataset
+                                for a specific z-side.
             resolution      : the current resolution of the interpolation mesh
             event_file_no   : the file number of event which was used to generate
                                 this (will give unique name to dataset)
@@ -502,9 +509,9 @@ def compute_energy_map(all_event_hits,event_mask,resolution,edge_length,event_fi
 
 
     #Strating the tfRecord Writer
-    for zside in [0,1]:
+    for zside in interpolate_zside:
         image_filename=image_basepath+\
-                    'image_event_file_%s_start_%s_stride_%s_zside_%s.tfrecords'%(
+                    'event_file_%s_start_%s_stride_%s_zside_%s.tfrecords'%(
                                 event_file_no,event_start_no,event_stride,zside)
         compression_options=tf.python_io.TFRecordOptions(
                         tf.python_io.TFRecordCompressionType.ZLIB)
@@ -602,6 +609,7 @@ def compute_energy_map(all_event_hits,event_mask,resolution,edge_length,event_fi
             #REMEMBER: we have to retreive in this format only. also check
             #in what format numpy stores matrix by using tobytes.
             #(row mojor or column major)
+            label_idx=0
             for example_idx in range(event_stride):
                 #Not saving the events which were not interpolated
                 if event_mask[example_idx]=='False':
@@ -611,10 +619,13 @@ def compute_energy_map(all_event_hits,event_mask,resolution,edge_length,event_fi
                     feature={
                         'image': _bytes_feature(energy_map[example_idx,:,:,:].tobytes()),
                         #Adding an event lable to check sequential access
-                        'event': _int64_feature(example_idx+event_start_no)
+                        'label': _bytes_feature(event_labels[label_idx,:].tobytes())
                     }
                 ))
                 record_writer.write(example.SerializeToString())
+                #Incrementing the label idx after the event which is not masked
+                #is serialized
+                label_idx+=1
 
             #Testing the numpy array
             #np.save(image_filename,energy_map)
@@ -654,11 +665,9 @@ def compute_target_lable(genpart_df,resolution,edge_length,
     DESCRIPTION:
         This function will create the target label for the their
         corresponding energy map for training the CNN.
-        The target label will currently consist the example protocol
-        which will save different field in target label as
-        name-value pair in that protocol. Appropriate restructuring
-        like converting the categorical variables to one-hot will be done
-        while parsing.
+        The target label will be a numpy array of the event selected
+        which will reguce the time wasted in the separate merging of
+        the images and the label.
 
     USAGE:
         INPUT:
@@ -675,11 +684,11 @@ def compute_target_lable(genpart_df,resolution,edge_length,
                                 datafile i.e the number of examples in this data
                                 file.
         OUTPUT:
-            target_labels   : this will be a file saved in the imag_data directory
-                                with the filename  convention decided inside
             event_mask      : a mas showing which event to take while Creating
                                 the image to have a sync between the image and
                                 label dataset
+            all_labels      : a numpy array of the labels of the event it has
+                                processed according to the event mask.
     '''
     #Reading the sq_cells dict for finding the probable location of
     #particle to the square layer
@@ -694,92 +703,99 @@ def compute_target_lable(genpart_df,resolution,edge_length,
     #Making a flag for the events which dont have any electron
     count=0
     event_mask=[]
+    all_labels=None
 
     #Setting up the filename and compression options of the target tfrecords
-    label_filename=image_basepath+'label_event_file_%s_start_%s_stride_%s.tfrecords'%(
-                                    event_file_no,event_start_no,event_stride)
-    compression_options=tf.python_io.TFRecordOptions(
-                    tf.python_io.TFRecordCompressionType.ZLIB)
+    # label_filename=image_basepath+'label_event_file_%s_start_%s_stride_%s.tfrecords'%(
+    #                                 event_file_no,event_start_no,event_stride)
+    # compression_options=tf.python_io.TFRecordOptions(
+    #                 tf.python_io.TFRecordCompressionType.ZLIB)
 
-    #Starting the tfrecords
-    with tf.python_io.TFRecordWriter(label_filename,
-                        options=compression_options) as record_writer:
-        events=range(event_start_no,event_start_no+event_stride)
-        for event in events:
-            print '>>> Creating the target label for event: {}'.format(event)
-            #Creating the mask for filtering the particles (on current requirement)
-            electron_id=11
-            positron_id=-11
-            particles_mask=np.logical_or(genpart_df.loc[event,"pid"]==electron_id,
-                                    genpart_df.loc[event,"pid"]==positron_id)
-            particles_mask &= (genpart_df.loc[event,"gen"]>=0)
-            particles_mask &= (genpart_df.loc[event,"reachedEE"]>1)
-            particles_mask &= ((genpart_df.loc[event,"energy"]/
-                                np.cosh(genpart_df.loc[event,"eta"]))>5)
-            particles_mask &= (genpart_df.loc[event,"eta"])>0
+    events=range(event_start_no,event_start_no+event_stride)
+    for event in events:
+        print '>>> Creating the target label for event: {}'.format(event)
+        #Creating the mask for filtering the particles (on current requirement)
+        electron_id=11
+        positron_id=-11
+        particles_mask=np.logical_or(genpart_df.loc[event,"pid"]==electron_id,
+                                genpart_df.loc[event,"pid"]==positron_id)
+        particles_mask &= (genpart_df.loc[event,"gen"]>=0)
+        particles_mask &= (genpart_df.loc[event,"reachedEE"]>1)
+        particles_mask &= ((genpart_df.loc[event,"energy"]/
+                            np.cosh(genpart_df.loc[event,"eta"]))>5)
+        particles_mask &= (genpart_df.loc[event,"eta"])>0
 
-            #Now filtering the required features for the target label
-            particles_energy=genpart_df.loc[event,"energy"][particles_mask]
-            particles_phi=genpart_df.loc[event,"phi"][particles_mask]
-            particles_eta=genpart_df.loc[event,"eta"][particles_mask]
-            particles_pid=genpart_df.loc[event,"pid"][particles_mask]
-            #Getting the barycenter location form the position array
-            particles_posx=np.array(genpart_df.loc[event,"posx"],
-                                dtype=object)[particles_mask]
-            particles_posy=np.array(genpart_df.loc[event,"posy"],
-                                dtype=object)[particles_mask]
-            particles_posz=np.array(genpart_df.loc[event,"posz"],
-                                dtype=object)[particles_mask]
+        #Now filtering the required features for the target label
+        particles_energy=genpart_df.loc[event,"energy"][particles_mask]
+        particles_phi=genpart_df.loc[event,"phi"][particles_mask]
+        particles_eta=genpart_df.loc[event,"eta"][particles_mask]
+        particles_pid=genpart_df.loc[event,"pid"][particles_mask]
+        #Getting the barycenter location form the position array
+        particles_posx=np.array(genpart_df.loc[event,"posx"],
+                            dtype=object)[particles_mask]
+        particles_posy=np.array(genpart_df.loc[event,"posy"],
+                            dtype=object)[particles_mask]
+        particles_posz=np.array(genpart_df.loc[event,"posz"],
+                            dtype=object)[particles_mask]
 
-            #Checking if the electron is filtered and we got just one
-            print particles_pid,'\n'
-            if particles_pid.shape!=(1,): #and particles_pid.shape!=(2,):
-                count+=1
-                print 'Multiple/No Electron Detected!!!'
-                event_mask.append('False') #Dont take this event
-                continue
-            else:
-                event_mask.append('True') #Take this event
-            #assert particles_pid.shape==(1,),"Multiple Electrons are detected"
+        #Checking if the electron is filtered and we got just one
+        print particles_pid,'\n'
+        if particles_pid.shape!=(1,): #and particles_pid.shape!=(2,):
+            count+=1
+            print 'Multiple/No Electron Detected!!!'
+            event_mask.append('False') #Dont take this event
+            continue
+        else:
+            event_mask.append('True') #Take this event
+        #assert particles_pid.shape==(1,),"Multiple Electrons are detected"
 
-            #Creating the label vector as its easier to manipulate in numpy
-            #format: [energy,bary_posx,bary_posy,bary_posz,pc1(electron),pc2]
-            #Target Metadata
-            target_len=6
-            label=np.empty((target_len,),dtype=np.float32)
-            barycenter_depth=10 #as recommended by Florian and Arthur Sir
-            #Filling up the target label
-            label[0]=particles_energy[0]
-            label[1]=particles_posx[0][barycenter_depth-1]
-            label[2]=particles_posy[0][barycenter_depth-1]
-            label[3]=particles_posz[0][barycenter_depth-1]
-            if particles_pid[0]==11:
-                label[4]=1      #its electron
-                label[5]=0
-            else:
-                label[4]=0
-                label[5]=1      #it not electon(positron ask Florian Sir)
+        #Creating the label vector as its easier to manipulate in numpy
+        #format: [energy,bary_posx,bary_posy,bary_posz,pc1(electron),pc2]
+        #Target Metadata
+        target_len=6
+        label=np.empty((target_len,),dtype=np.float32)
+        barycenter_depth=10 #as recommended by Florian and Arthur Sir
+        #Filling up the target label
+        label[0]=particles_energy[0]
+        label[1]=particles_posx[0][barycenter_depth-1]
+        label[2]=particles_posy[0][barycenter_depth-1]
+        label[3]=particles_posz[0][barycenter_depth-1]
+        if particles_pid[0]==11:
+            label[4]=1      #its electron
+            label[5]=0
+        else:
+            label[4]=0
+            label[5]=1      #it not electon(positron ask Florian Sir)
 
-            #Creating the example protocol to write to tfrecords
-            #Add the event number later for check of the correspondancce
-            #between the events in the label and image
-            example=tf.train.Example(features=tf.train.Features(
-                    feature={
-                        #Saving each features as the named dict with bytes
-                        'label':_bytes_feature(label.tobytes()),
-                        #extra label of event for seq access check
-                        'event':_int64_feature(event)
-                    }
-                )
-            )
-            #Adding the example to the record writer
-            record_writer.write(example.SerializeToString())
+        #Creating the example protocol to write to tfrecords
+        #Add the event number later for check of the correspondancce
+        #between the events in the label and image
+        # example=tf.train.Example(features=tf.train.Features(
+        #         feature={
+        #             #Saving each features as the named dict with bytes
+        #             'label':_bytes_feature(label.tobytes()),
+        #             #extra label of event for seq access check
+        #             'event':_int64_feature(event)
+        #         }
+        #     )
+        # )
+        # #Adding the example to the record writer
+        # record_writer.write(example.SerializeToString())
+
+        #Now instead of creating the tfrecords we will store
+        #the labels in the array
+        if all_labels==None:
+            all_labels=label
+        else:
+            all_labels=np.vstack((all_labels,label))
+
 
     #Seeing the fraction of events which dont have just one electron
     print 'Total number of events skipped: ',count
+    print 'Shape of the labels array: ',all_labels.shape
 
     #Returning the event mask for event selection in image_creation
-    return event_mask,target_len
+    return event_mask,all_labels
 
 ################## MERGING IMAGE & LABELS ####################
 def _binary_parse_function_image(serialized_example_protocol):
