@@ -8,13 +8,13 @@ from io_pipeline import parse_tfrecords_file_inference
 
 ################# GLOBAL VARIABLES #####################
 #Getting the model handle
-from model1_definition import model6 as model_function_handle
+from model1_definition import model7 as model_function_handle
 from model1_definition import calculate_total_loss,calculate_model_accuracy
 #model_function_handle=model2
 #default directory path for datasets
 local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
 #Checkpoint file path
-run_number=33
+run_number=34
 checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
 #Directory to save the prediction in compressed numpy format
 results_basepath='tmp/hgcal/{}/results/'.format(run_number)

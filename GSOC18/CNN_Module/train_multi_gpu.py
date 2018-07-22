@@ -16,7 +16,7 @@ from model1_definition import calculate_total_loss
 
 ################## GLOBAL VARIABLES #######################
 local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
-run_number=33                            #for saving the summaries
+run_number=34                            #for saving the summaries
 train_summary_filename='tmp/hgcal/%s/train/'%(run_number) #for training set
 test_summary_filename='tmp/hgcal/%s/valid/'%(run_number)  #For validation set
 if os.path.exists(train_summary_filename):
@@ -408,7 +408,7 @@ if __name__=='__main__':
 
     #Setting up the name of the filelist of train and test dataset
     #Making the filelist for the train dataset
-    train_filename_pattern=local_directory_path+'event_file_1*zside_0.tfrecords'
+    train_filename_pattern=local_directory_path+'event_file_1_*zside_0.tfrecords'
     #Making the filelist for the test datasets
     test_filename_pattern=local_directory_path+'event_file_2_start_0*zside_0.tfrecords'
 
@@ -420,7 +420,7 @@ if __name__=='__main__':
 
     #Setting up the learning rate Hyperparameter
     init_learning_rate=0.001    #0.001 default for Adam
-    decay_step=150
+    decay_step=350
     decay_rate=0.95
 
     #parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size)
