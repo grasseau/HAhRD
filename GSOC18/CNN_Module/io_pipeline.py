@@ -105,7 +105,44 @@ def _binary_parse_function_label(serialized_example_protocol):
 
     return label,event
 
-def parse_tfrecords_file(train_image_filename_list,train_label_filename_list,
+
+def _binary_parse_function_example(serialized_example_protocol):
+    '''
+    DESCRIPTION:
+        This function will deserialize, decompress and then transform
+        the image and label in the appropriate shape based on the (new) merged
+        structure of the dataset.
+    '''
+    #Parsing the exampe from the binary format
+    features={
+        'image':    tf.FixedLenFeature((),tf.string),
+        'label':    tf.FixedLenFeature((),tf.string)
+    }
+    parsed_feature=tf.parse_single_example(serialized_example_protocol,
+                                            features)
+
+    #Now setting the appropriate tranformation (decoding and reshape)
+    height=514
+    width=513
+    depth=40
+    #Decoding the image from biary
+    image=tf.decode_raw(parsed_feature['image'],tf.float32)#BEWARE of dtype
+    image.set_shape([depth*height*width])
+    #Now reshape in usual way since reshape automatically read in c-order
+    image=tf.reshape(image,[height,width,depth])
+
+    #Now decoding the label
+    target_len=6
+    label=tf.decode_raw(parsed_feature['label'],tf.float32)
+    label.set_shape([target_len])
+    #Reshaping appropriately
+    label=tf.reshape(label,[target_len,])
+
+    #Returing the example tuple finally
+    return image,label
+
+################# TRAIN DATASET PIPELINE #####################
+def parse_tfrecords_file_v1(train_image_filename_list,train_label_filename_list,
                         test_image_filename_list,test_label_filename_list,
                         mini_batch_size,buffer_size=5000):
     '''
@@ -135,24 +172,27 @@ def parse_tfrecords_file(train_image_filename_list,train_label_filename_list,
     train_dataset_label=tf.data.TFRecordDataset(train_label_filename_list,
                                 compression_type=comp_type,num_parallel_reads=ncpu/2)
     #Applying the apropriate transformation to map from binary
-    train_dataset_image=train_dataset_image.map(_binary_parse_function_image)
-    train_dataset_label=train_dataset_label.map(_binary_parse_function_label)
+    train_dataset_image=train_dataset_image.map(_binary_parse_function_image,
+                                                num_parallel_calls=ncpu/2)
+    train_dataset_label=train_dataset_label.map(_binary_parse_function_label,
+                                                num_parallel_calls=ncpu/2)
     #Stitching the image and label together
     train_dataset=tf.data.Dataset.zip((train_dataset_image,
                                         train_dataset_label))
 
     #Reading the test dataset
     test_dataset_image=tf.data.TFRecordDataset(test_image_filename_list,
-                                                compression_type=comp_type)
+                                compression_type=comp_type,num_parallel_reads=ncpu/2)
     test_dataset_label=tf.data.TFRecordDataset(test_label_filename_list,
-                                                compression_type=comp_type)
+                                compression_type=comp_type,num_parallel_reads=ncpu/2)
     #print '\ndirect binary'
     #print (train_dataset.output_types,train_dataset.output_shapes)
     #Applying the appropriate transformation to map from binary
     test_dataset_image=test_dataset_image.map(_binary_parse_function_image,
-                                        num_parallel_calls=ncpu-2)
+
+                                        num_parallel_calls=ncpu/2)
     test_dataset_label=test_dataset_label.map(_binary_parse_function_label,
-                                        num_parallel_calls=ncpu-2)
+                                        num_parallel_calls=ncpu/2)
     #Stitching the image and label together
     test_dataset=tf.data.Dataset.zip((test_dataset_image,
                                         test_dataset_label))
@@ -169,6 +209,10 @@ def parse_tfrecords_file(train_image_filename_list,train_label_filename_list,
     #print '\nbatched data'
     #print (train_dataset.output_types,train_dataset.output_shapes)
 
+    #Adding the prefetching so that the above steps are pipelined with below
+    train_dataset=train_dataset.prefetch(4)
+    test_dataset=test_dataset.prefetch(4)
+
     #now creating the re_initializable iterator
     iterator=tf.data.Iterator.from_structure(
                             train_dataset.output_types,
@@ -181,3 +225,200 @@ def parse_tfrecords_file(train_image_filename_list,train_label_filename_list,
 
     #Returning the required elements (dont return next element return iterator)
     return iterator,train_iter_init_op,test_iter_init_op
+
+def parse_tfrecords_file_v2(train_filename_pattern,test_filename_pattern,
+                        mini_batch_size,shuffle_buffer_size):
+    '''
+    DESCRIPTION:
+        This function will create the piepline based on the merged example
+        format where a single file contains both labels and images.
+    USAGE:
+        INPUT:
+            train_filename_pattern : the filename  pattern to create training
+                                        dataset
+            test_filename_pattern  :  the filename pattern to create test
+                                        dataset
+            mini_batch_size        : the batch size of the dataset
+            shuffle_buffer_size    : the buffere size to shuffle data from
+                                    (here shuffling will be done on the filename)
+        OUTPUT:
+
+    '''
+    comp_type='ZLIB'
+    #Creating the training dataset
+    files=tf.data.Dataset.list_files(train_filename_pattern)
+    train_dataset=tf.data.TFRecordDataset(files,
+                                        compression_type=comp_type,
+                                        num_parallel_reads=20)
+    #Shuffling the file list
+    train_dataset=train_dataset.shuffle(buffer_size=shuffle_buffer_size)
+    #Mapping the parser function on file on each element to decode them
+    train_dataset=train_dataset.map(_binary_parse_function_example,
+                                    num_parallel_calls=ncpu)
+    #Batching the dataset
+    train_dataset=train_dataset.batch(mini_batch_size)
+    #Prefetching the batches
+    train_dataset=train_dataset.prefetch(4)
+
+
+    #Now making the re-initializable iterator
+    iterator=tf.data.Iterator.from_structure(
+                                        train_dataset.output_types,
+                                        train_dataset.output_shapes)
+    train_iter_init_op=iterator.make_initializer(train_dataset)
+
+    return iterator,train_iter_init_op,None
+
+def parse_tfrecords_file(train_filename_pattern,test_filename_pattern,
+                        mini_batch_size,shuffle_buffer_size):
+    '''
+    DESCRIPTION:
+        This will be the new version of the io pipeline based on the
+        the the suggestion mentioned in the input pipeline performance
+        guide.
+    '''
+    comp_type='ZLIB'
+    #Giving the file pattern to read the dataset from
+    #Making the train dataset
+    train_files=tf.data.Dataset.list_files(train_filename_pattern)
+    train_dataset=train_files.apply(tf.contrib.data.parallel_interleave(
+                                lambda x:tf.data.TFRecordDataset(x,
+                                            compression_type=comp_type),
+                                cycle_length=20,
+                                sloppy=True)
+                            )
+    #Making the test dataset
+    test_files=tf.data.Dataset.list_files(test_filename_pattern)
+    test_dataset=test_files.apply(tf.contrib.data.parallel_interleave(
+                                lambda x:tf.data.TFRecordDataset(x,
+                                            compression_type=comp_type),
+                                cycle_length=20,
+                                sloppy=True)
+                            )
+
+    #Shuffling the filenames here instead of the elements (low memory footprint)
+    train_dataset=train_dataset.shuffle(buffer_size=shuffle_buffer_size)
+    test_dataset=test_dataset.shuffle(buffer_size=shuffle_buffer_size)
+
+    #Mapping the examples to decode the binary
+    # train_dataset=train_dataset.map(_binary_parse_function_example,
+    #                                 num_parallel_calls=ncpu)
+    # train_dataset=train_dataset.batch(mini_batch_size)
+
+    #Applying the fused map and batch operator to train dataset
+    train_dataset=train_dataset.apply(
+            tf.contrib.data.map_and_batch(_binary_parse_function_example,
+                                            mini_batch_size,
+                                            num_parallel_batches=4)
+    )
+    #Applying the fused map and batch operator to test dataset
+    test_dataset=test_dataset.apply(
+            tf.contrib.data.map_and_batch(_binary_parse_function_example,
+                                            mini_batch_size,
+                                            num_parallel_batches=4)
+    )
+
+    #Prefetching the dataset for train dataset
+    train_dataset=train_dataset.prefetch(4)
+    #Prefetching the dataset for test dataset
+    test_dataset=test_dataset.prefetch(4)
+
+    #Now making the re-initializable iterator
+    iterator=tf.data.Iterator.from_structure(
+                                        train_dataset.output_types,
+                                        train_dataset.output_shapes)
+    #Making the initialization operator
+    train_iter_init_op=iterator.make_initializer(train_dataset)
+    test_iter_init_op=iterator.make_initializer(test_dataset)
+
+    #Returning the iterator and initializer ops
+    return iterator,train_iter_init_op,test_iter_init_op
+
+
+################ INFERENCE DATASET PIPELINE #################
+def parse_tfrecords_file_inference_v1(test_image_filename_list,
+                                    test_label_filename_list,
+                                    mini_batch_size):
+    '''
+    DESCRIPTION:
+        This function will make the one-shot iterator for runnning
+        the imference on the test/validation set ,without any
+        shuffling etc.
+    USAGE:
+        INPUTS:
+            test_image_filename_list : the list of tfrecords containing
+                                        the images for inference
+            test_label_filename_list : the list of tfrecords with
+                                        the labels of the corresponding images
+            mini_batch_size          : since this time no gradient ops
+                                        will be made on graph, we could have
+                                        bigger batch size to parallely make
+                                        inference
+        OUTPUT:
+            one_shot_iterator       : the one-shot iterator for the dataset
+    '''
+    #Reading the tfrecords
+    comp_type='ZLIB'
+    test_dataset_image=tf.data.TFRecordDataset(test_image_filename_list,
+                                    compression_type=comp_type,
+                                    num_parallel_reads=ncpu-2)
+    test_dataset_label=tf.data.TFRecordDataset(test_label_filename_list,
+                                    compression_type=comp_type,
+                                    num_parallel_reads=ncpu-2)
+    #Decoding the binary file to numberical format
+    test_dataset_image=test_dataset_image.map(_binary_parse_function_image,
+                                                num_parallel_calls=ncpu-2)
+    test_dataset_label=test_dataset_label.map(_binary_parse_function_label,
+                                                num_parallel_calls=ncpu-2)
+
+    #Now Zipping them together to make on combined example dataset
+    test_dataset=tf.data.Dataset.zip((test_dataset_image,
+                                    test_dataset_label))
+
+    #Making the batches for parallel inference
+    test_dataset=test_dataset.batch(mini_batch_size)
+
+    #Finally making the one-shot iterator
+    one_shot_iterator=test_dataset.make_one_shot_iterator()
+
+    return one_shot_iterator
+
+def parse_tfrecords_file_inference(infer_filename_pattern,
+                                    mini_batch_size):
+    '''
+    DESCRIPTION:
+        This function will make the one-shot iterator for making
+        the inference. This is the most recent version of IO pipeline
+        optimized for the performance.
+    USAGE:
+        infer_filename_pattern  :the filename pattern on which we have to
+                                    make the inference on.
+        mini_batch_size         : the size of the minibatch where we will
+                                    make the inference parallely
+    '''
+    comp_type='ZLIB'
+    #Reading the tfrecord files,decompress it and make ready for furthur processing
+    infer_files=tf.data.Dataset.list_files(infer_filename_pattern)
+    infer_dataset=infer_files.apply(tf.contrib.data.parallel_interleave(
+                                    lambda x:tf.data.TFRecordDataset(
+                                                x,
+                                                compression_type=comp_type),
+                                    cycle_length=20,
+                                    sloppy=True)
+                                    )
+
+    #Now mapping and then making the batches in fused form
+    infer_dataset=infer_dataset.apply(
+            tf.contrib.data.map_and_batch(_binary_parse_function_example,
+                                        mini_batch_size,
+                                        num_parallel_batches=4)
+    )
+
+    #Prefetching to do software pipeline (but the above num_parallel_batch make
+    #it sort of redundant. Have to confirm that)
+    infer_dataset=infer_dataset.prefetch(4)
+
+    #Making the one shot iterator
+    one_shot_iterator=infer_dataset.make_one_shot_iterator()
+
+    return one_shot_iterator

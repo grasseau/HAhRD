@@ -1,24 +1,33 @@
 import tensorflow as tf
 import datetime
 import sys
+import os
 from tensorflow.python.client import device_lib
+from tensorflow.python.client import timeline
 
 #import models here(need to be defined separetely in model file)
 from io_pipeline import parse_tfrecords_file
 # from test import make_model_conv,make_model_conv3d,make_model_linear
 # from test import calculate_model_accuracy,calculate_total_loss
-from model1_definition import model1
+from model1_definition import model7 as model_function_handle
 from model1_definition import calculate_model_accuracy
 from model1_definition import calculate_total_loss
 
 
 ################## GLOBAL VARIABLES #######################
-local_directory_path='/home/abhinav/Desktop/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
-run_number=1                            #for saving the summaries
+local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
+run_number=35                            #for saving the summaries
 train_summary_filename='tmp/hgcal/%s/train/'%(run_number) #for training set
 test_summary_filename='tmp/hgcal/%s/valid/'%(run_number)  #For validation set
-checkpoint_filename='tmp/hgcal/checkpoint/'
-model_function_handle=model1
+if os.path.exists(train_summary_filename):
+    os.system('rm -rf ./'+train_summary_filename)
+    os.system('rm -rf ./'+test_summary_filename)
+
+checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
+#model_function_handle=model2
+timeline_filename='tmp/hgcal/{}/timeline/'.format(run_number)
+if not os.path.exists(timeline_filename):
+    os.makedirs(timeline_filename)
 
 ################# HELPER FUNCTIONS ########################
 def _add_summary(object):
@@ -176,7 +185,7 @@ def create_training_graph(iterator,is_training,global_step,learning_rate):
             with tf.device(all_gpu_name[i]):
                 with tf.name_scope('tower%s'%(i)) as tower_scope:
                     #Getting the next batch of the dataset from the iterator
-                    ((X,_),(Y,_))=iterator.get_next() #'element' referes to on minibatch
+                    X,Y=iterator.get_next() #'element' referes to on minibatch
 
                     #Create a graph on the GPU and get the gradient back
                     tower_grad_var_pair,total_cost=_get_GPU_gradient(X,Y,
@@ -212,9 +221,9 @@ def create_training_graph(iterator,is_training,global_step,learning_rate):
 
 
 def train(epochs,mini_batch_size,buffer_size,
-                decay_step,decay_rate,
-                train_image_filename_list,train_label_filename_list,
-                test_image_filename_list,test_label_filename_list):
+                init_learning_rate,decay_step,decay_rate,
+                train_filename_list,test_filename_list,
+                restore_epoch_number=None):
     '''
     DESCRIPTION:
         This function will finally take the graph created for training
@@ -226,6 +235,7 @@ def train(epochs,mini_batch_size,buffer_size,
                                         the dataset
             mini_batch_size           : the size of minibatch for each tower
             buffer_size               : the buffer size to randomly sample minibatch
+            init_learning_rate        : the initial learning rate of the oprimizer
             decay_step                : the number of step after which one unit decay
                                         will be applied to learning_rate
             decay_rate                : the rate at which the the learning rate
@@ -238,6 +248,8 @@ def train(epochs,mini_batch_size,buffer_size,
                                         tfrecords file
             test_label_filename_list  : the list of the filename having
                                         corresponding labels for the images
+            restore_epoch_number      : the number if given will be used for
+                                        restoring the training.
         OUTPUT:
             nothing
             later checkpoints saving will be added
@@ -247,23 +259,21 @@ def train(epochs,mini_batch_size,buffer_size,
     global_step=tf.get_variable('global_step',shape=[],
                         initializer=tf.constant_initializer(0),
                         trainable=False)
-    init_learning_rate=0.001    #default for Adam
     learning_rate=tf.train.exponential_decay(init_learning_rate,
                                             global_step,
                                             decay_step,
                                             decay_rate,#lr_decay rate
                                             staircase=True,
                                             name='exponential_decay')
+    tf.summary.scalar('learning_rate',learning_rate)
 
     #Setting up the input_pipeline
     with tf.name_scope('IO_Pipeline'):
         iterator,train_iter_init_op,test_iter_init_op=parse_tfrecords_file(
-                                                    train_image_filename_list,
-                                                    train_label_filename_list,
-                                                    test_image_filename_list,
-                                                    test_label_filename_list,
+                                                    train_filename_list,
+                                                    test_filename_list,
                                                     mini_batch_size,
-                                                    buffer_size=buffer_size)
+                                                    shuffle_buffer_size=buffer_size)
 
     #Creating the multi-GPU training graph
     train_track_ops=create_training_graph(iterator,is_training,global_step,
@@ -289,12 +299,13 @@ def train(epochs,mini_batch_size,buffer_size,
     config=tf.ConfigProto(allow_soft_placement=True,
                           log_device_placement=False)
     with tf.Session(config=config) as sess:
-        #initializing the global variables
-        sess.run(init)
-        #Restoring the saved model if possible
-        # last_epoch_number=8
-        # checkpoint_path=checkpoint_filename+'model.ckpt-%s'%(last_epoch_number)
-        # saver.restore(sess,checkpoint_path)
+        if restore_epoch_number==None:
+            #initializing the global variables
+            sess.run(init)
+        else:
+            #Restoring the saved model if possible
+            checkpoint_path=checkpoint_filename+'model.ckpt-%s'%(restore_epoch_number)
+            saver.restore(sess,checkpoint_path)
 
         #Adding the graph to tensorborad
         train_writer.add_graph(sess.graph)
@@ -306,20 +317,52 @@ def train(epochs,mini_batch_size,buffer_size,
             #initializing the training iterator
             sess.run(train_iter_init_op) #we need the is_training placeholder
             bno=1                        #writing the batch number
+            t_epoch_start=datetime.datetime.now()
             while True:
                 try:
-                    t0=datetime.datetime.now()
-                    #_,datay=sess.run(next_element)
-                    #print datax.shape
-                    #print datay
-                    track_results=sess.run(train_track_ops,feed_dict={is_training:True})
-                    t1=datetime.datetime.now()
+                    #Running the train op and optionally the tracer bullet
+                    if bno%20==0 and i%5==0:
+                        #Adding the runtime statisctics (memory and execution time)
+                        run_options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                        run_metadata=tf.RunMetadata()
+
+                        #Starting the timer
+                        t0=datetime.datetime.now()
+                        #Running the op
+                        track_results=sess.run(train_track_ops,
+                                                feed_dict={is_training:True},
+                                                options=run_options,
+                                                run_metadata=run_metadata)
+                        t1=datetime.datetime.now()
+
+                        #Adding the run matedata to the tensorboard summary writer
+                        train_writer.add_run_metadata(run_metadata,'step%dbatch%d'%(i,bno))
+
+                        #Creating the Timeline object and saving it to the json
+                        tline=timeline.Timeline(run_metadata.step_stats)
+                        #Creating the chrome trace
+                        ctf=tline.generate_chrome_trace_format()
+                        timeline_path=timeline_filename+'timeline_step%dbatch%d.json'%(i,bno)
+                        with open(timeline_path,'w') as f:
+                            f.write(ctf)
+
+                    else:
+                        #Starting the timer
+                        t0=datetime.datetime.now()
+                        #Running the op to train
+                        track_results=sess.run(train_track_ops,
+                                                feed_dict={is_training:True},
+                                                )
+                        t1=datetime.datetime.now()
+
                     print 'Training loss @epoch: ',i,' @minibatch: ',bno,track_results[1:-1],'in ',t1-t0
                     #Now the last op has the merged_summary evaluated.So, write it.
                     train_writer.add_summary(track_results[-1],bno)
                     bno+=1
                 except tf.errors.OutOfRangeError:
-                    print 'Training one epoch completed!!\n'
+                    t_epoch_end=datetime.datetime.now()
+                    print 'Training one epoch completed in: {}\n'.format(
+                                    t_epoch_end-t_epoch_start)
                     break
 
             #get the validation accuracy,starting the validation/test iterator
@@ -329,9 +372,12 @@ def train(epochs,mini_batch_size,buffer_size,
                 try:
                     #_,datay=sess.run(next_element)#dont use iterator now
                     #print datay
+                    #Running the op
                     t0=datetime.datetime.now()
                     #Run the summary also for the validation set.just leave the train op
-                    track_results=sess.run(train_track_ops[1:],feed_dict={is_training:False})
+                    track_results=sess.run(train_track_ops[1:],
+                                            feed_dict={is_training:False},
+                                            )
                     t1=datetime.datetime.now()
                     print 'Testing loss @epoch: ',i,' @minibatch: ',bno,track_results[0:-1],'in ',t1-t0
                     #Again write the evaluated summary to file
@@ -342,7 +388,8 @@ def train(epochs,mini_batch_size,buffer_size,
                     break
 
             #Also save the checkpoints (after two every epoch)
-            if i%2==0:
+            if i%6==0:
+                #Saving the checkpoints
                 checkpoint_path=checkpoint_filename+'model.ckpt'
                 saver.save(sess,checkpoint_path,global_step=i)
 
@@ -361,27 +408,25 @@ if __name__=='__main__':
 
     #Setting up the name of the filelist of train and test dataset
     #Making the filelist for the train dataset
-    train_image_filename_list=[local_directory_path+'image0batchsize1000zside0.tfrecords',]
-    train_label_filename_list=[local_directory_path+'label0batchsize1000.tfrecords']
+    train_filename_pattern=local_directory_path+'event_file_1_*zside_0.tfrecords'
     #Making the filelist for the test datasets
-    test_image_filename_list=[local_directory_path+'image1000batchsize1000zside0.tfrecords']
-    test_label_filename_list=[local_directory_path+'label1000batchsize1000.tfrecords']
+    test_filename_pattern=local_directory_path+'event_file_2_start_0*zside_0.tfrecords'
 
 
     #Seting up some metric of dataset and training iteration
-    mini_batch_size=10
+    mini_batch_size=20
     buffer_size=mini_batch_size*2
-    epochs=30
+    epochs=31
 
     #Setting up the learning rate Hyperparameter
-    decay_step=46
-    decay_rate=0.99
+    init_learning_rate=0.0009    #0.001 default for Adam
+    decay_step=150
+    decay_rate=0.90
 
     #parse_tfrecords_file(train_filename_list,test_filename_list,mini_batch_size)
     train(epochs,
             mini_batch_size,buffer_size,
-            decay_step,decay_rate,
-            train_image_filename_list,
-            train_label_filename_list,
-            test_image_filename_list,
-            test_label_filename_list)
+            init_learning_rate,decay_step,decay_rate,
+            train_filename_pattern,
+            test_filename_pattern,
+            restore_epoch_number=None)

@@ -113,7 +113,10 @@ def interpolate_layer(geometry_fname,sq_cells_dict,edge_length,resolution,layer)
     t1=datetime.datetime.now()
     print 'Pickling completed in: ',t1-t0,' sec\n'
 
-def generate_training_dataset(event_data_filename,resolution=(514,513),edge_length=0.7):
+def generate_training_dataset(event_data_filename,event_file_no,
+                            event_start_no,event_stride,
+                            no_layers=40,interpolate_zside=[0,1],
+                            resolution=(514,513),edge_length=0.7):
     #ONGOING
     '''
     DESCRIPTION:
@@ -124,25 +127,31 @@ def generate_training_dataset(event_data_filename,resolution=(514,513),edge_leng
     USAGE:
         INPUTS:
             event_data_filename  : the filename of the root file to read event
+            event_file_no        : this will be used to uniquely name the dataset
+            interpolate_zside    : which zside we want to interpolate, default both
             resolution          : the resolution of current interpolation scheme
             edge_length         : the edge length of the current interpolation
                                     scheme
         OUTPUTS:
 
     '''
-    #Some of the geometry metadata (will be constant)
-    no_layers=40
-    #Specifying the size of minibatch
-    event_stride=20 #seems optimal in terms of memory use.
-    event_start_no=0 #for testing now
+    # #Some of the geometry metadata (will be constant)
+    # no_layers=40
+    # #Specifying the size of minibatch
+    # event_stride='upto_end' #seems optimal in terms of memory use.
+    # event_start_no=0 #for testing now
 
     #Creating the corresponding label for out image
     print '>>> Reading the event dataframe for the groundtruth particles'
     all_event_particles=readDataFile_genpart(event_data_filename,event_start_no,
                                             event_stride)
+    #Setting up the correct value of stride for upto end case
+    if event_stride=='upto_end':
+        event_stride=all_event_particles.shape[0]
+
     t0=datetime.datetime.now()
-    event_mask=compute_target_lable(all_event_particles,resolution,edge_length,
-                        event_start_no,event_stride)
+    event_mask,all_labels=compute_target_lable(all_event_particles,resolution,edge_length,
+                        event_file_no,event_start_no,event_stride)
     t1=datetime.datetime.now()
     print '>>> Label Creation Completed in: ',t1-t0
 
@@ -152,10 +161,17 @@ def generate_training_dataset(event_data_filename,resolution=(514,513),edge_leng
                                     event_stride)
 
     t0=datetime.datetime.now()
-    compute_energy_map(all_event_hits,event_mask,resolution,edge_length,
-                        event_start_no,event_stride,no_layers)
+    print '>>> Starting to interpolate and create dataset'
+    compute_energy_map(all_event_hits,all_labels,event_mask,
+                        interpolate_zside,resolution,edge_length,
+                        event_file_no,event_start_no,event_stride,no_layers)
     t1=datetime.datetime.now()
     print '>>> Image Creation Completed in: ',t1-t0
+
+    #Now merging wont be done separately
+    #Merging the dataset together as one example protocol
+    # print 'Merging the Image and label'
+    # merge_image_and_label(event_file_no,event_start_no,event_stride,merge_zside)
 
 ################ MAIN FUNCTION DEFINITION ###################
 def readGeometry( input_file,  layer, subdet ):
@@ -254,7 +270,10 @@ def readDataFile_hits(filename,event_start_no,event_stride):
     df.rename(col_names,inplace=True,axis=1)
 
     #Extracting out the minibatch of event to process at a time
-    df=df.iloc[event_start_no:event_start_no+event_stride]
+    if event_stride=='upto_end':
+        df=df.iloc[event_start_no:]
+    else:
+        df=df.iloc[event_start_no:event_start_no+event_stride]
 
     #Do the Filtering here only no need to do it each time for each event
 
@@ -295,7 +314,8 @@ def readDataFile_genpart(filename,event_start_no,event_stride):
     tree=uproot.open(filename)['ana/hgc']
 
     branches =["genpart_energy","genpart_phi","genpart_eta",
-                "genpart_gen","genpart_pid","genpart_reachedEE"]
+                "genpart_gen","genpart_pid","genpart_reachedEE",
+                "genpart_posx","genpart_posy","genpart_posz"]
     cache={}
     df=tree.pandas.df(branches,cache=cache,executor=executor)
 
@@ -304,9 +324,16 @@ def readDataFile_genpart(filename,event_start_no,event_stride):
     df.rename(col_names,inplace=True,axis=1)
 
     #Extracting the dataframe for the required events
-    df=df.iloc[event_start_no:event_start_no+event_stride]
+    if event_stride=='upto_end':
+        df=df.iloc[event_start_no:]
+    else:
+        df=df.iloc[event_start_no:event_start_no+event_stride]
 
     print '>>> Extraction completed with current shape: ',df.shape
+    # print df.dtypes
+    # print type(df.loc[0,'posx'])
+    # print df.loc[0,'posx']
+    # sys.exit(1)
 
     return df
 
@@ -323,8 +350,14 @@ if __name__=='__main__':
                 help='Layer to be mapped', type='int', default=1)
     parser.add_option('--subdet', dest='subdet',
                 help='Subdet', type='int', default=3)
+    parser.add_option('--data_file_no',dest='data_file_no',
+                    help='The event file number for naming dataset')
     parser.add_option('--data_file',dest='data_file',
                 help='Ground Truth and Recorded Hits',default=data_default_file)
+    parser.add_option('--event_start_no',dest='event_start_no',
+                help='from where to start interpolation')
+    parser.add_option('--event_stride',dest='event_stride',
+                help='the number of events to process at a time')
     (opt, args) = parser.parse_args()
 
     #Checking if the required options are given or not
@@ -332,13 +365,20 @@ if __name__=='__main__':
         parser.print_help()
         print 'Error: Missing input geometry file name'
         sys.exit(1)
-    # if not opt.data_file:
-    #     parser.print_help()
-    #     print 'Error: Missing input data file name'
-    #     sys.exit(1)
+    if not opt.data_file:
+        parser.print_help()
+        print 'Error: Missing input data file name'
+        sys.exit(1)
 
     #Calling the driver function
     #generate_interpolation(opt.input_file,edge_length=0.7)
 
-    #Generating the image
-    generate_training_dataset(opt.data_file)
+    #Generating the image and label dataset (combined)
+    no_layers=40
+    try:
+        event_stride=int(opt.event_stride)
+    except:
+        event_stride=opt.event_stride
+    generate_training_dataset(opt.data_file,opt.data_file_no,
+                                int(opt.event_start_no),event_stride,
+                                no_layers,interpolate_zside=[0,])

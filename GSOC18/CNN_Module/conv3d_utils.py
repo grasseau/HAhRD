@@ -443,3 +443,96 @@ def inception3d_block(X,name,final_channel_list,compress_channel_list,
         A=tf.concat(concat_list,axis=axis,name='concat')
 
     return A
+
+
+def inception_global_filter_layer(X,name,
+                                    first_filter_shape,first_filter_stride,
+                                    second_filter_shape,second_filter_stride,
+                                    final_channel_list,
+                                    is_training,
+                                    dropout_rate=0.0,
+                                    apply_batchnorm=False,
+                                    weight_decay=None,
+                                    initializer=tf.glorot_uniform_initializer()):
+    '''
+    DESCRIPTION:
+        Using this layer we will try to bring the inception like pattern with
+        the global filters which we are using in model2 (in the depth dimension).
+        Currently we will use usual spatial filter dimensions like
+        (3x3,5x5,...) but the depth dimension will probe the whole depth at
+        once with the global filters of sized equal to the depth.
+    USAGE:
+        X                   : the input to this layer
+        name                : a unique name given to this layer for better
+                                visualization in tensorboard
+        first_filter_shape  : the shape of the first filter of this layer
+        first_filter_stride : the stride in the first filter convolution
+        second_filter_shape : the shape of the second filter
+        second_filter_stride: the stride of the second filter while convolving
+        final_channel_list  : this will specify the channel number of both filters
+                                [channel output filter 1, channel output filter 2]
+        is_training         : to specify whether we are in training or testing mode
+                                for dropout and batch normalization
+        dropout_rate        : the rate of dropping out the activation in that
+                                particular layer.
+        apply_batchnorm     : whether to apply batch norm or not (default False)
+        weight_decay        : how much L2 regularization we should apply
+        initializer         : the initializer for the variables
+    '''
+    with tf.variable_scope(name):
+        with tf.name_scope('first_global_filter'):
+            #Defining the first layer convolution steps
+            #Creating the appropriate padding in the spatial dimension
+            fx,fy,_=first_filter_shape
+            px=(fx-1)/2     #if integer division is possible it will give int
+            py=(fy-1)/2
+            padding=[[0,0],[px,px],[py,py],[0,0],[0,0]] #leaving the padding in last dimension
+            #Padding the input activation/image
+            padded_X1=tf.pad(X,paddings=padding,mode='CONSTANT',
+                            name='spatial_same_pad',constant_values=0)
+            #Now applying the usual convolution
+            A1=rectified_conv3d(padded_X1,
+                                name='conv3d1',
+                                filter_shape=first_filter_shape,
+                                output_channel=final_channel_list[0],
+                                stride=first_filter_stride,
+                                padding_type='VALID',
+                                is_training=is_training,
+                                dropout_rate=dropout_rate,
+                                apply_batchnorm=apply_batchnorm,
+                                weight_decay=weight_decay,
+                                apply_relu=True,
+                                initializer=initializer)
+
+        with tf.name_scope('second_global_filter'):
+            #Now defining the computation of the second filter
+            #Creatign the appropriate padding for the spatial dimension
+            fx,fy,_=second_filter_shape
+            px=(fx-1)/2
+            py=(fy-1)/2
+            padding=[[0,0],[px,px],[py,py],[0,0],[0,0]]
+            #Applying the padding to the input image
+            padded_X2=tf.pad(X,paddings=padding,mode='CONSTANT',
+                            name='spatial_same_pad',constant_values=0)
+            #Now applying the usual convolution with appropriate stride
+            A2=rectified_conv3d(padded_X2,
+                                name='conv3d2',
+                                filter_shape=second_filter_shape,
+                                output_channel=final_channel_list[1],
+                                stride=second_filter_stride,
+                                padding_type='VALID',
+                                is_training=is_training,
+                                dropout_rate=dropout_rate,
+                                apply_batchnorm=apply_batchnorm,
+                                weight_decay=weight_decay,
+                                apply_relu=True,
+                                initializer=initializer)
+
+        #Finally merging the two different filters global view
+        #having different receptive power
+        concat_list=[A1,A2]
+        axis=-1 #the last channel axis [assuming the layer : NDHWC]
+        A=tf.concat(concat_list,axis=axis,name='concat')
+
+    return A
+
