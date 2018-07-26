@@ -3,7 +3,7 @@ from tensorflow.python.client import device_lib
 import numpy as np
 import datetime
 import os
-from CNN_module/utils/io_pipeline import parse_tfrecords_file_inference
+from CNN_Module.utils.io_pipeline import parse_tfrecords_file_inference
 
 
 ################# GLOBAL VARIABLES #####################

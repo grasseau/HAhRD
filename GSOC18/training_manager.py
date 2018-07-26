@@ -4,9 +4,9 @@ import tensorflow as tf
 dataset_directory='GeometryUtilities-master/interpolation/image_data/'
 
 #importing the model to be used for training
-from models/model1_definition import model7 as model_function_handle
-from models/model1_definition import calculate_model_accuracy
-from models/model1_definition import calculate_total_loss
+from models.model1_definition import model6 as model_function_handle
+from models.model1_definition import calculate_model_accuracy
+from models.model1_definition import calculate_total_loss
 
 #import the trainer and inference functions
 from train_multi_gpu import train
@@ -16,7 +16,7 @@ from inference_multi_gpu import infer
 run_number=35
 #the regex pattern for the dataset filename
 train_filename_pattern='event_file_1_*zside_0.tfrecords'
-test_filename_pattern='event_file_2_*zside_0.tfrecords'
+test_filename_pattern='event_file_1_*zside_0.tfrecords'
 
 if __name__=='__main__':
 
@@ -58,17 +58,17 @@ if __name__=='__main__':
         decay_step=150
         decay_rate=0.95
         #Specifying the run configuration
-        mini_batch_size=20
+        mini_batch_size=1
         shuffle_buffer_size=mini_batch_size*2 #for shuffling the dataset files
-        epochs=31
-        restore_epoch_number=None
+        epochs=1
+        restore_epoch_number=0
 
         #Finally running the training
         train(run_number,
                 model_function_handle,
                 calculate_model_accuracy,
                 calculate_total_loss,
-                epochs,mini_batch_size,shuffle_buffer_size
+                epochs,mini_batch_size,shuffle_buffer_size,
                 init_learning_rate,decay_step,decay_rate,
                 train_filename_pattern,test_filename_pattern,
                 restore_epoch_number=restore_epoch_number)
@@ -86,26 +86,27 @@ if __name__=='__main__':
         current_directory/tmp/hgcal/run_number
     '''
     #specifying the inference configuration
-    mini_batch_size=20
-    checkpoint_epoch_number=30
+    if opt.mode=='infer':
+        mini_batch_size=1
+        checkpoint_epoch_number=0
 
-    #Running the inference on the training data set
-    infer(run_number,
-            model_function_handle,
-            calculate_model_accuracy,
-            calculate_total_loss,
-            train_filename_pattern,
-            inference_mode='train',#on the training dataset
-            mini_batch_size=mini_batch_size,
-            checkpoint_epoch_number=checkpoint_epoch_number)
+        #Running the inference on the training data set
+        infer(run_number,
+                model_function_handle,
+                calculate_model_accuracy,
+                calculate_total_loss,
+                train_filename_pattern,
+                inference_mode='train',#on the training dataset
+                mini_batch_size=mini_batch_size,
+                checkpoint_epoch_number=checkpoint_epoch_number)
 
-    #Now rerunning the inference on the test dataset
-    tf.reset_default_graph()
-    infer(run_number,
-            model_function_handle,
-            calculate_model_accuracy,
-            calculate_total_loss,
-            test_filename_pattern,
-            inference_mode='valid',
-            mini_batch_size=mini_batch_size,
-            checkpoint_epoch_number=checkpoint_epoch_number)
+        #Now rerunning the inference on the test dataset
+        tf.reset_default_graph()
+        infer(run_number,
+                model_function_handle,
+                calculate_model_accuracy,
+                calculate_total_loss,
+                test_filename_pattern,
+                inference_mode='valid',
+                mini_batch_size=mini_batch_size,
+                checkpoint_epoch_number=checkpoint_epoch_number)

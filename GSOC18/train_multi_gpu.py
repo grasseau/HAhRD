@@ -6,7 +6,7 @@ from tensorflow.python.client import device_lib
 from tensorflow.python.client import timeline
 
 #import models here(need to be defined separetely in model file)
-from CNN_module/utils/io_pipeline import parse_tfrecords_file
+from CNN_Module.utils.io_pipeline import parse_tfrecords_file
 # from test import make_model_conv,make_model_conv3d,make_model_linear
 # from test import calculate_model_accuracy,calculate_total_loss
 # from model1_definition import model7 as model_function_handle

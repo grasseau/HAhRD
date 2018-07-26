@@ -2,14 +2,9 @@ import tensorflow as tf
 import sys
 import os
 
-#Appending the path of conv utilities to make the model
-sys.path.append(
-    os.path.join(os.path.dirname(sys.path[0]),
-                    'CNN_Module/utils')
-)
-
-from conv2d_utils import *
-from conv3d_utils import *
+#Directly using the package
+from CNN_Module.utils.conv2d_utils import *
+from CNN_Module.utils.conv3d_utils import *
 
 def calculate_model_accuracy(Z,Y):
     '''
