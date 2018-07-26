@@ -13,10 +13,10 @@ from train_multi_gpu import train
 from inference_multi_gpu import infer
 
 ###################### RUN CONFIGURATION #####################
-run_number=35
+run_number=31
 #the regex pattern for the dataset filename
 train_filename_pattern='event_file_1_*zside_0.tfrecords'
-test_filename_pattern='event_file_1_*zside_0.tfrecords'
+test_filename_pattern='event_file_2_start_0*zside_0.tfrecords'
 
 if __name__=='__main__':
 
@@ -55,13 +55,13 @@ if __name__=='__main__':
     if opt.mode=='train':
         #Specifying the Hyperparameters
         init_learning_rate=0.001
-        decay_step=150
+        decay_step=350
         decay_rate=0.95
         #Specifying the run configuration
-        mini_batch_size=1
+        mini_batch_size=20
         shuffle_buffer_size=mini_batch_size*2 #for shuffling the dataset files
-        epochs=1
-        restore_epoch_number=0
+        epochs=31
+        restore_epoch_number=None
 
         #Finally running the training
         train(run_number,
@@ -87,8 +87,8 @@ if __name__=='__main__':
     '''
     #specifying the inference configuration
     if opt.mode=='infer':
-        mini_batch_size=1
-        checkpoint_epoch_number=0
+        mini_batch_size=20
+        checkpoint_epoch_number=30
 
         #Running the inference on the training data set
         infer(run_number,
