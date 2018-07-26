@@ -3,23 +3,23 @@ from tensorflow.python.client import device_lib
 import numpy as np
 import datetime
 import os
-from io_pipeline import parse_tfrecords_file_inference
+from CNN_module/utils/io_pipeline import parse_tfrecords_file_inference
 
 
 ################# GLOBAL VARIABLES #####################
 #Getting the model handle
-from model1_definition import model7 as model_function_handle
-from model1_definition import calculate_total_loss,calculate_model_accuracy
-#model_function_handle=model2
-#default directory path for datasets
-local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
-#Checkpoint file path
-run_number=35
-checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
-#Directory to save the prediction in compressed numpy format
-results_basepath='tmp/hgcal/{}/results/'.format(run_number)
-if not os.path.exists(results_basepath):
-    os.makedirs(results_basepath)
+# from model1_definition import model7 as model_function_handle
+# from model1_definition import calculate_total_loss,calculate_model_accuracy
+# #model_function_handle=model2
+# #default directory path for datasets
+# local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
+# #Checkpoint file path
+# run_number=35
+# checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
+# #Directory to save the prediction in compressed numpy format
+# results_basepath='tmp/hgcal/{}/results/'.format(run_number)
+# if not os.path.exists(results_basepath):
+#     os.makedirs(results_basepath)
 
 
 
@@ -53,7 +53,10 @@ def get_available_gpus():
     return all_gpu_name
 
 #################### MAIN FUCTIONS DEFINITIONS ###################
-def create_inference_graph(iterator,is_training):
+def create_inference_graph(model_function_handle,
+                            calculate_model_accuracy,
+                            calculate_total_loss,
+                            iterator,is_training):
     '''
     DESCRIPTION:
         This function will create a similar graph as that used during
@@ -61,11 +64,17 @@ def create_inference_graph(iterator,is_training):
         checkpoint later.
     USAGE:
         INPUT:
-            iterator    : the iterator to fetch the next batch of
-                            data for inference.
-            is_training : the boolean flag to tell that we are in
-                            inference phase and to stop the dropout
-                            and used appropriate BN statistics.
+            model_function_handle   :the function handle for the creation of the
+                                        CNN model
+            calculate_model_accuracy:the function handle for calculating the
+                                        models accuracy
+            calculate_total_loss    : the function handle to calculate the
+                                        total loss in the model
+            iterator                : the iterator to fetch the next batch of
+                                        data for inference.
+            is_training             : the boolean flag to tell that we are in
+                                        inference phase and to stop the dropout
+                                        and used appropriate BN statistics.
         OUTPUT:
             label_pred_ops : the list of containing the prediction
                                 from each of the tower like:
@@ -103,7 +112,11 @@ def create_inference_graph(iterator,is_training):
 
     return label_pred_ops,accuracy_ops
 
-def infer(infer_filename_pattern,inference_mode,
+def infer(run_number,
+            model_function_handle,
+            calculate_model_accuracy,
+            calculate_total_loss,
+            infer_filename_pattern,inference_mode,
             mini_batch_size,checkpoint_epoch_number):
     '''
     DESCRIPTION:
@@ -116,6 +129,12 @@ def infer(infer_filename_pattern,inference_mode,
         6. Calling the plotting and other functions for visualization
     USAGE:
         INPUT:
+            model_function_handle    : the function handle to create the
+                                         CNN graph
+            calculate_model_accuracy : the function handle to calculate the
+                                        model accuracy of the model
+            calculate_total_loss     : the fucntion handle to calculate the
+                                        total loss fo the model
             test_filename_pattern    : the file pattern on which we have to
                                         make the inference.
             inference_mode           : to specify whether we are infering
@@ -126,6 +145,13 @@ def infer(infer_filename_pattern,inference_mode,
                                         saved at that epoch
 
     '''
+    #Setting up the required directory for saving the results and loading checkpoints
+    checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
+    #Directory to save the prediction in compressed numpy format
+    results_basepath='tmp/hgcal/{}/results/'.format(run_number)
+    if not os.path.exists(results_basepath):
+        os.makedirs(results_basepath)
+
     #Setting up the required config i.e mode of the running the graph
     is_training=tf.constant(False,dtype=tf.bool,name='training_flag')
 
@@ -135,7 +161,11 @@ def infer(infer_filename_pattern,inference_mode,
                                                 mini_batch_size)
 
     #Creating the graph for inference
-    label_pred_ops,accuracy_ops=create_inference_graph(os_iterator,is_training)
+    label_pred_ops,accuracy_ops=create_inference_graph(
+                                            model_function_handle,
+                                            calculate_model_accuracy,
+                                            calculate_total_loss,
+                                            os_iterator,is_training)
     #Initializing the result array
     predictions=None
     labels=None

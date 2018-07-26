@@ -6,28 +6,28 @@ from tensorflow.python.client import device_lib
 from tensorflow.python.client import timeline
 
 #import models here(need to be defined separetely in model file)
-from io_pipeline import parse_tfrecords_file
+from CNN_module/utils/io_pipeline import parse_tfrecords_file
 # from test import make_model_conv,make_model_conv3d,make_model_linear
 # from test import calculate_model_accuracy,calculate_total_loss
-from model1_definition import model7 as model_function_handle
-from model1_definition import calculate_model_accuracy
-from model1_definition import calculate_total_loss
+# from model1_definition import model7 as model_function_handle
+# from model1_definition import calculate_model_accuracy
+# from model1_definition import calculate_total_loss
 
 
 ################## GLOBAL VARIABLES #######################
-local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
-run_number=35                            #for saving the summaries
-train_summary_filename='tmp/hgcal/%s/train/'%(run_number) #for training set
-test_summary_filename='tmp/hgcal/%s/valid/'%(run_number)  #For validation set
-if os.path.exists(train_summary_filename):
-    os.system('rm -rf ./'+train_summary_filename)
-    os.system('rm -rf ./'+test_summary_filename)
-
-checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
-#model_function_handle=model2
-timeline_filename='tmp/hgcal/{}/timeline/'.format(run_number)
-if not os.path.exists(timeline_filename):
-    os.makedirs(timeline_filename)
+# local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
+# run_number=35                            #for saving the summaries
+# train_summary_filename='tmp/hgcal/%s/train/'%(run_number) #for training set
+# test_summary_filename='tmp/hgcal/%s/valid/'%(run_number)  #For validation set
+# if os.path.exists(train_summary_filename):
+#     os.system('rm -rf ./'+train_summary_filename)
+#     os.system('rm -rf ./'+test_summary_filename)
+#
+# checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
+# #model_function_handle=model2
+# timeline_filename='tmp/hgcal/{}/timeline/'.format(run_number)
+# if not os.path.exists(timeline_filename):
+#     os.makedirs(timeline_filename)
 
 ################# HELPER FUNCTIONS ########################
 def _add_summary(object):
@@ -64,7 +64,10 @@ def _get_available_gpus():
 
     return all_gpu_name
 
-def _get_GPU_gradient(X,Y,is_training,scope,optimizer):
+def _get_GPU_gradient(model_function_handle,
+                        calculate_model_accuracy,
+                        calculate_total_loss,
+                        X,Y,is_training,scope,optimizer):
     '''
     DESCRIPTION:
         This function creates a computational graph on the GPU,
@@ -133,7 +136,11 @@ def _compute_average_gradient(all_tower_grad_var):
     return average_grad_var_pair
 
 ####################### MAIN TRAIN FUNCTION ###################
-def create_training_graph(iterator,is_training,global_step,learning_rate):
+def create_training_graph(model_function_handle,
+                            calculate_model_accuracy,
+                            calculate_total_loss,
+                            iterator,is_training,
+                            global_step,learning_rate):
     '''
     DESCRIPTION:
         This function will serve the main purpose of training the
@@ -151,24 +158,25 @@ def create_training_graph(iterator,is_training,global_step,learning_rate):
         Please run it under the cpu:0 scope in the main driver function
     USAGE:
         INPUTS:
-            iterator    : an instance of iterator having the property of
-                            .get_next() to get the next
-                            batch of data from the input pipeline
-                            (following Derek Murray advice on Stack Overflow)
-            is_training : a boolean flag to distinguish in what mode we are in
-                            Training/Testing
-            global_step : a varible which could how many rounds of backpropagation
-                            is completed
-            learning_rate: the learning rate with the learning rate decay
-                            applied to it
+            model_function_handle   : the fucntion handle to create CNN graph
+            calculate_model_accuracy: the fucntion handle to calculate the model
+                                        accuracy
+            calculate_total_loss    : the fucntion handle to calculate the total
+                                        loaa of the CNN  model
+            iterator                : an instance of iterator having the property of
+                                        .get_next() to get the next
+                                        batch of data from the input pipeline
+                                        (following Derek Murray advice on Stack Overflow)
+            is_training             : a boolean flag to distinguish in what mode we are in
+                                        Training/Testing
+            global_step             : a varible which could how many rounds of backpropagation
+                                        is completed
+            learning_rate           : the learning rate with the learning rate decay
+                                        applied to it
         OUTPUTS:
-            train_track_ops  : the list of op to run of form
-                                [apply_gradient_op,loss1_op,loss2_op.....]
+            train_track_ops         : the list of op to run of form
+                                        [apply_gradient_op,loss1_op,loss2_op.....]
     '''
-    #Setting the input placeholders for training mode
-    #filename=tf.placeholder
-
-
     #Setting up the optimizer
     optimizer=tf.train.AdamOptimizer(learning_rate=learning_rate)
 
@@ -188,8 +196,12 @@ def create_training_graph(iterator,is_training,global_step,learning_rate):
                     X,Y=iterator.get_next() #'element' referes to on minibatch
 
                     #Create a graph on the GPU and get the gradient back
-                    tower_grad_var_pair,total_cost=_get_GPU_gradient(X,Y,
-                                        is_training,tower_scope,optimizer)
+                    tower_grad_var_pair,total_cost=_get_GPU_gradient(
+                                            model_function_handle,
+                                            calculate_model_accuracy,
+                                            calculate_total_loss,
+                                            X,Y,
+                                            is_training,tower_scope,optimizer)
                     all_tower_grad_var.append(tower_grad_var_pair)
                     all_tower_cost.append(total_cost)
 
@@ -220,10 +232,14 @@ def create_training_graph(iterator,is_training,global_step,learning_rate):
     return train_track_ops
 
 
-def train(epochs,mini_batch_size,buffer_size,
-                init_learning_rate,decay_step,decay_rate,
-                train_filename_list,test_filename_list,
-                restore_epoch_number=None):
+def train(run_number,
+            model_function_handle,
+            calculate_model_accuracy,
+            calculate_total_loss,
+            epochs,mini_batch_size,shuffle_buffer_size,
+            init_learning_rate,decay_step,decay_rate,
+            train_filename_list,test_filename_list,
+            restore_epoch_number=None):
     '''
     DESCRIPTION:
         This function will finally take the graph created for training
@@ -231,10 +247,18 @@ def train(epochs,mini_batch_size,buffer_size,
         and track the result using the loss of all the towers
     USAGE:
         INPUT:
+            run_number                : the run number to save the results and
+                                        checkpoints in unique directory
+            model_function_handle     : the fucntion handle to create the CNN
+                                        model architecture
+            calculate_model_accuracy  : the fucntion handle to calculate the
+                                        accuracy of the model
+            calculate_total_loss      : the function handle to calculate the
+                                        loss or cost of the model
             epochs                    : the total number of epochs to go through
                                         the dataset
             mini_batch_size           : the size of minibatch for each tower
-            buffer_size               : the buffer size to randomly sample minibatch
+            shuffle_buffer_size       : the buffer size to randomly sample minibatch
             init_learning_rate        : the initial learning rate of the oprimizer
             decay_step                : the number of step after which one unit decay
                                         will be applied to learning_rate
@@ -254,6 +278,19 @@ def train(epochs,mini_batch_size,buffer_size,
             nothing
             later checkpoints saving will be added
     '''
+    #Setting up the required directory for savinng results and checkpoint
+    train_summary_filename='tmp/hgcal/%s/train/'%(run_number) #for training set
+    test_summary_filename='tmp/hgcal/%s/valid/'%(run_number)  #For validation set
+    if os.path.exists(train_summary_filename):
+        os.system('rm -rf ./'+train_summary_filename)
+        os.system('rm -rf ./'+test_summary_filename)
+
+    checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
+    #model_function_handle=model2
+    timeline_filename='tmp/hgcal/{}/timeline/'.format(run_number)
+    if not os.path.exists(timeline_filename):
+        os.makedirs(timeline_filename)
+
     #Setting the required Placeholders and Global Non-Trainable Variable
     is_training=tf.placeholder(tf.bool,[],name='training_flag')
     global_step=tf.get_variable('global_step',shape=[],
@@ -273,10 +310,13 @@ def train(epochs,mini_batch_size,buffer_size,
                                                     train_filename_list,
                                                     test_filename_list,
                                                     mini_batch_size,
-                                                    shuffle_buffer_size=buffer_size)
+                                                    shuffle_buffer_size=shuffle_buffer_size)
 
     #Creating the multi-GPU training graph
-    train_track_ops=create_training_graph(iterator,is_training,global_step,
+    train_track_ops=create_training_graph(model_function_handle,
+                                            calculate_model_accuracy,
+                                            calculate_total_loss,
+                                            iterator,is_training,global_step,
                                             learning_rate)
 
     #Adding saver to create checkpoints for weights
