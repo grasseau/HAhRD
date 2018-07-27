@@ -332,7 +332,7 @@ def parse_tfrecords_file(train_filename_pattern,test_filename_pattern,
     test_iter_init_op=iterator.make_initializer(test_dataset)
 
     #Returning the iterator and initializer ops
-    return iterator,train_iter_init_op,test_iter_init_op
+    return iterator.get_next(),train_iter_init_op,test_iter_init_op
 
 
 ################ INFERENCE DATASET PIPELINE #################

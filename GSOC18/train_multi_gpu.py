@@ -1,6 +1,8 @@
 import tensorflow as tf
 import datetime
 import sys
+#for runtime optional input of the learning rate
+import select
 import os
 from tensorflow.python.client import device_lib
 from tensorflow.python.client import timeline
@@ -189,11 +191,19 @@ def create_training_graph(model_function_handle,
     #Creating one single variable scope for all the towers
     with tf.variable_scope(tf.get_variable_scope()):
         #one by one launching the graph on each gpu devices
+
+        #Adding the split ops
+        X_all,Y_all=iterator#assuming it is the iterator.next_element()
+        X_splits=tf.split(X_all,num_gpus)
+        Y_splits=tf.split(Y_all,num_gpus)
+
         for i in range(num_gpus):
             with tf.device(all_gpu_name[i]):
                 with tf.name_scope('tower%s'%(i)) as tower_scope:
                     #Getting the next batch of the dataset from the iterator
-                    X,Y=iterator.get_next() #'element' referes to on minibatch
+                    #X,Y=iterator.get_next() #'element' referes to on minibatch
+                    X=X_splits[i]
+                    Y=Y_splits[i]
 
                     #Create a graph on the GPU and get the gradient back
                     tower_grad_var_pair,total_cost=_get_GPU_gradient(
@@ -296,12 +306,14 @@ def train(run_number,
     global_step=tf.get_variable('global_step',shape=[],
                         initializer=tf.constant_initializer(0),
                         trainable=False)
-    learning_rate=tf.train.exponential_decay(init_learning_rate,
+    learning_rate_placevalue=tf.train.exponential_decay(init_learning_rate,
                                             global_step,
                                             decay_step,
                                             decay_rate,#lr_decay rate
                                             staircase=True,
                                             name='exponential_decay')
+    #Making the larning rate as a placeholder
+    learning_rate=tf.placeholder(tf.float32,name='learning_rate')
     tf.summary.scalar('learning_rate',learning_rate)
 
     #Setting up the input_pipeline
@@ -321,7 +333,7 @@ def train(run_number,
 
     #Adding saver to create checkpoints for weights
     saver=tf.train.Saver(tf.global_variables(),
-                        max_to_keep=2)
+                        max_to_keep=50)#default is 5, we will save all epoch
 
     #Adding all the varaible summary
     train_writer=tf.summary.FileWriter(train_summary_filename)
@@ -353,6 +365,7 @@ def train(run_number,
 
         #Starting the training epochs
         for i in range(epochs):
+            ############################# TRAINING #############################
             #Since we are not repeating the data it will raise error once over
             #initializing the training iterator
             sess.run(train_iter_init_op) #we need the is_training placeholder
@@ -360,8 +373,34 @@ def train(run_number,
             t_epoch_start=datetime.datetime.now()
             while True:
                 try:
+                    #Giving the option for manually setting up the learning rate
+                    if bno%5==0:
+                        wait_time=10
+                        print 'Waiting for {} sec for the learning rate:'.format(wait_time)
+                        inp_abvl,_,_=select.select([sys.stdin],[],[],wait_time)
+                        #if the input is available in the stdin
+                        if inp_abvl:
+                            try:
+                                init_learning_rate=float(sys.stdin.readline().strip())
+                                print 'New Learning rate accepted: ',init_learning_rate
+                                #Initializing the global step
+                                sess.run(global_step.initializer)
+                                #Now making the new learning_rate_placevalue
+                                learning_rate_placevalue=tf.train.exponential_decay(
+                                                            init_learning_rate,
+                                                            global_step,
+                                                            decay_step,
+                                                            decay_rate,#lr_decay rate
+                                                            staircase=True,
+                                                            name='exponential_decay')
+
+                            except:
+                                print 'Give the learning rate as floating value next time'
+                        else:
+                            print "Resuming the Learning without changes"
+
                     #Running the train op and optionally the tracer bullet
-                    if bno%20==0 and i%5==0:
+                    if bno%30==0:
                         #Adding the runtime statisctics (memory and execution time)
                         run_options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                         run_metadata=tf.RunMetadata()
@@ -370,45 +409,55 @@ def train(run_number,
                         t0=datetime.datetime.now()
                         #Running the op
                         track_results=sess.run(train_track_ops,
-                                                feed_dict={is_training:True},
+                                                feed_dict={is_training:True,
+                                                    learning_rate:learning_rate_placevalue},
                                                 options=run_options,
                                                 run_metadata=run_metadata)
                         t1=datetime.datetime.now()
 
-                        #Adding the run matedata to the tensorboard summary writer
-                        train_writer.add_run_metadata(run_metadata,'step%dbatch%d'%(i,bno))
+                        #Writing the timeline tracer every 300th minibatch
+                        if bno%300==0:
+                            #Adding the run matedata to the tensorboard summary writer
+                            train_writer.add_run_metadata(run_metadata,'step%dbatch%d'%(i,bno))
 
-                        #Creating the Timeline object and saving it to the json
-                        tline=timeline.Timeline(run_metadata.step_stats)
-                        #Creating the chrome trace
-                        ctf=tline.generate_chrome_trace_format()
-                        timeline_path=timeline_filename+'timeline_step%dbatch%d.json'%(i,bno)
-                        with open(timeline_path,'w') as f:
-                            f.write(ctf)
+                            #Creating the Timeline object and saving it to the json
+                            tline=timeline.Timeline(run_metadata.step_stats)
+                            #Creating the chrome trace
+                            ctf=tline.generate_chrome_trace_format()
+                            timeline_path=timeline_filename+'timeline_step%dbatch%d.json'%(i,bno)
+                            with open(timeline_path,'w') as f:
+                                f.write(ctf)
+
+                        #Writing the summary (only every 30th iteration)
+                        #Now the last op has the merged_summary evaluated.So, write it.
+                        train_writer.add_summary(track_results[-1],bno)
+                        print 'Training loss @epoch: ',i,' @minibatch: ',bno,track_results[1:-1],'in ',t1-t0
 
                     else:
                         #Starting the timer
                         t0=datetime.datetime.now()
                         #Running the op to train
-                        track_results=sess.run(train_track_ops,
-                                                feed_dict={is_training:True},
+                        track_results=sess.run(train_track_ops[:-1],
+                                                feed_dict={is_training:True,
+                                                    learning_rate:learning_rate_placevalue},
                                                 )
                         t1=datetime.datetime.now()
+                        print 'Training loss @epoch: ',i,' @minibatch: ',bno,track_results[1:],'in ',t1-t0
 
-                    print 'Training loss @epoch: ',i,' @minibatch: ',bno,track_results[1:-1],'in ',t1-t0
-                    #Now the last op has the merged_summary evaluated.So, write it.
-                    train_writer.add_summary(track_results[-1],bno)
+                    #Incrementing the minibatch number
                     bno+=1
+                #Finally when we are out of the examples
                 except tf.errors.OutOfRangeError:
                     t_epoch_end=datetime.datetime.now()
                     print 'Training one epoch completed in: {}\n'.format(
                                     t_epoch_end-t_epoch_start)
                     break
 
+            ###################### VALIDATION ################################
             #get the validation accuracy,starting the validation/test iterator
             sess.run(test_iter_init_op)
             bno=1
-            while i%6==0:
+            while i%5==0:
                 try:
                     #_,datay=sess.run(next_element)#dont use iterator now
                     #print datay
@@ -416,19 +465,21 @@ def train(run_number,
                     t0=datetime.datetime.now()
                     #Run the summary also for the validation set.just leave the train op
                     track_results=sess.run(train_track_ops[1:],
-                                            feed_dict={is_training:False},
+                                            feed_dict={is_training:False,
+                                    learning_rate:learning_rate_placevalue},
                                             )
                     t1=datetime.datetime.now()
                     print 'Testing loss @epoch: ',i,' @minibatch: ',bno,track_results[0:-1],'in ',t1-t0
                     #Again write the evaluated summary to file
                     test_writer.add_summary(track_results[-1],bno)
+                    #Incrementing the minibathc count
                     bno+=1
                 except tf.errors.OutOfRangeError:
                     print 'Validation check completed!!\n'
                     break
 
             #Also save the checkpoints (after two every epoch)
-            if i%6==0:
+            if i%1==0:
                 #Saving the checkpoints
                 checkpoint_path=checkpoint_filename+'model.ckpt'
                 saver.save(sess,checkpoint_path,global_step=i)
