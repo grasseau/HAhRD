@@ -13,10 +13,10 @@ from train_multi_gpu import train
 from inference_multi_gpu import infer
 
 ###################### RUN CONFIGURATION #####################
-run_number=31
+run_number=40
 #the regex pattern for the dataset filename
-train_filename_pattern='event_file_1_*zside_0.tfrecords'
-test_filename_pattern='event_file_2_start_0*zside_0.tfrecords'
+train_filename_pattern='train/*'
+test_filename_pattern='valid/*'
 
 if __name__=='__main__':
 

@@ -193,17 +193,17 @@ def create_training_graph(model_function_handle,
         #one by one launching the graph on each gpu devices
 
         #Adding the split ops
-        X_all,Y_all=iterator#assuming it is the iterator.next_element()
-        X_splits=tf.split(X_all,num_gpus)
-        Y_splits=tf.split(Y_all,num_gpus)
+        #X_all,Y_all=iterator#assuming it is the iterator.next_element()
+        #X_splits=tf.split(X_all,num_gpus,num=num_gpus)
+        #Y_splits=tf.split(Y_all,num_gpus,num=num_gpus)
 
         for i in range(num_gpus):
             with tf.device(all_gpu_name[i]):
                 with tf.name_scope('tower%s'%(i)) as tower_scope:
                     #Getting the next batch of the dataset from the iterator
-                    #X,Y=iterator.get_next() #'element' referes to on minibatch
-                    X=X_splits[i]
-                    Y=Y_splits[i]
+                    X,Y=iterator.get_next() #'element' referes to on minibatch
+                    #X=X_splits[i]
+                    #Y=Y_splits[i]
 
                     #Create a graph on the GPU and get the gradient back
                     tower_grad_var_pair,total_cost=_get_GPU_gradient(
@@ -374,8 +374,9 @@ def train(run_number,
             while True:
                 try:
                     #Giving the option for manually setting up the learning rate
-                    if bno%5==0:
+                    if bno%100==0:
                         wait_time=10
+                        print 'The current learning rate is: ',sess.run(learning_rate_placevalue)
                         print 'Waiting for {} sec for the learning rate:'.format(wait_time)
                         inp_abvl,_,_=select.select([sys.stdin],[],[],wait_time)
                         #if the input is available in the stdin
@@ -408,9 +409,10 @@ def train(run_number,
                         #Starting the timer
                         t0=datetime.datetime.now()
                         #Running the op
+                        learning_rate_val=sess.run(learning_rate_placevalue)
                         track_results=sess.run(train_track_ops,
                                                 feed_dict={is_training:True,
-                                                    learning_rate:learning_rate_placevalue},
+                                                    learning_rate:learning_rate_val},
                                                 options=run_options,
                                                 run_metadata=run_metadata)
                         t1=datetime.datetime.now()
@@ -437,9 +439,10 @@ def train(run_number,
                         #Starting the timer
                         t0=datetime.datetime.now()
                         #Running the op to train
+                        learning_rate_val=sess.run(learning_rate_placevalue)
                         track_results=sess.run(train_track_ops[:-1],
                                                 feed_dict={is_training:True,
-                                                    learning_rate:learning_rate_placevalue},
+                                                    learning_rate:learning_rate_val},
                                                 )
                         t1=datetime.datetime.now()
                         print 'Training loss @epoch: ',i,' @minibatch: ',bno,track_results[1:],'in ',t1-t0
@@ -457,7 +460,7 @@ def train(run_number,
             #get the validation accuracy,starting the validation/test iterator
             sess.run(test_iter_init_op)
             bno=1
-            while i%5==0:
+            while i%1==0:
                 try:
                     #_,datay=sess.run(next_element)#dont use iterator now
                     #print datay
@@ -466,12 +469,13 @@ def train(run_number,
                     #Run the summary also for the validation set.just leave the train op
                     track_results=sess.run(train_track_ops[1:],
                                             feed_dict={is_training:False,
-                                    learning_rate:learning_rate_placevalue},
+                                                        learning_rate:0.0},
                                             )
                     t1=datetime.datetime.now()
                     print 'Testing loss @epoch: ',i,' @minibatch: ',bno,track_results[0:-1],'in ',t1-t0
-                    #Again write the evaluated summary to file
-                    test_writer.add_summary(track_results[-1],bno)
+                    if bno%30==0:
+                        #Again write the evaluated summary to file
+                        test_writer.add_summary(track_results[-1],bno)
                     #Incrementing the minibathc count
                     bno+=1
                 except tf.errors.OutOfRangeError:
