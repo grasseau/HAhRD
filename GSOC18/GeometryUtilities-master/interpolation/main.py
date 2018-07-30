@@ -344,12 +344,18 @@ if __name__=='__main__':
     import optparse
     usage = 'usage: %prog [options]'
     parser = optparse.OptionParser(usage)
+
+    #For specifying the mode (coef_gen or dataset_gen)
+    parser.add_option('--mode', dest='mode',
+                help='coef_gen or dataset_gen', default='dataset_gen')
+
+    #Arguments for the input geometry
     parser.add_option('--input_geometry', dest='input_file',
                 help='Input geometry file', default=input_default_file)
-    parser.add_option('--layer', dest='layer',
-                help='Layer to be mapped', type='int', default=1)
-    parser.add_option('--subdet', dest='subdet',
-                help='Subdet', type='int', default=3)
+    parser.add_option('--edge_length', dest='edge_length',
+                help='edge_length of square', type='int', default=0.7)
+
+    #Arguments for the Dataset Creation
     parser.add_option('--data_file_no',dest='data_file_no',
                     help='The event file number for naming dataset')
     parser.add_option('--data_file',dest='data_file',
@@ -371,7 +377,9 @@ if __name__=='__main__':
         sys.exit(1)
 
     #Calling the driver function
-    #generate_interpolation(opt.input_file,edge_length=0.7)
+    if opt.mode=='coef_gen'
+        generate_interpolation(opt.input_file,opt.edge_length)
+        sys.exit(0)
 
     #Generating the image and label dataset (combined)
     no_layers=40
