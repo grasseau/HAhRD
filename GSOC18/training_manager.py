@@ -157,10 +157,13 @@ if __name__=='__main__':
         checkpoint_epoch_number=30
         #Choosing wrt which output dimension we want to calculate gradient
         map_dimension=0
+        #Number of images we want to process in parallel
+        mini_batch_size=20
         #Calulating the gradient
         get_gradient(run_number,
                     model_function_handle,
                     viz_filename_pattern,
+                    mini_batch_size,
                     checkpoint_epoch_number,
                     map_dimension)
 
@@ -173,5 +176,5 @@ if __name__=='__main__':
         pred=data['pred']
         label=data['label']
         #creating the visualization
-        create_layerwise_saliency_map(input,gradient)
         create_layerwise_saliency_map_matplot(input,gradient)
+        create_layerwise_saliency_map(input,gradient)

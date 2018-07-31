@@ -95,6 +95,7 @@ def create_computation_graph(model_function_handle,
 def get_gradient(run_number,
                 model_function_handle,
                 infer_filename_pattern,
+                mini_batch_size,
                 checkpoint_epoch_number,
                 map_dimension):
     '''
@@ -104,8 +105,14 @@ def get_gradient(run_number,
         map.
     USAGE:
         INPUT:
+            run_number              : the run number to save the results in
+                                        appropriate place
+            model_function_handle   : the function handle to create the
+                                        computation graph.
             infer_filename_pattern  : the filename patter on which
                                         we have to do this new inference
+            mini_batch_size         : the size of the minibatch we want to
+                                        process the gradient on.
             checkpoint_epoch_number : the checkpoint number which we want to
                                         restore
             map_dimension           : the dimension of output where we want
@@ -125,7 +132,7 @@ def get_gradient(run_number,
     is_training=tf.constant(False,dtype=tf.bool,name='training_flag')
 
     #Creating the saliency map of only one element at a time
-    mini_batch_size=1
+    #mini_batch_size=1
     with tf.device('/cpu:0'):
         os_iterator=parse_tfrecords_file_inference(infer_filename_pattern,
                                                     mini_batch_size)
