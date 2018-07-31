@@ -10,8 +10,8 @@ from models.model1_definition import calculate_total_loss
 
 #Inmporting the modules for visualization process
 from Visualization_Module.prediction_visualization import plot_histogram,load_data
-from Visualization_Module.saliency_map_visalization import create_layerwise_saliency_map
-from Visualization_Module.saliency_map_visalization import create_layerwise_saliency_map_matplot
+from Visualization_Module.saliency_map_visualization import create_layerwise_saliency_map
+from Visualization_Module.saliency_map_visualization import create_layerwise_saliency_map_matplot
 
 #import the trainer and inference functions
 from train_multi_gpu import train
@@ -160,12 +160,12 @@ if __name__=='__main__':
         #Number of images we want to process in parallel
         mini_batch_size=20
         #Calulating the gradient
-        get_gradient(run_number,
-                    model_function_handle,
-                    viz_filename_pattern,
-                    mini_batch_size,
-                    checkpoint_epoch_number,
-                    map_dimension)
+        # get_gradient(run_number,
+        #             model_function_handle,
+        #             viz_filename_pattern,
+        #             mini_batch_size,
+        #             checkpoint_epoch_number,
+        #             map_dimension)
 
         #Now visualizing the gradient
         #Loading the gradient data
@@ -176,5 +176,5 @@ if __name__=='__main__':
         pred=data['pred']
         label=data['label']
         #creating the visualization
-        create_layerwise_saliency_map_matplot(input,gradient)
-        create_layerwise_saliency_map(input,gradient)
+        # create_layerwise_saliency_map_matplot(input,gradient)
+        # create_layerwise_saliency_map(input,gradient)
