@@ -8,15 +8,23 @@ from models.model1_definition import model6 as model_function_handle
 from models.model1_definition import calculate_model_accuracy
 from models.model1_definition import calculate_total_loss
 
+#Inmporting the modules for visualization process
+from Visualization_Module.prediction_visualization import plot_histogram,load_data
+from Visualization_Module.saliency_map_visalization import create_layerwise_saliency_map
+from Visualization_Module.saliency_map_visalization import create_layerwise_saliency_map_matplot
+
 #import the trainer and inference functions
 from train_multi_gpu import train
 from inference_multi_gpu import infer
+#import the gradient calulation function
+from get_saliency_map import get_gradient
 
 ###################### RUN CONFIGURATION #####################
 run_number=40
 #the regex pattern for the dataset filename
 train_filename_pattern='train/*'
 test_filename_pattern='valid/*'
+viz_filename_pattern=''
 
 if __name__=='__main__':
 
@@ -38,6 +46,7 @@ if __name__=='__main__':
     #Finally giving the full path to the dataset
     train_filename_pattern=dataset_directory+train_filename_pattern
     test_filename_pattern=dataset_directory+test_filename_pattern
+    viz_filename_pattern=dataset_directory+viz_filename_pattern
 
 
     ################## TRAINING HANDLE ####################
@@ -110,3 +119,59 @@ if __name__=='__main__':
                 inference_mode='valid',
                 mini_batch_size=mini_batch_size,
                 checkpoint_epoch_number=checkpoint_epoch_number)
+
+    ############# Visulaization Handle ###############
+    '''
+    Description:
+        This will be the main point of control for making all the
+        visualization of the training including the currently developed
+        visualizations like
+            1. prediction visulaization (includes error histograms)
+            2. saliency maps (the gradient maps giving the sensitive
+                                regions of the prediction in image)
+            other visualization will be added later
+
+        This manager will use the results saved by the inference module
+        in tmp/hgcal/run_number/results to make the visualization
+    '''
+    if opt.mode=='viz':
+        #################### Histogram Plots ###################
+        #Loading the data
+        filename='tmp/hgcal/{}/results/results_mode_train.npz'.format(run_number)
+        train_results=load_data(filename)
+        predictions=train_results['predictions']
+        labels=train_results['labels']
+        #Plotting the histogram
+        plot_histogram(predictions,labels)
+
+        #plotting the test set prediction histograms
+        filename='tmp/hgcal/{}/results/results_mode_valid.npz'.format(run_number)
+        test_results=load_data(filename)
+        predictions=test_results['predictions']
+        labels=test_results['labels']
+        #Plotting the histogram
+        plot_histogram(predictions,labels)
+
+        #################### Saliency Map #####################
+        #Creating the saliency map
+        checkpoint_epoch_number=30
+        #Choosing wrt which output dimension we want to calculate gradient
+        map_dimension=0
+        #Calulating the gradient
+        get_gradient(run_number,
+                    model_function_handle,
+                    viz_filename_pattern,
+                    checkpoint_epoch_number,
+                    map_dimension)
+
+        #Now visualizing the gradient
+        #Loading the gradient data
+        filename='tmp/hgcal/{}/results/saliency_map_arrays.npz'.format(run_number)
+        map_data=load_data(filename)
+        gradient=data['gradient']
+        input=data['input']
+        pred=data['pred']
+        label=data['label']
+        #creating the visualization
+        create_layerwise_saliency_map(input,gradient)
+        create_layerwise_saliency_map_matplot(input,gradient)

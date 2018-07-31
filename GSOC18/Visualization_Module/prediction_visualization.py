@@ -147,23 +147,23 @@ def plot_histogram(predictions,labels):
         #Taking the random shuffled sample
         no_samples=100
         x=range(1,no_samples+1)
-        predictions=predictions[0:no_samples,:]
-        labels=labels[0:no_samples,:]
+        predictions_slice=predictions[0:no_samples,:]
+        labels_slice=labels[0:no_samples,:]
 
         #Plotting these sample : Energy
         fig=plt.figure()
         fig.suptitle('{} Prediction and Label'.format(regression_names[pred_i]))
         #Plotting the overalyed Bar Graph
         ax1=fig.add_subplot(211)
-        ax1.bar(x,predictions[:,pred_i],alpha=1,color='#ff9933',label='prediction')
-        ax1.bar(x,labels[:,pred_i],alpha=0.5,color='b',label='label')
+        ax1.bar(x,predictions_slice[:,pred_i],alpha=1,color='#ff9933',label='prediction')
+        ax1.bar(x,labels_slice[:,pred_i],alpha=0.5,color='b',label='label')
         ax1.set_xlabel('{} random sample prediction and labels'.format(no_samples))
         ax1.set_ylabel('Value')
         ax1.legend()
         ax1.set_title('Bar Graph: Prediction and Label overlayed')
         #Plotting the corresponding difference
         ax2=fig.add_subplot(212)
-        ax2.bar(x,((predictions[:,pred_i]-labels[:,pred_i])/labels[:,pred_i]),
+        ax2.bar(x,((predictions_slice[:,pred_i]-labels_slice[:,pred_i])/labels_slice[:,pred_i]),
                             alpha=0.7,color='r',label='Error')
         ax2.set_xlabel('Same random Sample as above')
         ax2.set_ylabel('Percentage Error')
@@ -219,7 +219,7 @@ def plot_histogram(predictions,labels):
 
 if __name__=='__main__':
     #Loading the prediction and label data
-    filename='results_mode_train.npz'
+    filename='results_mode_valid.npz'
     data=load_data(filename)
     predictions=data['predictions']
     labels=data['labels']
