@@ -9,11 +9,6 @@ from models.model1_definition import model6 as model_function_handle
 from models.model1_definition import calculate_model_accuracy
 from models.model1_definition import calculate_total_loss
 
-#Inmporting the modules for visualization process
-from Visualization_Module.prediction_visualization import plot_histogram,load_data
-from Visualization_Module.saliency_map_visualization import create_layerwise_saliency_map
-from Visualization_Module.saliency_map_visualization import create_layerwise_saliency_map_matplot
-
 #import the trainer and inference functions
 from train_multi_gpu import train
 from inference_multi_gpu import infer
@@ -149,6 +144,8 @@ if __name__=='__main__':
         in tmp/hgcal/run_number/results to make the visualization
     '''
     if opt.mode=='pred_viz':
+        #Inmporting the modules for visualization process
+        from Visualization_Module.prediction_visualization import plot_histogram,load_data
         #################### Histogram Plots ###################
         #Loading the data
         filename='tmp/hgcal/{}/results/results_mode_train.npz'.format(run_number)
@@ -173,21 +170,32 @@ if __name__=='__main__':
         #Choosing wrt which output dimension we want to calculate gradient
         map_dimension=0
         #Number of images we want to process in parallel
-        mini_batch_size=2
+        '''
+        Currently only minibatch size of 1 is supported for calculation of
+        gradient. For more information follow this thread.
+        https://github.com/tensorflow/tensorflow/issues/4897
+        '''
+        mini_batch_size=1
+        filename='test_pu'
         #Calulating the gradient
         get_gradient(run_number,
                     model_function_handle,
                     viz_filename_pattern,
                     mini_batch_size,
                     checkpoint_epoch_number,
-                    map_dimension)
+                    map_dimension,
+                    filename)
 
     if opt.mode=='map_viz':
+        #Importing the necessary modules
+        from Visualization_Module.prediction_visualization import plot_histogram,load_data
+        from Visualization_Module.saliency_map_visualization import create_layerwise_saliency_map
+        from Visualization_Module.saliency_map_visualization import create_layerwise_saliency_map_matplot
         #Now visualizing the gradient
         #Loading the gradient data
         filename='tmp/hgcal/{}/results/saliency_map_arrays.npz'.format(run_number)
         map_data=load_data(filename)
-        plot_example=15
+        plot_example=0
         gradient=np.squeeze(map_data['gradient'])[plot_example,:,:,:]
         input=map_data['input'][plot_example,:,:,:]
         pred=map_data['pred'][plot_example,:]

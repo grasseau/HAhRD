@@ -98,7 +98,8 @@ def get_gradient(run_number,
                 infer_filename_pattern,
                 mini_batch_size,
                 checkpoint_epoch_number,
-                map_dimension):
+                map_dimension,
+                filename):
     '''
     DESCRIPTION:
         This function will control all the tensorflow relate ops and
@@ -118,6 +119,8 @@ def get_gradient(run_number,
                                         restore
             map_dimension           : the dimension of output where we want
                                         to create the saliency map
+            filename                : the filename to give unique name to
+                                        saliency map.
         OUTPUT:
 
     '''
@@ -163,7 +166,7 @@ def get_gradient(run_number,
         print 'Prediction: ',pred
 
         print '>>> Saving the data for map creation in results folder'
-        results_filename=save_dir+'saliency_map_arrays'
+        results_filename=save_dir+'saliency_map_arrays_'+filename
         np.savez_compressed(results_filename,
                             gradient=gradient,
                             input=input,
