@@ -16,10 +16,10 @@ from inference_multi_gpu import infer
 from get_saliency_map import get_gradient
 
 ###################### RUN CONFIGURATION #####################
-run_number=40
+run_number=41
 #the regex pattern for the dataset filename
-train_filename_pattern='train/*'
-test_filename_pattern='valid/*'
+train_filename_pattern='pu/train/*'
+test_filename_pattern='pu/valid/*'
 test_pu_filename_pattern='test_pu/*'
 viz_filename_pattern='test_pu/*'
 
@@ -62,7 +62,7 @@ if __name__=='__main__':
     if opt.mode=='train':
         #Specifying the Hyperparameters
         init_learning_rate=0.001
-        decay_step=150
+        decay_step=350
         decay_rate=0.95
         #Specifying the run configuration
         mini_batch_size=20
@@ -95,7 +95,7 @@ if __name__=='__main__':
     #specifying the inference configuration
     if opt.mode=='infer':
         mini_batch_size=20
-        checkpoint_epoch_number=9
+        checkpoint_epoch_number=30
 
         #Running the inference on the training data set
         infer(run_number,
@@ -119,15 +119,15 @@ if __name__=='__main__':
                 checkpoint_epoch_number=checkpoint_epoch_number)
 
         #Now running the inference on the PU dataset
-        tf.reset_default_graph()
-        infer(run_number,
-                model_function_handle,
-                calculate_model_accuracy,
-                calculate_total_loss,
-                test_pu_filename_pattern,
-                inference_mode='test_pu',
-                mini_batch_size=mini_batch_size,
-                checkpoint_epoch_number=checkpoint_epoch_number)
+        # tf.reset_default_graph()
+        # infer(run_number,
+        #         model_function_handle,
+        #         calculate_model_accuracy,
+        #         calculate_total_loss,
+        #         test_pu_filename_pattern,
+        #         inference_mode='test_pu',
+        #         mini_batch_size=mini_batch_size,
+        #         checkpoint_epoch_number=checkpoint_epoch_number)
 
     ############# Visulaization Handle ###############
     '''
@@ -201,11 +201,11 @@ if __name__=='__main__':
         pred=map_data['pred'][plot_example,:]
         label=map_data['label'][plot_example,:]
         #creating the visualization
-        create_layerwise_saliency_map_matplot(input,gradient)
+        create_layerwise_saliency_map_matplot(input,gradient*input)
 
         #Creating the saliency map
         print gradient.shape,input.shape
         print pred
         print label
         save_dir='tmp/hgcal/{}/results/'.format(run_number)
-        create_layerwise_saliency_map(input,gradient,save_dir)
+        create_layerwise_saliency_map(input,gradient*input,save_dir)
