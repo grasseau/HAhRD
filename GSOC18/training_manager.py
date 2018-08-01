@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 
 #Adding the default path to the data directory
 dataset_directory='GeometryUtilities-master/interpolation/image_data/'
@@ -24,7 +25,8 @@ run_number=40
 #the regex pattern for the dataset filename
 train_filename_pattern='train/*'
 test_filename_pattern='valid/*'
-viz_filename_pattern=''
+test_pu_filename_pattern='test_pu/*'
+viz_filename_pattern='test_pu/*'
 
 if __name__=='__main__':
 
@@ -46,6 +48,7 @@ if __name__=='__main__':
     #Finally giving the full path to the dataset
     train_filename_pattern=dataset_directory+train_filename_pattern
     test_filename_pattern=dataset_directory+test_filename_pattern
+    test_pu_filename_pattern=dataset_directory+test_pu_filename_pattern
     viz_filename_pattern=dataset_directory+viz_filename_pattern
 
 
@@ -97,7 +100,7 @@ if __name__=='__main__':
     #specifying the inference configuration
     if opt.mode=='infer':
         mini_batch_size=20
-        checkpoint_epoch_number=30
+        checkpoint_epoch_number=9
 
         #Running the inference on the training data set
         infer(run_number,
@@ -120,6 +123,17 @@ if __name__=='__main__':
                 mini_batch_size=mini_batch_size,
                 checkpoint_epoch_number=checkpoint_epoch_number)
 
+        #Now running the inference on the PU dataset
+        tf.reset_default_graph()
+        infer(run_number,
+                model_function_handle,
+                calculate_model_accuracy,
+                calculate_total_loss,
+                test_pu_filename_pattern,
+                inference_mode='test_pu',
+                mini_batch_size=mini_batch_size,
+                checkpoint_epoch_number=checkpoint_epoch_number)
+
     ############# Visulaization Handle ###############
     '''
     Description:
@@ -134,7 +148,7 @@ if __name__=='__main__':
         This manager will use the results saved by the inference module
         in tmp/hgcal/run_number/results to make the visualization
     '''
-    if opt.mode=='viz':
+    if opt.mode=='pred_viz':
         #################### Histogram Plots ###################
         #Loading the data
         filename='tmp/hgcal/{}/results/results_mode_train.npz'.format(run_number)
@@ -145,36 +159,45 @@ if __name__=='__main__':
         plot_histogram(predictions,labels)
 
         #plotting the test set prediction histograms
-        filename='tmp/hgcal/{}/results/results_mode_valid.npz'.format(run_number)
+        filename='tmp/hgcal/{}/results/results_mode_test_pu.npz'.format(run_number)
         test_results=load_data(filename)
         predictions=test_results['predictions']
         labels=test_results['labels']
         #Plotting the histogram
         plot_histogram(predictions,labels)
 
+    if opt.mode=='map_gen':
         #################### Saliency Map #####################
         #Creating the saliency map
-        checkpoint_epoch_number=30
+        checkpoint_epoch_number=9
         #Choosing wrt which output dimension we want to calculate gradient
         map_dimension=0
         #Number of images we want to process in parallel
-        mini_batch_size=20
+        mini_batch_size=2
         #Calulating the gradient
-        # get_gradient(run_number,
-        #             model_function_handle,
-        #             viz_filename_pattern,
-        #             mini_batch_size,
-        #             checkpoint_epoch_number,
-        #             map_dimension)
+        get_gradient(run_number,
+                    model_function_handle,
+                    viz_filename_pattern,
+                    mini_batch_size,
+                    checkpoint_epoch_number,
+                    map_dimension)
 
+    if opt.mode=='map_viz':
         #Now visualizing the gradient
         #Loading the gradient data
         filename='tmp/hgcal/{}/results/saliency_map_arrays.npz'.format(run_number)
         map_data=load_data(filename)
-        gradient=data['gradient']
-        input=data['input']
-        pred=data['pred']
-        label=data['label']
+        plot_example=15
+        gradient=np.squeeze(map_data['gradient'])[plot_example,:,:,:]
+        input=map_data['input'][plot_example,:,:,:]
+        pred=map_data['pred'][plot_example,:]
+        label=map_data['label'][plot_example,:]
         #creating the visualization
-        # create_layerwise_saliency_map_matplot(input,gradient)
-        # create_layerwise_saliency_map(input,gradient)
+        create_layerwise_saliency_map_matplot(input,gradient)
+
+        #Creating the saliency map
+        print gradient.shape,input.shape
+        print pred
+        print label
+        save_dir='tmp/hgcal/{}/results/'.format(run_number)
+        create_layerwise_saliency_map(input,gradient,save_dir)

@@ -1,3 +1,4 @@
+import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.axes3d import Axes3D
 #Importing the plotly requirements
@@ -146,7 +147,7 @@ def create_3d_scatter_saliency_map_matplot(input_img,gradient):
     plt.show()
 
 
-def create_layerwise_saliency_map(input_img,gradient):
+def create_layerwise_saliency_map(input_img,gradient,save_dir):
     '''
     DESCRIPTION:
         Now finally we will make the visualization of the saliency
@@ -184,7 +185,7 @@ def create_layerwise_saliency_map(input_img,gradient):
                         color=hit_color,
                         showscale=True,
                         line=dict(width=1),
-                        colorscale='Virdis',
+                        colorscale='Viridis',
                         colorbar=dict(
                                     x=0.42,
                                     # y=0.8,
@@ -202,7 +203,7 @@ def create_layerwise_saliency_map(input_img,gradient):
                         z=gradient[:,:,0].T,#ot make it similar to scatter
                         xaxis='x2',
                         yaxis='y2',
-                        colorscale='Virdis',
+                        colorscale='Viridis',
                         colorbar=dict(
                                     x=1.02,
                                     # y=0.8,
@@ -241,7 +242,7 @@ def create_layerwise_saliency_map(input_img,gradient):
                         color=hit_color_all[layer_i],
                         showscale=True,
                         line=dict(width=1),
-                        colorscale='Virdis',
+                        colorscale='Viridis',
                         colorbar=dict(
                                     x=0.42,
                                     # y=0.8,
@@ -260,7 +261,7 @@ def create_layerwise_saliency_map(input_img,gradient):
                     name='gradient',
                     xaxis='x2',
                     yaxis='y2',
-                    colorscale='Virdis',
+                    colorscale='Viridis',
                     colorbar=dict(
                                 x=1.02,
                                 # y=0.8,
