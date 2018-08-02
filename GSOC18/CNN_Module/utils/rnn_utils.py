@@ -99,8 +99,8 @@ def _simple_vector_RNN_layer(input_sequence,
                                 num_output_source,
                                 output_dimension,
                                 output_norm,
-                                weight_decay=None,
-                                initializer==tf.glorot_uniform_initializer()):
+                                weight_decay,
+                                initializer):
     '''
     DESCRIPTION:
         This is the second object in our RNN hirerchy to make the fully functional
@@ -180,8 +180,14 @@ def _simple_vector_RNN_layer(input_sequence,
 def simple_vector_RNN_block(X_img,
                             is_training,
                             conv2d_function_handle,
+                            num_of_sequence_layers,
+                            hidden_state_dim_list,
+                            output_dimension_list,
+                            output_type,
+                            output_norm_list,
                             num_detector_layers=40,
-                            initial_hidden_state='zeros'):
+                            weight_decay=None,
+                            initializer=tf.glorot_uniform_initializer()):
     '''
     DESCRIPTION:
 
@@ -195,12 +201,26 @@ def simple_vector_RNN_block(X_img,
                                         applied to the "images" of each layer of the
                                         detector with the same shared parameters
                                         and finally generating a vectored output.
-            rnn_layers_height       : the number of RNN cells stacked on top of
+            num_of_sequence_layers  : the number of RNN cells stacked on top of
                                         each other.
+                                        Practically <=2 is best to keep.
+            hidden_state_dim_list   : the list containing the dimension of the
+                                        hidden state of the RNN layers.
+            output_dimension_list   : the list containing the output dimension of
+                                        each RNN layer
+            output_type             : whether we want to return a sequence or
+                                        vector as output of this block.
+                                        string: 'sequence'/'vector'
+            output_norm_list        : the name of the normalization to be applied
+                                        to the output of each layer.
+                                        ['relu'/'tanh'/None] supported now
             num_detector_layers     : the total number of layers in detector
                                         hit-image, default to 40
-            initial_hidden_state    : the initial hidden state input to be given
-                                        to the first detector-layer's RNN cell.
+            weight_decay            : the hyperparameter that will be multiplied
+                                        to the L2-regularization contribution
+                                        to the total cost.
+            initializer              : the initializer to initialize the weigths
+                                        of the weights in the layers (CNN and RNN)
         OUTPUT:
     '''
     #Asserting the dimension of input with the number of detector-layer
@@ -226,3 +246,39 @@ def simple_vector_RNN_block(X_img,
             tf.get_variable_scope().reuse_variables()
 
     #Now we are ready for the implementation of the sequence(RNN/LSTM) cells
+    #The input to this sequenced layer
+    input_sequence=conv_output_list
+
+    #All the necessary argument assertion
+    assert output_type=='sequence' or output_type=='vector','Give correct argument'
+
+    #Writing in a separate name scope since varaible scope are taken care inside
+    with tf.name_scope('seq_RNN_layers'):
+        #Stacking up the RNN seq-layer on top on one another.
+        for i in range(num_of_sequence_layers):
+            #Deciding the unique layer name for unique varaible scope for each layer
+            layer_name='layer{}'.format(i+1)
+
+            #Specifying the number of output_source
+            num_output_source='all'
+            if i==num_of_sequence_layers-1 and output_type=='vector':
+                num_output_source='one'
+
+            #Now stacking up the layers on top of other
+            #The output of this layer will be the input sequence to next RNN layer
+            input_sequence=_simple_vector_RNN_layer(input_sequence=input_sequence,
+                                    name=layer_name,
+                                    hidden_state_length=hidden_state_dim_list[i],
+                                    num_output_source=num_output_source,
+                                    output_dimension=output_dimension_list[i],
+                                    output_norm=output_norm_list[i],
+                                    weight_decay=weight_decay,
+                                    initializer=initializer)
+
+        #Finally returning the output sequence be it a list of one vector or all
+        output_sequence=input_sequence
+
+        #This output could be used for furthur fully connected layer/
+        #aggregateion (if its a sequence) or input to other sequence layer
+        #or directly as the unnormalized output of the whole model.
+        return output_sequence
