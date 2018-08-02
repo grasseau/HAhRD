@@ -352,17 +352,10 @@ if __name__=='__main__':
     #Arguments for the input geometry
     parser.add_option('--input_geometry', dest='input_file',
                 help='Input geometry file', default=input_default_file)
-<<<<<<< HEAD
     parser.add_option('--edge_length', dest='edge_length',
                 help='edge_length of square', type='int', default=0.7)
 
     #Arguments for the Dataset Creation
-=======
-    parser.add_option('--layer', dest='layer',
-                help='Layer to be mapped', type='int', default=1)
-    parser.add_option('--subdet', dest='subdet',
-                help='Subdet', type='int', default=3)
->>>>>>> upstream/master
     parser.add_option('--data_file_no',dest='data_file_no',
                     help='The event file number for naming dataset')
     parser.add_option('--data_file',dest='data_file',
