@@ -14,9 +14,9 @@ def _simple_vector_RNN_cell(prev_hidden_state,
                             give_output,
                             output_shape,
                             name,
-                            output_norm=None,
-                            weight_decay=None,
-                            initializer=tf.glorot_uniform_initializer()):
+                            output_norm,
+                            weight_decay,
+                            initializer):
     '''
     DESCRIPTION:
         This function will be used by the main sequence model implementation
@@ -93,7 +93,14 @@ def _simple_vector_RNN_cell(prev_hidden_state,
         else:
             return A_hidden
 
-def _simple_vector_RNN_layer():
+def _simple_vector_RNN_layer(input_sequence,
+                                name,
+                                hidden_state_length,
+                                num_output_source,
+                                output_dimension,
+                                output_norm,
+                                weight_decay=None,
+                                initializer==tf.glorot_uniform_initializer()):
     '''
     DESCRIPTION:
         This is the second object in our RNN hirerchy to make the fully functional
@@ -103,17 +110,76 @@ def _simple_vector_RNN_layer():
         layer to capture the inter-layer information using the RNN cells.
     USAGE:
         INPUT:
-
+            input_sequence      : the input sequence to this RNN "layer".This
+                                    will include the activation of all the detector-
+                                    layer in general case.
+            name                : this name will be used to create a shared variable
+                                    scope for all the RNN cells inside this layer
+            hidden_state_length : the length of the hidden state vector which will
+                                    carry over the memory between layers.
+            num_output_source   : whether we want an output from each detector-
+                                    layer or just a single output.
+                                    'all' : for number of output = number of input
+                                    'one' : number of output = 1
+            output_dimension    : the size of each output vector
+            output_norm         : the normalization to be applied to the output
+                                    of the RNN cell.
+                                    Currently relu and tanh supported.
+            weight_decay        : the factor by which the L2-regularization of the
+                                    weights will be multipled.
+            initializer         : the initializer function handle for the weights/
+                                    parameter in the RNN cell. default to
+                                    glorot uniform initializer.
         OUTPUT:
 
     '''
-    
+    #Now starting the shared variable scope for all the RNN cells
+    with tf.variable_scope(name):
+        #creating the initial hidden state which will be a zero vector
+        hidden_state_shape=(1,hidden_state_length)
+        prev_hidden_state=tf.constant(0.0,shape=hidden_state_shape,dtype=dtype)
+
+        #Now will will initiate the RNN connncetion to get inter-detector_layer communication
+        #Making a list to hold the output sequences.
+        output_sequence=[]
+
+        #Setting up the give output parameter
+        assert num_output_source=='all' or num_output_source=='one','Give correct\
+                                                            arguments'
+        give_output=False
+        if num_output_source=='all':
+            give_output=True
+
+        #Iterating over the all the sequences to have communication between them
+        for seq_i in range(len(input_sequence)):
+            #Initializing the RNN cell under the above variable scope
+            if seq_i==len(input_sequence)-1:
+                #Atleast the last RNN cell has to give output
+                give_output=True
+
+            output_tuple=_simple_vector_RNN_cell(prev_hidden_state,
+                                                input_sequence[seq_i],
+                                                give_output=give_output,
+                                                output_shape=output_dimension,
+                                                name='RNN{}'.format(seq_i+1),
+                                                output_norm=output_norm,
+                                                weight_decay=weight_decay,
+                                                initializer=initializer)
+            if give_output==True:
+                prev_hidden_state=output_tuple[0]
+                output_sequence.append(output_tuple[1])
+            else:
+                prev_hidden_state=output_tuple
+
+            #Sharing the parameter in the current varaible scope across RNN cells
+            tf.get_variable_scope().reuse_variables()
+
+        #The output sequence from this RNN "layer" is ready to given out
+        return output_sequence
 
 def simple_vector_RNN_block(X_img,
                             is_training,
                             conv2d_function_handle,
-                            num_output_source,
-                            output_dimension,
                             num_detector_layers=40,
                             initial_hidden_state='zeros'):
     '''
@@ -129,11 +195,6 @@ def simple_vector_RNN_block(X_img,
                                         applied to the "images" of each layer of the
                                         detector with the same shared parameters
                                         and finally generating a vectored output.
-            num_output_source       : whether we want an output from each detector-
-                                        layer or just a single output.
-                                        'all' : for number of output = number of input
-                                        'one' : number of output = 1
-            output_dimension        : the size of each output vector
             rnn_layers_height       : the number of RNN cells stacked on top of
                                         each other.
             num_detector_layers     : the total number of layers in detector
