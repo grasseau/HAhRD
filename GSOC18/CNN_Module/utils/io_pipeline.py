@@ -309,19 +309,21 @@ def parse_tfrecords_file(train_filename_pattern,test_filename_pattern,
     train_dataset=train_dataset.apply(
             tf.contrib.data.map_and_batch(_binary_parse_function_example,
                                             mini_batch_size,
-                                            num_parallel_batches=4)
+                                            num_parallel_batches=10,
+                                            drop_remainder=True)
     )
     #Applying the fused map and batch operator to test dataset
     test_dataset=test_dataset.apply(
             tf.contrib.data.map_and_batch(_binary_parse_function_example,
                                             mini_batch_size,
-                                            num_parallel_batches=4)
+                                            num_parallel_batches=10,
+                                            drop_remainder=True)
     )
 
     #Prefetching the dataset for train dataset
-    train_dataset=train_dataset.prefetch(4)
+    train_dataset=train_dataset.prefetch(3)
     #Prefetching the dataset for test dataset
-    test_dataset=test_dataset.prefetch(4)
+    test_dataset=test_dataset.prefetch(3)
 
     #Now making the re-initializable iterator
     iterator=tf.data.Iterator.from_structure(

@@ -1,6 +1,10 @@
 import tensorflow as tf
-from conv2d_utils import *
-from conv3d_utils import *
+import sys
+import os
+
+#Directly using the package
+from CNN_Module.utils.conv2d_utils import *
+from CNN_Module.utils.conv3d_utils import *
 
 def calculate_model_accuracy(Z,Y):
     '''

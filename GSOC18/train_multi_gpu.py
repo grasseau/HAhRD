@@ -1,33 +1,35 @@
 import tensorflow as tf
 import datetime
 import sys
+#for runtime optional input of the learning rate
+import select
 import os
 from tensorflow.python.client import device_lib
 from tensorflow.python.client import timeline
 
 #import models here(need to be defined separetely in model file)
-from io_pipeline import parse_tfrecords_file
+from CNN_Module.utils.io_pipeline import parse_tfrecords_file
 # from test import make_model_conv,make_model_conv3d,make_model_linear
 # from test import calculate_model_accuracy,calculate_total_loss
-from model1_definition import model7 as model_function_handle
-from model1_definition import calculate_model_accuracy
-from model1_definition import calculate_total_loss
+# from model1_definition import model7 as model_function_handle
+# from model1_definition import calculate_model_accuracy
+# from model1_definition import calculate_total_loss
 
 
 ################## GLOBAL VARIABLES #######################
-local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
-run_number=35                            #for saving the summaries
-train_summary_filename='tmp/hgcal/%s/train/'%(run_number) #for training set
-test_summary_filename='tmp/hgcal/%s/valid/'%(run_number)  #For validation set
-if os.path.exists(train_summary_filename):
-    os.system('rm -rf ./'+train_summary_filename)
-    os.system('rm -rf ./'+test_summary_filename)
-
-checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
-#model_function_handle=model2
-timeline_filename='tmp/hgcal/{}/timeline/'.format(run_number)
-if not os.path.exists(timeline_filename):
-    os.makedirs(timeline_filename)
+# local_directory_path='/home/gridcl/kumar/HAhRD/GSOC18/GeometryUtilities-master/interpolation/image_data'
+# run_number=35                            #for saving the summaries
+# train_summary_filename='tmp/hgcal/%s/train/'%(run_number) #for training set
+# test_summary_filename='tmp/hgcal/%s/valid/'%(run_number)  #For validation set
+# if os.path.exists(train_summary_filename):
+#     os.system('rm -rf ./'+train_summary_filename)
+#     os.system('rm -rf ./'+test_summary_filename)
+#
+# checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
+# #model_function_handle=model2
+# timeline_filename='tmp/hgcal/{}/timeline/'.format(run_number)
+# if not os.path.exists(timeline_filename):
+#     os.makedirs(timeline_filename)
 
 ################# HELPER FUNCTIONS ########################
 def _add_summary(object):
@@ -64,7 +66,10 @@ def _get_available_gpus():
 
     return all_gpu_name
 
-def _get_GPU_gradient(X,Y,is_training,scope,optimizer):
+def _get_GPU_gradient(model_function_handle,
+                        calculate_model_accuracy,
+                        calculate_total_loss,
+                        X,Y,is_training,scope,optimizer):
     '''
     DESCRIPTION:
         This function creates a computational graph on the GPU,
@@ -133,7 +138,11 @@ def _compute_average_gradient(all_tower_grad_var):
     return average_grad_var_pair
 
 ####################### MAIN TRAIN FUNCTION ###################
-def create_training_graph(iterator,is_training,global_step,learning_rate):
+def create_training_graph(model_function_handle,
+                            calculate_model_accuracy,
+                            calculate_total_loss,
+                            iterator,is_training,
+                            global_step,learning_rate):
     '''
     DESCRIPTION:
         This function will serve the main purpose of training the
@@ -151,24 +160,25 @@ def create_training_graph(iterator,is_training,global_step,learning_rate):
         Please run it under the cpu:0 scope in the main driver function
     USAGE:
         INPUTS:
-            iterator    : an instance of iterator having the property of
-                            .get_next() to get the next
-                            batch of data from the input pipeline
-                            (following Derek Murray advice on Stack Overflow)
-            is_training : a boolean flag to distinguish in what mode we are in
-                            Training/Testing
-            global_step : a varible which could how many rounds of backpropagation
-                            is completed
-            learning_rate: the learning rate with the learning rate decay
-                            applied to it
+            model_function_handle   : the fucntion handle to create CNN graph
+            calculate_model_accuracy: the fucntion handle to calculate the model
+                                        accuracy
+            calculate_total_loss    : the fucntion handle to calculate the total
+                                        loaa of the CNN  model
+            iterator                : an instance of iterator having the property of
+                                        .get_next() to get the next
+                                        batch of data from the input pipeline
+                                        (following Derek Murray advice on Stack Overflow)
+            is_training             : a boolean flag to distinguish in what mode we are in
+                                        Training/Testing
+            global_step             : a varible which could how many rounds of backpropagation
+                                        is completed
+            learning_rate           : the learning rate with the learning rate decay
+                                        applied to it
         OUTPUTS:
-            train_track_ops  : the list of op to run of form
-                                [apply_gradient_op,loss1_op,loss2_op.....]
+            train_track_ops         : the list of op to run of form
+                                        [apply_gradient_op,loss1_op,loss2_op.....]
     '''
-    #Setting the input placeholders for training mode
-    #filename=tf.placeholder
-
-
     #Setting up the optimizer
     optimizer=tf.train.AdamOptimizer(learning_rate=learning_rate)
 
@@ -181,15 +191,27 @@ def create_training_graph(iterator,is_training,global_step,learning_rate):
     #Creating one single variable scope for all the towers
     with tf.variable_scope(tf.get_variable_scope()):
         #one by one launching the graph on each gpu devices
+
+        #Adding the split ops
+        #X_all,Y_all=iterator#assuming it is the iterator.next_element()
+        #X_splits=tf.split(X_all,num_gpus,num=num_gpus)
+        #Y_splits=tf.split(Y_all,num_gpus,num=num_gpus)
+
         for i in range(num_gpus):
             with tf.device(all_gpu_name[i]):
                 with tf.name_scope('tower%s'%(i)) as tower_scope:
                     #Getting the next batch of the dataset from the iterator
                     X,Y=iterator.get_next() #'element' referes to on minibatch
+                    #X=X_splits[i]
+                    #Y=Y_splits[i]
 
                     #Create a graph on the GPU and get the gradient back
-                    tower_grad_var_pair,total_cost=_get_GPU_gradient(X,Y,
-                                        is_training,tower_scope,optimizer)
+                    tower_grad_var_pair,total_cost=_get_GPU_gradient(
+                                            model_function_handle,
+                                            calculate_model_accuracy,
+                                            calculate_total_loss,
+                                            X,Y,
+                                            is_training,tower_scope,optimizer)
                     all_tower_grad_var.append(tower_grad_var_pair)
                     all_tower_cost.append(total_cost)
 
@@ -220,10 +242,14 @@ def create_training_graph(iterator,is_training,global_step,learning_rate):
     return train_track_ops
 
 
-def train(epochs,mini_batch_size,buffer_size,
-                init_learning_rate,decay_step,decay_rate,
-                train_filename_list,test_filename_list,
-                restore_epoch_number=None):
+def train(run_number,
+            model_function_handle,
+            calculate_model_accuracy,
+            calculate_total_loss,
+            epochs,mini_batch_size,shuffle_buffer_size,
+            init_learning_rate,decay_step,decay_rate,
+            train_filename_list,test_filename_list,
+            restore_epoch_number=None):
     '''
     DESCRIPTION:
         This function will finally take the graph created for training
@@ -231,10 +257,18 @@ def train(epochs,mini_batch_size,buffer_size,
         and track the result using the loss of all the towers
     USAGE:
         INPUT:
+            run_number                : the run number to save the results and
+                                        checkpoints in unique directory
+            model_function_handle     : the fucntion handle to create the CNN
+                                        model architecture
+            calculate_model_accuracy  : the fucntion handle to calculate the
+                                        accuracy of the model
+            calculate_total_loss      : the function handle to calculate the
+                                        loss or cost of the model
             epochs                    : the total number of epochs to go through
                                         the dataset
             mini_batch_size           : the size of minibatch for each tower
-            buffer_size               : the buffer size to randomly sample minibatch
+            shuffle_buffer_size       : the buffer size to randomly sample minibatch
             init_learning_rate        : the initial learning rate of the oprimizer
             decay_step                : the number of step after which one unit decay
                                         will be applied to learning_rate
@@ -254,17 +288,32 @@ def train(epochs,mini_batch_size,buffer_size,
             nothing
             later checkpoints saving will be added
     '''
+    #Setting up the required directory for savinng results and checkpoint
+    train_summary_filename='tmp/hgcal/%s/train/'%(run_number) #for training set
+    test_summary_filename='tmp/hgcal/%s/valid/'%(run_number)  #For validation set
+    if os.path.exists(train_summary_filename):
+        os.system('rm -rf ./'+train_summary_filename)
+        os.system('rm -rf ./'+test_summary_filename)
+
+    checkpoint_filename='tmp/hgcal/{}/checkpoint/'.format(run_number)
+    #model_function_handle=model2
+    timeline_filename='tmp/hgcal/{}/timeline/'.format(run_number)
+    if not os.path.exists(timeline_filename):
+        os.makedirs(timeline_filename)
+
     #Setting the required Placeholders and Global Non-Trainable Variable
     is_training=tf.placeholder(tf.bool,[],name='training_flag')
     global_step=tf.get_variable('global_step',shape=[],
                         initializer=tf.constant_initializer(0),
                         trainable=False)
-    learning_rate=tf.train.exponential_decay(init_learning_rate,
+    learning_rate_placevalue=tf.train.exponential_decay(init_learning_rate,
                                             global_step,
                                             decay_step,
                                             decay_rate,#lr_decay rate
                                             staircase=True,
                                             name='exponential_decay')
+    #Making the larning rate as a placeholder
+    learning_rate=tf.placeholder(tf.float32,name='learning_rate')
     tf.summary.scalar('learning_rate',learning_rate)
 
     #Setting up the input_pipeline
@@ -273,15 +322,18 @@ def train(epochs,mini_batch_size,buffer_size,
                                                     train_filename_list,
                                                     test_filename_list,
                                                     mini_batch_size,
-                                                    shuffle_buffer_size=buffer_size)
+                                                    shuffle_buffer_size=shuffle_buffer_size)
 
     #Creating the multi-GPU training graph
-    train_track_ops=create_training_graph(iterator,is_training,global_step,
+    train_track_ops=create_training_graph(model_function_handle,
+                                            calculate_model_accuracy,
+                                            calculate_total_loss,
+                                            iterator,is_training,global_step,
                                             learning_rate)
 
     #Adding saver to create checkpoints for weights
     saver=tf.train.Saver(tf.global_variables(),
-                        max_to_keep=2)
+                        max_to_keep=50)#default is 5, we will save all epoch
 
     #Adding all the varaible summary
     train_writer=tf.summary.FileWriter(train_summary_filename)
@@ -313,6 +365,7 @@ def train(epochs,mini_batch_size,buffer_size,
 
         #Starting the training epochs
         for i in range(epochs):
+            ############################# TRAINING #############################
             #Since we are not repeating the data it will raise error once over
             #initializing the training iterator
             sess.run(train_iter_init_op) #we need the is_training placeholder
@@ -320,8 +373,35 @@ def train(epochs,mini_batch_size,buffer_size,
             t_epoch_start=datetime.datetime.now()
             while True:
                 try:
+                    #Giving the option for manually setting up the learning rate
+                    if bno%100==0:
+                        wait_time=10
+                        print 'The current learning rate is: ',sess.run(learning_rate_placevalue)
+                        print 'Waiting for {} sec for the learning rate:'.format(wait_time)
+                        inp_abvl,_,_=select.select([sys.stdin],[],[],wait_time)
+                        #if the input is available in the stdin
+                        if inp_abvl:
+                            try:
+                                init_learning_rate=float(sys.stdin.readline().strip())
+                                print 'New Learning rate accepted: ',init_learning_rate
+                                #Initializing the global step
+                                sess.run(global_step.initializer)
+                                #Now making the new learning_rate_placevalue
+                                learning_rate_placevalue=tf.train.exponential_decay(
+                                                            init_learning_rate,
+                                                            global_step,
+                                                            decay_step,
+                                                            decay_rate,#lr_decay rate
+                                                            staircase=True,
+                                                            name='exponential_decay')
+
+                            except:
+                                print 'Give the learning rate as floating value next time'
+                        else:
+                            print "Resuming the Learning without changes"
+
                     #Running the train op and optionally the tracer bullet
-                    if bno%20==0 and i%5==0:
+                    if bno%30==0:
                         #Adding the runtime statisctics (memory and execution time)
                         run_options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                         run_metadata=tf.RunMetadata()
@@ -329,46 +409,58 @@ def train(epochs,mini_batch_size,buffer_size,
                         #Starting the timer
                         t0=datetime.datetime.now()
                         #Running the op
+                        learning_rate_val=sess.run(learning_rate_placevalue)
                         track_results=sess.run(train_track_ops,
-                                                feed_dict={is_training:True},
+                                                feed_dict={is_training:True,
+                                                    learning_rate:learning_rate_val},
                                                 options=run_options,
                                                 run_metadata=run_metadata)
                         t1=datetime.datetime.now()
 
-                        #Adding the run matedata to the tensorboard summary writer
-                        train_writer.add_run_metadata(run_metadata,'step%dbatch%d'%(i,bno))
+                        #Writing the timeline tracer every 300th minibatch
+                        if bno%300==0:
+                            #Adding the run matedata to the tensorboard summary writer
+                            train_writer.add_run_metadata(run_metadata,'step%dbatch%d'%(i,bno))
 
-                        #Creating the Timeline object and saving it to the json
-                        tline=timeline.Timeline(run_metadata.step_stats)
-                        #Creating the chrome trace
-                        ctf=tline.generate_chrome_trace_format()
-                        timeline_path=timeline_filename+'timeline_step%dbatch%d.json'%(i,bno)
-                        with open(timeline_path,'w') as f:
-                            f.write(ctf)
+                            #Creating the Timeline object and saving it to the json
+                            tline=timeline.Timeline(run_metadata.step_stats)
+                            #Creating the chrome trace
+                            ctf=tline.generate_chrome_trace_format()
+                            timeline_path=timeline_filename+'timeline_step%dbatch%d.json'%(i,bno)
+                            with open(timeline_path,'w') as f:
+                                f.write(ctf)
+
+                        #Writing the summary (only every 30th iteration)
+                        #Now the last op has the merged_summary evaluated.So, write it.
+                        train_writer.add_summary(track_results[-1],bno)
+                        print 'Training loss @epoch: ',i,' @minibatch: ',bno,track_results[1:-1],'in ',t1-t0
 
                     else:
                         #Starting the timer
                         t0=datetime.datetime.now()
                         #Running the op to train
-                        track_results=sess.run(train_track_ops,
-                                                feed_dict={is_training:True},
+                        learning_rate_val=sess.run(learning_rate_placevalue)
+                        track_results=sess.run(train_track_ops[:-1],
+                                                feed_dict={is_training:True,
+                                                    learning_rate:learning_rate_val},
                                                 )
                         t1=datetime.datetime.now()
+                        print 'Training loss @epoch: ',i,' @minibatch: ',bno,track_results[1:],'in ',t1-t0
 
-                    print 'Training loss @epoch: ',i,' @minibatch: ',bno,track_results[1:-1],'in ',t1-t0
-                    #Now the last op has the merged_summary evaluated.So, write it.
-                    train_writer.add_summary(track_results[-1],bno)
+                    #Incrementing the minibatch number
                     bno+=1
+                #Finally when we are out of the examples
                 except tf.errors.OutOfRangeError:
                     t_epoch_end=datetime.datetime.now()
                     print 'Training one epoch completed in: {}\n'.format(
                                     t_epoch_end-t_epoch_start)
                     break
 
+            ###################### VALIDATION ################################
             #get the validation accuracy,starting the validation/test iterator
             sess.run(test_iter_init_op)
             bno=1
-            while i%6==0:
+            while i%1==0:
                 try:
                     #_,datay=sess.run(next_element)#dont use iterator now
                     #print datay
@@ -376,19 +468,22 @@ def train(epochs,mini_batch_size,buffer_size,
                     t0=datetime.datetime.now()
                     #Run the summary also for the validation set.just leave the train op
                     track_results=sess.run(train_track_ops[1:],
-                                            feed_dict={is_training:False},
+                                            feed_dict={is_training:False,
+                                                        learning_rate:0.0},
                                             )
                     t1=datetime.datetime.now()
                     print 'Testing loss @epoch: ',i,' @minibatch: ',bno,track_results[0:-1],'in ',t1-t0
-                    #Again write the evaluated summary to file
-                    test_writer.add_summary(track_results[-1],bno)
+                    if bno%30==0:
+                        #Again write the evaluated summary to file
+                        test_writer.add_summary(track_results[-1],bno)
+                    #Incrementing the minibathc count
                     bno+=1
                 except tf.errors.OutOfRangeError:
                     print 'Validation check completed!!\n'
                     break
 
             #Also save the checkpoints (after two every epoch)
-            if i%6==0:
+            if i%1==0:
                 #Saving the checkpoints
                 checkpoint_path=checkpoint_filename+'model.ckpt'
                 saver.save(sess,checkpoint_path,global_step=i)
