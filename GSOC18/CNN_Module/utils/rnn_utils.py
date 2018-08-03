@@ -4,7 +4,7 @@ from conv2d_utils import get_variable_on_cpu
 ############# Tensorflow Constants #################
 #this constant random seed is set for reproducability of the model
 graph_level_seed=1
-tf.random_seed(graph_level_seed)
+tf.set_random_seed(graph_level_seed)
 ############# Global COnstants #####################
 dtype=tf.float32
 
@@ -49,11 +49,11 @@ def _simple_vector_RNN_cell(prev_hidden_state,
             output_vector       : (optional) the output of the RNN cell
     '''
     #We wont start a new variable scope here as we will control that from
-    tf.name_scope(name):
+    with tf.name_scope(name):
         #Retreiving the shapes for parameter initialization
         shape_a=prev_hidden_state.get_shape().as_list()[1]
         #Retreiving the shape for current input transforamtion
-        shape_x=current_input_vector.get_shape().as_list()[]
+        shape_x=current_input_vector.get_shape().as_list()[1]
 
         #initializing the Waa parameters
         shape_Waa=(shape_a,shape_a)
@@ -65,6 +65,12 @@ def _simple_vector_RNN_cell(prev_hidden_state,
         #initializing the Wax parameters
         shape_Wax=(shape_x,shape_a)
         Wax=get_variable_on_cpu('Wax',shape_Wax,initializer,weight_decay)
+        #initializing the Wya and by parameter
+        shape_Wya=(shape_a,output_shape)
+        Wya=get_variable_on_cpu('Wya',shape_Wya,initializer,weight_decay)
+        #getting by parameters
+        shape_by=(1,output_shape)
+        by=get_variable_on_cpu('by',shape_by,bias_initializer)
 
         #Now making the transformation for next state
         Z_hidden=tf.matmul(prev_hidden_state,Waa,name='prev_mul')+\
@@ -75,12 +81,6 @@ def _simple_vector_RNN_cell(prev_hidden_state,
 
         #Now defining the output of the current cell
         if give_output==True:
-            #initializing the required parameter
-            shape_Wya=(shape_a,output_shape)
-            Wya=get_variable_on_cpu('Wya',shape_Wya,initializer,weight_decay)
-            shape_by=(1,output_shape)
-            by=get_variable_on_cpu('by',shape_by,bias_initializer)
-
             #Now transformaing the hidden vector to get the output
             Z_out=tf.matmul(A_hidden,Wya,name='output_mul')+by
 
@@ -235,7 +235,8 @@ def simple_vector_RNN_block(X_img,
         for i in range(num_detector_layers):
             #Running the convolution on each layers of the detector one by one
             #Slicing the input image for getting a detector layer
-            X=X_img[:,:,:,i]
+            X=tf.expand_dims(X_img[:,:,:,i],axis=-1,name='channel_dim')
+
             #Passing it through the convolution layer with shared parameters
             det_layer_activation=conv2d_function_handle(X,is_training)
 

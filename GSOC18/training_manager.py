@@ -2,10 +2,10 @@ import tensorflow as tf
 import numpy as np
 
 #Adding the default path to the data directory
-dataset_directory='GeometryUtilities-master/interpolation/image_data/'
+default_dataset_directory='GeometryUtilities-master/interpolation/image_data/'
 
 #importing the model to be used for training
-from models.model1_definition import model6 as model_function_handle
+from models.model_rnn_definition import model8 as model_function_handle
 from models.model1_definition import calculate_model_accuracy
 from models.model1_definition import calculate_total_loss
 
@@ -16,10 +16,10 @@ from inference_multi_gpu import infer
 from get_saliency_map import get_gradient
 
 ###################### RUN CONFIGURATION #####################
-run_number=41
+run_number=42
 #the regex pattern for the dataset filename
-train_filename_pattern='pu/train/*'
-test_filename_pattern='pu/valid/*'
+train_filename_pattern='nopu/valid/*'
+test_filename_pattern='nopu/valid/*'
 test_pu_filename_pattern='test_pu/*'
 viz_filename_pattern='test_pu/*'
 
@@ -33,7 +33,7 @@ if __name__=='__main__':
                         help='train/infer/hparam_search')
     parser.add_option('--dataset_directory',dest='dataset_directory',
                         help='directory with the dataset',
-                        default=dataset_directory)
+                        default=default_dataset_directory)
     (opt,args)=parser.parse_args()
 
     #Correcting the dataset directory if / is not specified at end
@@ -62,12 +62,12 @@ if __name__=='__main__':
     if opt.mode=='train':
         #Specifying the Hyperparameters
         init_learning_rate=0.001
-        decay_step=350
+        decay_step=1000
         decay_rate=0.95
         #Specifying the run configuration
-        mini_batch_size=20
+        mini_batch_size=2
         shuffle_buffer_size=mini_batch_size*2 #for shuffling the dataset files
-        epochs=31
+        epochs=10
         restore_epoch_number=None
 
         #Finally running the training

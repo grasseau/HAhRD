@@ -1,0 +1,205 @@
+import tensorflow as tf
+import sys
+import os
+
+#Imprting the RNN and CNN utiltites from CNN Module
+from CNN_Module.utils.conv2d_utils import *
+from CNN_Module.utils.rnn_utils import *
+
+def _conv2d_function_handle(X_layer,is_training):
+    '''
+    DESCRIPTION:
+        This will be a 2d convolution handle to be applied to all the
+        detector-layers separately to genarate a sequence of output which
+        will then be fed to the RNN block for inter-detector-layer
+        connection.
+
+        This convolution will generate a vector encoding of the detector
+        layer since current RNN module just support the vector sequence
+        handling. Later the CNN sequence handling will be added to have
+        the sequence flow between the image layers (which still contain
+        the spatial information).
+    USAGE:
+        INPUT:
+            X_layer     : the hit-"image" of a particular layer of detector
+            is_training : the training flag which will be used by
+                            batchnormalization and the dropoutlayers.
+        Output:
+            Zx          : the output encoding of this image to be collected
+                            and fed to RNN sequence.
+
+        One drawback to this vectored approach is that model wont be able to
+        share the low level features between the image layers and the
+        features which depend on the inter-layer connection like for particle
+        classification.
+    '''
+    #Model Hyperparameter
+    bn_decision=False
+    lambd=0.0
+    dropout_rate=0.0
+
+    #Starting the model definition
+    #First the convolution
+    A1=rectified_conv2d(X_layer,
+                        name='conv2d1',
+                        filter_shape=(3,3),
+                        output_channel=10,
+                        stride=(1,1),
+                        padding_type='VALID',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+    #Then maxpooling the output
+    A1Mp=max_pooling2d(A1,
+                        name='mpool1',
+                        filter_shape=(3,3),
+                        stride=(2,2),
+                        padding_type='VALID')
+
+    #Definign the second layer
+    #First the convolution
+    A2=rectified_conv2d(A1Mp,
+                        name='conv2d2',
+                        filter_shape=(3,3),
+                        output_channel=20,
+                        stride=(1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+    #Then maxpooling the output
+    A2Mp=max_pooling2d(A2,
+                        name='mpool2',
+                        filter_shape=(3,3),
+                        stride=(2,2),
+                        padding_type='VALID')
+
+    #Defining the third layer
+    #First the convolution
+    A3=rectified_conv2d(A2Mp,
+                        name='conv2d3',
+                        filter_shape=(3,3),
+                        output_channel=30,
+                        stride=(1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+    #Then maxpooling the output
+    A3Mp=max_pooling2d(A3,
+                        name='mpool3',
+                        filter_shape=(3,3),
+                        stride=(2,2),
+                        padding_type='VALID')
+
+    #Defining the fourth layer
+    #First the convolution
+    A4=rectified_conv2d(A3Mp,
+                        name='conv2d4',
+                        filter_shape=(3,3),
+                        output_channel=40,
+                        stride=(1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+    #Then maxpooling the output
+    A4Mp=max_pooling2d(A4,
+                        name='mpool4',
+                        filter_shape=(3,3),
+                        stride=(2,2),
+                        padding_type='VALID')
+
+    #Defining the fifth layer
+    #First the convolution
+    A5=rectified_conv2d(A4Mp,
+                        name='conv2d5',
+                        filter_shape=(3,3),
+                        output_channel=50,
+                        stride=(1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+    #Then maxpooling the output
+    A5Mp=max_pooling2d(A5,
+                        name='mpool5',
+                        filter_shape=(3,3),
+                        stride=(2,2),
+                        padding_type='VALID')
+
+    #Defining the sixth layer
+    #First defining the convolution
+    A6=rectified_conv2d(A5Mp,
+                        name='conv2d6',
+                        filter_shape=(3,3),
+                        output_channel=60,
+                        stride=(1,1),
+                        padding_type='SAME',
+                        is_training=is_training,
+                        dropout_rate=dropout_rate,
+                        apply_batchnorm=bn_decision,
+                        weight_decay=lambd,
+                        apply_relu=True)
+    #Then maxpooling the output
+    A6Mp=max_pooling2d(A6,
+                        name='mpool6',
+                        filter_shape=(3,3),
+                        stride=(2,2),
+                        padding_type='VALID')
+
+    #now it's time to flatten out all the activation
+    Z7=simple_fully_connected(A6Mp,
+                                name='fc1',
+                                output_dim=1000,
+                                is_training=is_training,
+                                dropout_rate=dropout_rate,
+                                apply_batchnorm=bn_decision,
+                                weight_decay=lambd,
+                                flatten_first=True,
+                                apply_relu=False)
+
+    return Z7
+
+def model8(X_img,is_training):
+    '''
+    DESCRIPTION:
+        In this model we will test the performance of the RNN module
+        on the detector-hits.
+    USAGE:
+        INPUT:
+            X_img       : the complete 3d hit-image of the detector
+            is_training : the training flag which will be used by the
+                            batchnorm and dropout layers
+        OUTPUT:
+            Z_out       : the final unnormalized output of the model
+    '''
+    #Rnn Hyperparameters
+    rnn_lambd=0.0
+
+    #Now invoking the RNN block to create create the RNN layers along
+    #with the required convolution using the CNN function handle
+    Z_list=simple_vector_RNN_block(X_img,
+                                    is_training,
+                                    _conv2d_function_handle,
+                                    num_of_sequence_layers=1,
+                                    hidden_state_dim_list=[1000],
+                                    output_dimension_list=[6],
+                                    output_type='vector',
+                                    output_norm_list=[None],
+                                    num_detector_layers=40,
+                                    weight_decay=rnn_lambd)
+
+    #Returning the unnormalized output of the whole model
+    Z_out=Z_list[0]
+    return Z_out
