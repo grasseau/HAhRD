@@ -5,7 +5,7 @@ import numpy as np
 default_dataset_directory='GeometryUtilities-master/interpolation/image_data/'
 
 #importing the model to be used for training
-from models.model_rnn_definition import model8 as model_function_handle
+from models.model_rnn_definition import model9 as model_function_handle
 from models.model1_definition import calculate_model_accuracy
 from models.model1_definition import calculate_total_loss
 
@@ -16,7 +16,7 @@ from inference_multi_gpu import infer
 from get_saliency_map import get_gradient
 
 ###################### RUN CONFIGURATION #####################
-run_number=42
+run_number=43
 #the regex pattern for the dataset filename
 train_filename_pattern='nopu/valid/*'
 test_filename_pattern='nopu/valid/*'
@@ -62,12 +62,12 @@ if __name__=='__main__':
     if opt.mode=='train':
         #Specifying the Hyperparameters
         init_learning_rate=0.001
-        decay_step=1000
+        decay_step=2500
         decay_rate=0.95
         #Specifying the run configuration
         mini_batch_size=2
         shuffle_buffer_size=mini_batch_size*2 #for shuffling the dataset files
-        epochs=10
+        epochs=31
         restore_epoch_number=None
 
         #Finally running the training
@@ -95,7 +95,7 @@ if __name__=='__main__':
     #specifying the inference configuration
     if opt.mode=='infer':
         mini_batch_size=20
-        checkpoint_epoch_number=30
+        checkpoint_epoch_number=31
 
         #Running the inference on the training data set
         infer(run_number,

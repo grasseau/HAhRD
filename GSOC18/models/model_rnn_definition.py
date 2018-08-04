@@ -203,3 +203,48 @@ def model8(X_img,is_training):
     #Returning the unnormalized output of the whole model
     Z_out=Z_list[0]
     return Z_out
+
+def model9(X_img,is_training):
+    '''
+    DESCRIPTION:
+        In this model we will try to test the reason for bad learning of
+        model8, and confirm if it is caused by the vanishing gradient
+        problem or not by haing more direct channel for the gradient
+        propagation in each detector-layer
+    USAGE:
+        as the above model
+    '''
+    #RNN Hyperparameter
+    rnn_lambd=0.0
+    bn_decision=False
+    fc_lambd=0.0
+    dropout_rate=0.0
+
+    #Invoking the RNN block which will implicitely create the conv2d
+    #activation first before adding the RNN layer to the vector-encoding
+    Z_list=simple_vector_RNN_block(X_img,
+                                    is_training,
+                                    _conv2d_function_handle,
+                                    num_of_sequence_layers=1,
+                                    hidden_state_dim_list=[1000],
+                                    output_dimension_list=[20],
+                                    output_type='sequence',
+                                    output_norm_list=['relu'],
+                                    num_detector_layers=40,
+                                    weight_decay=rnn_lambd)
+
+    #Now we will be aggregating the output of the sequence layer
+    Z_aggregated=tf.concat(Z_list,axis=1,name='seq_concat')
+
+    #Now we will be reducing the aggregation by FC layer
+    Z_out=simple_fully_connected(Z_aggregated,
+                                name='fc_aggregated',
+                                output_dim=6,
+                                is_training=is_training,
+                                dropout_rate=dropout_rate,
+                                apply_batchnorm=bn_decision,
+                                weight_decay=fc_lambd,
+                                apply_relu=False)
+
+    #Now finally returning this unnormalized vector as output of model
+    return Z_out
