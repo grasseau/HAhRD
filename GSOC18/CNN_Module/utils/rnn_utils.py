@@ -177,6 +177,65 @@ def _simple_vector_RNN_layer(input_sequence,
         #The output sequence from this RNN "layer" is ready to given out
         return output_sequence
 
+
+def _tfwhile_cond(X_img,iter_i,iter_end,tensor_array):
+    '''
+    DESCRIPTION:
+        This callable will be used in the simple_vector_RNN_block to make the
+        CNN graph using the tf.while_loop. Though this tf.while loop makes the
+        unrolled representation of the computation of the graph it gives two
+        powerfull control to us to control the speed and memory
+        1.parallel_iteration :for parallely executing the branches of the loop
+        2.swap_memory        : for swapping the foreqard propagation tensor
+                                from CPU to GPU for time being before being used
+                                in the backpropagation.
+    USAGE:
+        Dont use it directly. it will be called with the arguments of the
+        tf.while_loop loop_vars.
+    '''
+    return tf.less(iter_i,iter_end)
+
+def _tfwhile_body(X_img,iter_i,iter_end,tensor_array):
+    '''
+    DESCRIPTION:
+        Again this function will be called by the tf.while loop to perform the
+        2D convolution on the layers of the detector and keep concatenating the
+        output vector-encoding of the CNN operation on each layer which will
+        be later used by the RNN Module.
+
+        (maybe we have to use the parallel_iteration=1 to not cause the randomization
+        in the concatenation. But since all the current layer's encoding concat
+        depends on the all the previous concat ebing done, then the parallel_iteration
+        should not cause the problem)
+    USAGE:
+        Don't use it directly it will be called by the tf.while
+    '''
+
+    #Running the convolution on each layers of the detector one by one
+    #Slicing the input image for getting a detector layer
+    X=tf.expand_dims(X_img[:,:,:,iter_i],axis=-1,name='channel_dim')
+
+    #Passing it through the convolution layer with shared parameters
+    det_layer_activation=conv2d_function_handle(X,is_training)
+    #Expanding the output activation to be ready for the result concatenation
+    det_layer_activation=tf.expand_dims(det_layer_activation,axis=2)
+
+    #adding the output encoding to the tensorarray
+    tensor_array=tensor_array.write(iter_i,det_layer_activation)
+
+    #Updating the iter_i
+    iter_i=iter_i+1
+
+    #returning all the loop_vars
+    return [X_img,iter_i,iter_end,tensor_array]
+
+
+    #The shared variable scope is being started outside the tf.while loop
+    # #reusing the variable/parameters of CNN for other detecotr layers
+    # tf.get_variable_scope().reuse_variables()
+
+
+
 def simple_vector_RNN_block(X_img,
                             is_training,
                             conv2d_function_handle,
@@ -231,24 +290,29 @@ def simple_vector_RNN_block(X_img,
 
     #Running the convolution on the same varaible scope for each detector layer
     conv_output_list=[]
-    with tf.variable_scope('shared_conv_layers'):
-        for i in range(num_detector_layers):
-            #Running the convolution on each layers of the detector one by one
-            #Slicing the input image for getting a detector layer
-            X=tf.expand_dims(X_img[:,:,:,i],axis=-1,name='channel_dim')
+    with tf.variable_scope('shared_conv_layers',reuse=True):
+        #initializing the iter varaible
+        iter_i=tf.constant(0,dtype=tf.int32,name='iter_i')
+        iter_end=tf.constant(num_detector_layers,dtype=tf.int32,name='iter_end')
 
-            #Passing it through the convolution layer with shared parameters
-            det_layer_activation=conv2d_function_handle(X,is_training)
+        #Initializing the TensorArray for holding all the layer activation
+        tensor_array=tf.TensorArray(dtype=dtype,
+                                    size=num_detector_layers,
+                                    clear_after_read=True,#no read many
+                                    infer_shape==True)
 
-            #Appending the output of current layers convolution to the list
-            conv_output_list.append(det_layer_activation)
+        #Now running the tf.while loop and the final tensor array as the output
+        _,_,_,tensor_array=tf.while_loop(_tfwhile_cond,
+                                        _tfwhile_body,
+                                        loop_vars=[X_img,iter_i,iter_end,tensor_array],
+                                        #none of them will be shape invaraint,
+                                        swap_memory=True,
+                                        parallel_iterations=1)
 
-            #reusing the variable/parameters of CNN for other detecotr layers
-            tf.get_variable_scope().reuse_variables()
 
     #Now we are ready for the implementation of the sequence(RNN/LSTM) cells
-    #The input to this sequenced layer
-    input_sequence=conv_output_list
+    #Retreiving the sequence tensor (vector-encoding) from the tensor array
+    input_sequence=[tensor_array.read(i) for i in range(num_detector_layers)]
 
     #All the necessary argument assertion
     assert output_type=='sequence' or output_type=='vector','Give correct argument'
