@@ -6,7 +6,77 @@ import os
 from CNN_Module.utils.conv2d_utils import *
 from CNN_Module.utils.rnn_utils import *
 
-def _conv2d_function_handle(X_layer,is_training):
+def calculate_total_loss(Z,Y,scope=None):
+    '''
+    DESCRIPTION:
+        This function combines all the losses i.e the model loss
+        + L2Regularization loss
+
+        Also, it will filter the L2 loss based on the namescope
+        from all_losses collection to give specific loss for
+        each GPU.
+        (Though the L2Loss will be same for both GPU, but both
+        GPU need to calculate their complete loss for computing
+        gradient, so its better to do it from their local copy
+        of variables)
+    USAGE:
+        INPUT:
+            Z       :the final layer's unnormalized output of model
+            Y       :the actual target label to train model on
+            scope   :the namescope of the current tower to compute
+                        the tower specific loss from the local copy
+                        of the parameter present on each tower.
+        OUTPUT:
+            total_cost: the total cost of the model, which will be
+                        used to calculate the gradient
+    '''
+    with tf.name_scope('loss_calculation'):
+        #A list to combine all losses
+        all_loss_list=[]
+
+        #Calculating the L2_loss(scalar)
+        # reg_loss_list=tf.get_collection('all_losses',scope=scope)
+        # l2_reg_loss=0.0
+        # if not len(reg_loss_list)==0:
+        #     l2_reg_loss=tf.add_n(reg_loss_list,name='l2_reg_loss')
+        #     tf.summary.scalar('l2_reg_loss',l2_reg_loss)
+        # all_loss_list.append(l2_reg_loss)
+
+        #Calculating the model loss
+        #Calculating the regression loss(scalar)
+        regression_len=4
+        regression_output=Z[:,0:regression_len]#0,1,2,3
+        regression_label=Y[:,0:regression_len]#TRUTH
+
+        #mean_squared_error Regrassion Loss
+        regression_loss=tf.losses.mean_squared_error(regression_output,
+                                    regression_label)
+
+        #Defining new loss based on the Mean Percentage Error
+        # absolute_diff=tf.losses.absolute_difference(regression_output,
+        #                                             regression_label,
+        #                                 reduction=tf.losses.Reduction.NONE)
+        # regression_loss=tf.reduce_mean(tf.abs(tf.divide(
+        #                         absolute_diff,regression_label+1e-10)))*100
+
+        tf.summary.scalar('regression_loss',regression_loss)
+        all_loss_list.append(regression_loss)
+
+        #Calculating the x-entropy loss(scalar)
+        class_output=Z[:,regression_len:]#4,....
+        class_label=Y[:,regression_len:]#TRUTH
+        categorical_loss=tf.losses.softmax_cross_entropy(class_label,
+                                                        class_output)
+        tf.summary.scalar('categorical_loss',categorical_loss)
+        all_loss_list.append(categorical_loss)
+
+        #calculating the total loss
+        total_loss=tf.add_n(all_loss_list,name='merge_loss')
+        tf.summary.scalar('total_loss',total_loss)
+
+    return total_loss
+
+def _conv2d_function_handle(X_img,is_training,iter_i,iter_end,tensor_array):
     '''
     DESCRIPTION:
         This will be a 2d convolution handle to be applied to all the
@@ -37,6 +107,10 @@ def _conv2d_function_handle(X_layer,is_training):
     bn_decision=False
     lambd=0.0
     dropout_rate=0.0
+
+    #Running the convolution on each layers of the detector one by one
+    #Slicing the input image for getting a detector layer
+    X_layer=tf.expand_dims(X_img[:,:,:,iter_i],axis=-1,name='channel_dim')
 
     #Starting the model definition
     #First the convolution
@@ -169,7 +243,20 @@ def _conv2d_function_handle(X_layer,is_training):
                                 flatten_first=True,
                                 apply_relu=False)
 
-    return Z7
+    #Setting the final activation to the layer output
+    det_layer_activation=Z7
+
+    #adding the output encoding to the tensorarray
+    tensor_array=tensor_array.write(iter_i,det_layer_activation)
+
+    #Updating the iter_i
+    iter_i=iter_i+1
+
+    #Setting the variable scope to True
+    tf.get_variable_scope().reuse_variables()
+
+    #returning all the loop_vars
+    return [X_img,is_training,iter_i,iter_end,tensor_array]
 
 def model8(X_img,is_training):
     '''

@@ -178,7 +178,7 @@ def _simple_vector_RNN_layer(input_sequence,
         return output_sequence
 
 
-def _tfwhile_cond(X_img,iter_i,iter_end,tensor_array):
+def _tfwhile_cond(X_img,is_training,iter_i,iter_end,tensor_array):
     '''
     DESCRIPTION:
         This callable will be used in the simple_vector_RNN_block to make the
@@ -195,7 +195,7 @@ def _tfwhile_cond(X_img,iter_i,iter_end,tensor_array):
     '''
     return tf.less(iter_i,iter_end)
 
-def _tfwhile_body(X_img,iter_i,iter_end,tensor_array):
+def _tfwhile_body(X_img,is_training,iter_i,iter_end,tensor_array):
     '''
     DESCRIPTION:
         Again this function will be called by the tf.while loop to perform the
@@ -290,7 +290,7 @@ def simple_vector_RNN_block(X_img,
 
     #Running the convolution on the same varaible scope for each detector layer
     conv_output_list=[]
-    with tf.variable_scope('shared_conv_layers',reuse=True):
+    with tf.variable_scope('shared_conv_layers'):
         #initializing the iter varaible
         iter_i=tf.constant(0,dtype=tf.int32,name='iter_i')
         iter_end=tf.constant(num_detector_layers,dtype=tf.int32,name='iter_end')
@@ -299,20 +299,22 @@ def simple_vector_RNN_block(X_img,
         tensor_array=tf.TensorArray(dtype=dtype,
                                     size=num_detector_layers,
                                     clear_after_read=True,#no read many
-                                    infer_shape==True)
+                                    infer_shape=True)
 
         #Now running the tf.while loop and the final tensor array as the output
-        _,_,_,tensor_array=tf.while_loop(_tfwhile_cond,
-                                        _tfwhile_body,
-                                        loop_vars=[X_img,iter_i,iter_end,tensor_array],
+        _,_,_,_,tensor_array=tf.while_loop(_tfwhile_cond,
+                                        #_tfwhile_body,
+                                        conv2d_function_handle,
+                                        loop_vars=[X_img,is_training,iter_i,iter_end,tensor_array],
                                         #none of them will be shape invaraint,
                                         swap_memory=True,
-                                        parallel_iterations=1)
+                                        parallel_iterations=8)
 
 
     #Now we are ready for the implementation of the sequence(RNN/LSTM) cells
     #Retreiving the sequence tensor (vector-encoding) from the tensor array
-    input_sequence=[tensor_array.read(i) for i in range(num_detector_layers)]
+    cnn_output_vectors=tensor_array.stack()
+    input_sequence=[cnn_output_vectors[i,:,:] for i in range(num_detector_layers)]
 
     #All the necessary argument assertion
     assert output_type=='sequence' or output_type=='vector','Give correct argument'

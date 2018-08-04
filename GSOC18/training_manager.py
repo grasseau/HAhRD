@@ -7,7 +7,7 @@ default_dataset_directory='GeometryUtilities-master/interpolation/image_data/'
 #importing the model to be used for training
 from models.model_rnn_definition import model9 as model_function_handle
 from models.model1_definition import calculate_model_accuracy
-from models.model1_definition import calculate_total_loss
+from models.model_rnn_definition import calculate_total_loss
 
 #import the trainer and inference functions
 from train_multi_gpu import train
@@ -16,7 +16,7 @@ from inference_multi_gpu import infer
 from get_saliency_map import get_gradient
 
 ###################### RUN CONFIGURATION #####################
-run_number=43
+run_number=44
 #the regex pattern for the dataset filename
 train_filename_pattern='nopu/valid/*'
 test_filename_pattern='nopu/valid/*'
@@ -65,7 +65,7 @@ if __name__=='__main__':
         decay_step=2500
         decay_rate=0.95
         #Specifying the run configuration
-        mini_batch_size=2
+        mini_batch_size=20
         shuffle_buffer_size=mini_batch_size*2 #for shuffling the dataset files
         epochs=31
         restore_epoch_number=None
