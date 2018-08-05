@@ -1,14 +1,14 @@
 import tensorflow as tf
 from conv2d_utils import get_variable_on_cpu
 
-############# Tensorflow Constants #################
+################### Tensorflow Constants #################
 #this constant random seed is set for reproducability of the model
 graph_level_seed=1
 tf.set_random_seed(graph_level_seed)
-############# Global COnstants #####################
+################### Global COnstants #####################
 dtype=tf.float32
 
-############# RNN Layer Definition #################
+################### RNN Layer Definition #################
 def _simple_vector_RNN_cell(prev_hidden_state,
                             current_input_vector,
                             give_output,
@@ -36,10 +36,6 @@ def _simple_vector_RNN_cell(prev_hidden_state,
                                     for tensorboard.
             output_norm         : which norm we want to apply to the output of RNN
                                     [relu/tanh/None] supported now
-            dropout_rate        : to specify the dropout rate to be applied
-                                    to the new hidden state
-            apply_batchnorm     : whether we want to appply batchnorm to the layer
-                                    or not.
             weight_decay        : the hyperparameter to control the amount of
                                     L2 norm to be applied to the weight of the cell.
             initializer         : the initializer to initialize the weights of
@@ -177,7 +173,225 @@ def _simple_vector_RNN_layer(input_sequence,
         #The output sequence from this RNN "layer" is ready to given out
         return output_sequence
 
+################### LSTM Layer Definition ##################
+def _simple_vector_LSTM_cell(prev_memory_state,
+                            prev_hidden_state,
+                            current_input_vector,
+                            give_output,
+                            output_shape,
+                            name,
+                            output_norm,
+                            weight_decay,
+                            initializer):
+    '''
+    DESCRIPTION:
+        This function will describe an ideal LSTM cell which is
+        analogous to our previous development heirarchy
+        cell->layer->block.
 
+        The input and output format of a cell be customized according
+        to the typical LSTM block with two ingoing connection
+        1.prev_memory_state
+        2.prev_hidden_state
+        and it will output the corresponding two state as output
+        with an optional output from the cell to next layer.
+        (if we are making this cell to do sequence-to-sequence connection)
+    USAGE:
+        INPUT:
+            prev_memory_state   : this will be the memory state of the previous
+                                    LSTM cell.
+            prev_hidden_state   : this will be the hidden state of the previous
+                                    LSTM cell.
+            current_input_vector: this will be the input to the LSTM cell at the
+                                    current time.
+            give_output         : a boolean to specify whether we want to give
+                                    output from the current LSTM cell.
+            output_shape        : (if the current LSTM cell is giving output)then
+                                    what is the shape/size of output vector.
+            name                : the name to be given to the current LSTM cell
+                                    for simpler visualization in the tensorboard.
+                                    This will just open a name scope since we will
+                                    be sharing the weight among all the LSTM cells
+                                    in the layer.
+            output_norm         : the normalization to be applied to the (optional)
+                                    output of this layer.
+            weight_decay        : the scalar to be multiplied to the L2-regularization
+                                    cost to control the weight decay.
+            initializer         : the initiailizer to be used to initialize the
+                                    parameters/weights of this layer.
+    '''
+    #Starting the cell in name scope to encapsulate the cell visualization
+    with tf.name_scope(name):
+        #Extracting the shapes to be used for making weights/parameter
+        na=prev_memory_state.get_shape().as_list()[1]
+        nx=current_input_vector.get_shape().as_list()[1]
+        #Initializing the handle for bias initializer
+        bias_initializer=tf.zeros_initializer()
+
+
+        #Making/Retreiving the required parameters
+        #Candidate Parameters
+        shape_Wc=(na+nx,na)
+        shape_bc=(1,na)
+        Wc=get_variable_on_cpu('Wc',shape_Wc,initializer,weight_decay)
+        bc=get_variable_on_cpu('bc',shape_bc,bias_initializer)
+        #Update Gate Parameters
+        shape_Wu=(na+nx,na)
+        shape_bu=(1,na)
+        Wu=get_variable_on_cpu('Wu',shape_Wu,initializer,weight_decay)
+        bu=get_variable_on_cpu('bu',shape_bu,bias_initializer)
+        #Forget Gate Parameter
+        shape_Wf=(na+nx,na)
+        shape_bf=(1,na)
+        Wf=get_variable_on_cpu('Wf',shape_Wf,initializer,weight_decay)
+        bf=get_variable_on_cpu('bf',shape_bf,bias_initializer)
+        #Memory-Output Gate Parameters
+        shape_Wo=(na+nx,na)
+        shape_bo=(1,na)
+        Wo=get_variable_on_cpu('Wo',shape_Wo,initiailizer,weight_decay)
+        bo=get_variable_on_cpu('bo',shape_bo,bias_initializer)
+        #Cell-Output Parameters
+        shape_Wy=(na,output_shape)
+        shape_by=(1,output_shape)
+        Wy=get_variable_on_cpu('Wy',shape_Wy,initializer,weight_decay)
+        by=get_variable_on_cpu('by',shape_by,bias_initializer)
+
+        #Now performig the necessary gate operation
+        #Concatenating the prev_hidden_state and input along axis=1
+        IH_concat_vec=tf.concat([prev_hidden_state,current_input_vector],
+                                axis=1,
+                                name='Inp/Hidd_concat')
+
+        #Calculating the next memory candidate
+        with tf.name_scope('new_memory'):
+            with tf.name_scope('candidate_calc'):
+                Zc_delta=tf.matmul(IH_concat_vec,Wc)+bc
+                c_delta=tf.nn.tanh(Zc_delta)
+            #Calculation of the update gate
+            with tf.name_scope('update_gate'):
+                Z_delta_u=tf.matmul(IH_concat_vec,Wu)+bu
+                delta_u=tf.nn.sigmoid(Z_delta_u)
+            #Calculation of the forget gate
+            with tf.name_scope('forget_gate'):
+                Z_delta_f=tf.matmul(IH_concat_vec,Wf)+bf
+                delta_f=tf.nn.sigmoid(Z_delta_f)
+            #Finally calculation of the candidate
+            with tf.name_scope('memory_update'):
+                c_t=delta_f*prev_memory_state+delta_u*c_delta
+
+        #Now calculation of the new hidden state
+        with tf.name_scope('new_hidden_state'):
+            with tf.name_scope('output_gate'):
+                Z_delta_o=tf.matmul(IH_concat_vec,Wo)+bo
+                delta_o=tf.nn.sigmoid(Z_delta_o)
+            with tf.name_scope('hidden_state_update'):
+                a_t=tf.nn.tanh(c_t)*delta_o
+
+        #Now finally its time for optional output
+        if give_output==True:
+            with tf.name_scope('cell_output'):
+                Z_yt=tf.matmul(a_t,Wy)+by
+                if output_norm=='relu':
+                    Z_yt=tf.nn.relu(Z_yt)
+                elif outptu_norm=='tanh':
+                    Z_yt=tf.nn.tanh(Z_yt)
+
+            return [c_t,a_t,Z_yt]
+        else:
+            return [c_t,a_t]
+
+def _simple_vector_LSTM_layer(input_sequence,
+                                name,
+                                hidden_state_length,
+                                num_output_source,
+                                output_dimension,
+                                output_norm,
+                                weight_decay,
+                                initializer):
+    '''
+    DESCRIPTION:
+        This function will be the second building block in the hierarchy
+        of the LSTM Module. This will encapsulate the whole layer
+        of the LSTM cells as we did for the RNN cells.
+        The enetry and exit points for this layer will be:
+        1.input_sequence
+        2.output_sequence (or just a single output)
+
+        Also, we will taking the length of the memory vector to be
+        equal to the hidden state vector of LSTM cell, which is a common
+        desgn pattern.
+
+    USAGE:
+        INPUT:
+            input_sequence      : this will give the LSTM layer the sequence of
+                                    of inputs from the previous layer or CNN layer
+            name                : this name will be used to invoke a unique variable
+                                    scope for sharing the weights among the LSTM cells
+            hidden_state_length : = memory_vector_length
+            num_output_source   : whether we want 'all' the cells to give output
+                                    or just 'one' last cell of the layer.
+                                    ['all' / 'one']
+            output_dimension    : the length of the output vector form the cells
+            output_norm         : which of the normalizaiton ot be applied to
+                                    all the output of the layer's cell
+            weight_decay        : the weight decay parameter to control the
+                                    L2-regularization of the weights
+            initializer         : the initializer to be used by the LSTM cells
+                                    to initialize their parameters/weights
+        OUTPUT:
+            output_sequence     : the sequence(or just one) of output of the
+                                    current cell.
+    '''
+    #Starting the variable scope to share the parameters among the LSTM cells
+    with tf.variable_scope(name):
+        #Initializing the initial memory and hidden states of the layer
+        state_shape=(1,hidden_state_length)
+        prev_memory_state=tf.constant(0.0,shape=state_shape,dtype=dtype)
+        prev_hidden_state=tf.constant(0.0,shape=state_shape,dtype=dtype)
+
+        #Initilaizing the list to collect the output_sequence
+        output_sequence=[]
+
+        #Asserting the corect input arguments
+        assert num_output_source=='all' or num_output_source=='one',\
+                        'Please give the correct number of output source'
+
+        #setting the give_output parameters for all the cells of layer
+        give_output=False
+        if num_output_source=='all':
+            give_output=True
+
+        #Starting to create the LSTM sequence
+        for seq_i in len(input_sequence):
+            #Setting up the give_output for the compulsary output
+            if seq_i==len(input_sequence)-1:
+                give_output=True
+
+            cell_output=_simple_vector_LSTM_cell(prev_memory_state,
+                                            prev_hidden_state,
+                                            input_sequence[seq_i],
+                                            give_output=give_output,
+                                            output_shape=output_dimension,
+                                            name='LSTM{}'.format(seq_i),
+                                            output_norm=output_norm,
+                                            weight_decay=weight_decay,
+                                            initializer=initializer)
+
+            #Now setting up the memory and hidden state for next cell in seq
+            prev_memory_state=cell_output[0]
+            prev_hidden_state=cell_output[1]
+            #Now appending the output of the cell if possible
+            if give_output==True:
+                output_sequence.append(cell_output[2])
+
+            #Specifying the layer to reuse the parameter in each cell
+            tf.get_variable_scope().reuse_variables()
+
+        #Finally returning the sequence for the next layer or output
+        return output_sequence
+
+
+################# RNN BLOCK Definition ####################
 def _tfwhile_cond(X_img,is_training,iter_i,iter_end,reg_loss,tensor_array):
     '''
     DESCRIPTION:
