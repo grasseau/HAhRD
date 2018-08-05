@@ -295,7 +295,7 @@ def model8(X_img,is_training):
     Z_list=simple_vector_RNN_block(X_img,
                                     is_training,
                                     _conv2d_function_handle,
-                                    sequence_model_type='LSTM'
+                                    sequence_model_type='LSTM',
                                     num_of_sequence_layers=1,
                                     hidden_state_dim_list=[1000],
                                     output_dimension_list=[6],
@@ -329,6 +329,7 @@ def model9(X_img,is_training):
     Z_list=simple_vector_RNN_block(X_img,
                                     is_training,
                                     _conv2d_function_handle,
+                                    sequence_model_type='LSTM',
                                     num_of_sequence_layers=1,
                                     hidden_state_dim_list=[1000],
                                     output_dimension_list=[20],

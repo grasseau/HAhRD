@@ -248,7 +248,7 @@ def _simple_vector_LSTM_cell(prev_memory_state,
         #Memory-Output Gate Parameters
         shape_Wo=(na+nx,na)
         shape_bo=(1,na)
-        Wo=get_variable_on_cpu('Wo',shape_Wo,initiailizer,weight_decay)
+        Wo=get_variable_on_cpu('Wo',shape_Wo,initializer,weight_decay)
         bo=get_variable_on_cpu('bo',shape_bo,bias_initializer)
         #Cell-Output Parameters
         shape_Wy=(na,output_shape)
@@ -293,7 +293,7 @@ def _simple_vector_LSTM_cell(prev_memory_state,
                 Z_yt=tf.matmul(a_t,Wy)+by
                 if output_norm=='relu':
                     Z_yt=tf.nn.relu(Z_yt)
-                elif outptu_norm=='tanh':
+                elif output_norm=='tanh':
                     Z_yt=tf.nn.tanh(Z_yt)
 
             return [c_t,a_t,Z_yt]
@@ -345,7 +345,8 @@ def _simple_vector_LSTM_layer(input_sequence,
     #Starting the variable scope to share the parameters among the LSTM cells
     with tf.variable_scope(name):
         #Initializing the initial memory and hidden states of the layer
-        state_shape=(1,hidden_state_length)
+        batch_size=input_sequence[0].get_shape().as_list()[0]
+        state_shape=(batch_size,hidden_state_length)
         prev_memory_state=tf.constant(0.0,shape=state_shape,dtype=dtype)
         prev_hidden_state=tf.constant(0.0,shape=state_shape,dtype=dtype)
 
@@ -362,7 +363,7 @@ def _simple_vector_LSTM_layer(input_sequence,
             give_output=True
 
         #Starting to create the LSTM sequence
-        for seq_i in len(input_sequence):
+        for seq_i in range(len(input_sequence)):
             #Setting up the give_output for the compulsary output
             if seq_i==len(input_sequence)-1:
                 give_output=True
