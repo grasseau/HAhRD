@@ -65,7 +65,7 @@ if __name__=='__main__':
         decay_step=2500
         decay_rate=0.95
         #Specifying the run configuration
-        mini_batch_size=20
+        mini_batch_size=10
         shuffle_buffer_size=mini_batch_size*2 #for shuffling the dataset files
         epochs=31
         restore_epoch_number=None

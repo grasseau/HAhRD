@@ -308,7 +308,7 @@ def simple_vector_RNN_block(X_img,
                                         loop_vars=[X_img,is_training,iter_i,iter_end,tensor_array],
                                         #none of them will be shape invaraint,
                                         swap_memory=True,
-                                        parallel_iterations=8)
+                                        parallel_iterations=16)
 
 
     #Now we are ready for the implementation of the sequence(RNN/LSTM) cells

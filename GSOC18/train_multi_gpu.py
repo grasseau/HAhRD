@@ -403,7 +403,7 @@ def train(run_number,
                             print "Resuming the Learning without changes"
 
                     #Running the train op and optionally the tracer bullet
-                    if bno%3==0:
+                    if bno%30==0:
                         #Adding the runtime statisctics (memory and execution time)
                         run_options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                         run_metadata=tf.RunMetadata()
@@ -420,7 +420,7 @@ def train(run_number,
                         t1=datetime.datetime.now()
 
                         #Writing the timeline tracer every 300th minibatch
-                        if bno%3==0:
+                        if bno%30==0:
                             #Adding the run matedata to the tensorboard summary writer
                             train_writer.add_run_metadata(run_metadata,'step%dbatch%d'%(i,bno))
 
