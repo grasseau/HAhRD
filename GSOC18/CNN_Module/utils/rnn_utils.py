@@ -302,7 +302,7 @@ def simple_vector_RNN_block(X_img,
                                     infer_shape=True)
 
         #Initializing the constant to hold the regularization loss
-        conv_reg_loss=tf.constant(0,dtype=dtype,name='reg_loss_value')
+        conv_reg_loss=tf.constant(0.0,dtype=dtype,name='reg_loss_value')
 
         #Now running the tf.while loop and the final tensor array as the output
         _,_,_,_,conv_reg_loss,tensor_array=tf.while_loop(_tfwhile_cond,

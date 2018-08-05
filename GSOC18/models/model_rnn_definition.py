@@ -105,7 +105,7 @@ def _conv2d_function_handle(X_img,is_training,iter_i,iter_end,reg_loss,tensor_ar
     '''
     #Model Hyperparameter
     bn_decision=False
-    lambd=0.0
+    lambd=0.00
     dropout_rate=0.0
 
     #Running the convolution on each layers of the detector one by one
@@ -258,7 +258,9 @@ def _conv2d_function_handle(X_img,is_training,iter_i,iter_end,reg_loss,tensor_ar
     #Calculating the regularization loss of the conv2d layer for passing it
     #out of the tf.while_loop (though doing it each time it should remain same)
     #Retreiving the collection in current scope and geting the collection
-    reg_loss_list=tf.get_collection('all_losses',scope=tf.get_variable_scope().name)
+    reg_loss_list=tf.get_collection('all_losses',
+                            scope=tf.contrib.framework.get_name_scope())
+    #print tf.contrib.framework.get_name_scope()
     l2_reg_loss_conv=0.0
     if not len(reg_loss_list)==0:
         l2_reg_loss_conv=tf.add_n(reg_loss_list,name='l2_reg_loss_conv')
