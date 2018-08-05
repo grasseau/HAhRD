@@ -178,7 +178,7 @@ def _simple_vector_RNN_layer(input_sequence,
         return output_sequence
 
 
-def _tfwhile_cond(X_img,is_training,iter_i,iter_end,tensor_array):
+def _tfwhile_cond(X_img,is_training,iter_i,iter_end,reg_loss,tensor_array):
     '''
     DESCRIPTION:
         This callable will be used in the simple_vector_RNN_block to make the
@@ -301,14 +301,22 @@ def simple_vector_RNN_block(X_img,
                                     clear_after_read=True,#no read many
                                     infer_shape=True)
 
+        #Initializing the constant to hold the regularization loss
+        conv_reg_loss=tf.constant(0,dtype=dtype,name='reg_loss_value')
+
         #Now running the tf.while loop and the final tensor array as the output
-        _,_,_,_,tensor_array=tf.while_loop(_tfwhile_cond,
+        _,_,_,_,conv_reg_loss,tensor_array=tf.while_loop(_tfwhile_cond,
                                         #_tfwhile_body,
                                         conv2d_function_handle,
-                                        loop_vars=[X_img,is_training,iter_i,iter_end,tensor_array],
+                                        loop_vars=[X_img,is_training,iter_i,iter_end,\
+                                                conv_reg_loss,tensor_array],
                                         #none of them will be shape invaraint,
                                         swap_memory=True,
                                         parallel_iterations=16)
+
+        #Now adding this regularization of this conv_layer to one collection
+        tf.add_to_collection('reg_losses',conv_reg_loss)
+        tf.summary.scalar('l2_reg_loss_conv',conv_reg_loss)
 
 
     #Now we are ready for the implementation of the sequence(RNN/LSTM) cells
@@ -320,7 +328,7 @@ def simple_vector_RNN_block(X_img,
     assert output_type=='sequence' or output_type=='vector','Give correct argument'
 
     #Writing in a separate name scope since varaible scope are taken care inside
-    with tf.name_scope('seq_RNN_layers'):
+    with tf.name_scope('seq_RNN_layers') as rnn_block_scope:
         #Stacking up the RNN seq-layer on top on one another.
         for i in range(num_of_sequence_layers):
             #Deciding the unique layer name for unique varaible scope for each layer
@@ -344,6 +352,16 @@ def simple_vector_RNN_block(X_img,
 
         #Finally returning the output sequence be it a list of one vector or all
         output_sequence=input_sequence
+
+        #Adding the regularization loss of this scope to the
+        reg_loss_list_rnn=tf.get_collection('all_losses',scope=rnn_block_scope)
+        l2_reg_loss_rnn=0.0
+        if not len(reg_loss_list_rnn)==0:
+            l2_reg_loss_rnn=tf.add_n(reg_loss_list_rnn,name='l2_reg_loss_rnn')
+        #Adding this regularization loss to the reg_losses collection
+        tf.add_to_collection('reg_losses',l2_reg_loss_rnn)
+        tf.summary.scalar('l2_reg_loss_rnn',l2_reg_loss_rnn)
+
 
         #This output could be used for furthur fully connected layer/
         #aggregateion (if its a sequence) or input to other sequence layer

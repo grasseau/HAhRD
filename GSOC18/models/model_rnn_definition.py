@@ -35,12 +35,12 @@ def calculate_total_loss(Z,Y,scope=None):
         all_loss_list=[]
 
         #Calculating the L2_loss(scalar)
-        # reg_loss_list=tf.get_collection('all_losses',scope=scope)
-        # l2_reg_loss=0.0
-        # if not len(reg_loss_list)==0:
-        #     l2_reg_loss=tf.add_n(reg_loss_list,name='l2_reg_loss')
-        #     tf.summary.scalar('l2_reg_loss',l2_reg_loss)
-        # all_loss_list.append(l2_reg_loss)
+        reg_loss_list=tf.get_collection('reg_losses',scope=scope)
+        l2_reg_loss=0.0
+        if not len(reg_loss_list)==0:
+            l2_reg_loss=tf.add_n(reg_loss_list,name='l2_reg_loss')
+            tf.summary.scalar('l2_reg_loss',l2_reg_loss)
+        all_loss_list.append(l2_reg_loss)
 
         #Calculating the model loss
         #Calculating the regression loss(scalar)
@@ -76,7 +76,7 @@ def calculate_total_loss(Z,Y,scope=None):
 
     return total_loss
 
-def _conv2d_function_handle(X_img,is_training,iter_i,iter_end,tensor_array):
+def _conv2d_function_handle(X_img,is_training,iter_i,iter_end,reg_loss,tensor_array):
     '''
     DESCRIPTION:
         This will be a 2d convolution handle to be applied to all the
@@ -246,17 +246,31 @@ def _conv2d_function_handle(X_img,is_training,iter_i,iter_end,tensor_array):
     #Setting the final activation to the layer output
     det_layer_activation=Z7
 
+
+    ##################### CUSTOM OPS (Directly copy them)#############
+    ##################### No need to change with models ###############
     #adding the output encoding to the tensorarray
     tensor_array=tensor_array.write(iter_i,det_layer_activation)
 
     #Updating the iter_i
     iter_i=iter_i+1
 
+    #Calculating the regularization loss of the conv2d layer for passing it
+    #out of the tf.while_loop (though doing it each time it should remain same)
+    #Retreiving the collection in current scope and geting the collection
+    reg_loss_list=tf.get_collection('all_losses',scope=tf.get_variable_scope().name)
+    l2_reg_loss_conv=0.0
+    if not len(reg_loss_list)==0:
+        l2_reg_loss_conv=tf.add_n(reg_loss_list,name='l2_reg_loss_conv')
+        #tf.summary.scalar('l2_reg_loss_conv',l2_reg_loss)
+    #Assigning this l2Loss of current conv layer to the reg_loss loop_var
+    reg_loss=l2_reg_loss_conv
+
     #Setting the variable scope to True
     tf.get_variable_scope().reuse_variables()
 
     #returning all the loop_vars
-    return [X_img,is_training,iter_i,iter_end,tensor_array]
+    return [X_img,is_training,iter_i,iter_end,reg_loss,tensor_array]
 
 def model8(X_img,is_training):
     '''
