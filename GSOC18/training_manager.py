@@ -16,10 +16,10 @@ from inference_multi_gpu import infer
 from get_saliency_map import get_gradient
 
 ###################### RUN CONFIGURATION #####################
-run_number=44
+run_number=45
 #the regex pattern for the dataset filename
-train_filename_pattern='nopu/valid/*'
-test_filename_pattern='nopu/valid/*'
+train_filename_pattern='nopu/train/small/*'
+test_filename_pattern='nopu/valid/small/*'
 test_pu_filename_pattern='test_pu/*'
 viz_filename_pattern='test_pu/*'
 
@@ -62,7 +62,7 @@ if __name__=='__main__':
     if opt.mode=='train':
         #Specifying the Hyperparameters
         init_learning_rate=0.001
-        decay_step=2500
+        decay_step=500
         decay_rate=0.95
         #Specifying the run configuration
         mini_batch_size=10
@@ -94,7 +94,7 @@ if __name__=='__main__':
     '''
     #specifying the inference configuration
     if opt.mode=='infer':
-        mini_batch_size=20
+        mini_batch_size=10
         checkpoint_epoch_number=31
 
         #Running the inference on the training data set
