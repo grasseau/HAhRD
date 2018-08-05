@@ -235,6 +235,8 @@ def create_training_graph(model_function_handle,
     #(LATER)
 
     #Adding all the gradient for the summary
+    for grad,_ in average_grad_val_pair:
+        _add_summary(grad)
 
     #Finally accumulating all the runnable op
     train_track_ops=[apply_gradient_op]+all_tower_cost
@@ -374,7 +376,7 @@ def train(run_number,
             while True:
                 try:
                     #Giving the option for manually setting up the learning rate
-                    if bno%100==0:
+                    if bno%500==0:
                         wait_time=10
                         print 'The current learning rate is: ',sess.run(learning_rate_placevalue)
                         print 'Waiting for {} sec for the learning rate:'.format(wait_time)
@@ -401,7 +403,7 @@ def train(run_number,
                             print "Resuming the Learning without changes"
 
                     #Running the train op and optionally the tracer bullet
-                    if bno%30==0:
+                    if bno%300==0:
                         #Adding the runtime statisctics (memory and execution time)
                         run_options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                         run_metadata=tf.RunMetadata()
@@ -460,7 +462,7 @@ def train(run_number,
             #get the validation accuracy,starting the validation/test iterator
             sess.run(test_iter_init_op)
             bno=1
-            while i%1==0:
+            while i%10==0:
                 try:
                     #_,datay=sess.run(next_element)#dont use iterator now
                     #print datay
@@ -483,7 +485,7 @@ def train(run_number,
                     break
 
             #Also save the checkpoints (after two every epoch)
-            if i%1==0:
+            if i%10==0:
                 #Saving the checkpoints
                 checkpoint_path=checkpoint_filename+'model.ckpt'
                 saver.save(sess,checkpoint_path,global_step=i)
