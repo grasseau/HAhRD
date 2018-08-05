@@ -62,7 +62,7 @@ if __name__=='__main__':
     if opt.mode=='train':
         #Specifying the Hyperparameters
         init_learning_rate=0.001
-        decay_step=500
+        decay_step=120
         decay_rate=0.95
         #Specifying the run configuration
         mini_batch_size=10
