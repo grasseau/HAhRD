@@ -5,7 +5,7 @@ import numpy as np
 default_dataset_directory='GeometryUtilities-master/interpolation/image_data/'
 
 #importing the model to be used for training
-from models.model_rnn_definition import model9 as model_function_handle
+from models.model_rnn_definition import model8 as model_function_handle
 from models.model1_definition import calculate_model_accuracy
 from models.model_rnn_definition import calculate_total_loss
 

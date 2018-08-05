@@ -453,6 +453,7 @@ def _tfwhile_body(X_img,is_training,iter_i,iter_end,tensor_array):
 def simple_vector_RNN_block(X_img,
                             is_training,
                             conv2d_function_handle,
+                            sequence_model_type,
                             num_of_sequence_layers,
                             hidden_state_dim_list,
                             output_dimension_list,
@@ -474,6 +475,11 @@ def simple_vector_RNN_block(X_img,
                                         applied to the "images" of each layer of the
                                         detector with the same shared parameters
                                         and finally generating a vectored output.
+            sequence_model_type     : whether we want to use the 'LSTM' layers
+                                        or RNN layers
+                                        (later support for mixing both could be
+                                        added).
+                                        ['LSTM'/'RNN']
             num_of_sequence_layers  : the number of RNN cells stacked on top of
                                         each other.
                                         Practically <=2 is best to keep.
@@ -554,8 +560,15 @@ def simple_vector_RNN_block(X_img,
                 num_output_source='one'
 
             #Now stacking up the layers on top of other
+            #Selecting the type of sequence model we want stack
+            seq_layer_function_handle=None
+            if sequence_model_type=='RNN':
+                seq_layer_function_handle=_simple_vector_RNN_layer
+            elif sequence_model_type=='LSTM':
+                seq_layer_function_handle=_simple_vector_LSTM_layer
+
             #The output of this layer will be the input sequence to next RNN layer
-            input_sequence=_simple_vector_RNN_layer(input_sequence=input_sequence,
+            input_sequence=seq_layer_function_handle(input_sequence=input_sequence,
                                     name=layer_name,
                                     hidden_state_length=hidden_state_dim_list[i],
                                     num_output_source=num_output_source,
