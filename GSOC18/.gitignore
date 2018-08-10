@@ -1,14 +1,13 @@
 *.pkl
 *.root
 *.pyc
-*.txt
+
 *.npy
 tmp
 datacifar
-*.tfrecords
+
 *.html
 *.npz
 *.png
 *.jpg
 *.jpeg
-

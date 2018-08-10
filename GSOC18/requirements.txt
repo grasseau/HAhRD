@@ -1,0 +1,7 @@
+plotly==3.1.0
+matplotlib==2.2.2
+numpy==1.13.3
+attrs==16.3.0
+scipy==0.19.0
+pandas==0.23.0
+futures==3.2.0
