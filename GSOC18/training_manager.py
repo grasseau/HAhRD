@@ -5,9 +5,9 @@ import numpy as np
 default_dataset_directory='GeometryUtilities-master/interpolation/image_data/'
 
 #importing the model to be used for training
-from models.model_rnn_definition import model9 as model_function_handle
+from models.model1_definition import model6 as model_function_handle
 from models.model1_definition import calculate_model_accuracy
-from models.model_rnn_definition import calculate_total_loss
+from models.model1_definition import calculate_total_loss
 
 #import the trainer and inference functions
 from train_multi_gpu import train
@@ -18,8 +18,8 @@ from get_saliency_map import get_gradient
 ###################### RUN CONFIGURATION #####################
 run_number=47
 #the regex pattern for the dataset filename
-train_filename_pattern='nopu/train/small/*'
-test_filename_pattern='nopu/valid/small/*'
+train_filename_pattern='nopu/train_small/*'
+test_filename_pattern='nopu/valid_small/*'
 test_pu_filename_pattern='test_pu/*'
 viz_filename_pattern='test_pu/*'
 
@@ -62,10 +62,10 @@ if __name__=='__main__':
     if opt.mode=='train':
         #Specifying the Hyperparameters
         init_learning_rate=0.001
-        decay_step=60
+        decay_step=200
         decay_rate=0.95
         #Specifying the run configuration
-        mini_batch_size=10
+        mini_batch_size=20
         shuffle_buffer_size=mini_batch_size*2 #for shuffling the dataset files
         epochs=31
         restore_epoch_number=None
@@ -94,8 +94,8 @@ if __name__=='__main__':
     '''
     #specifying the inference configuration
     if opt.mode=='infer':
-        mini_batch_size=10
-        checkpoint_epoch_number=31
+        mini_batch_size=20
+        checkpoint_epoch_number=30
 
         #Running the inference on the training data set
         infer(run_number,
@@ -166,7 +166,7 @@ if __name__=='__main__':
     if opt.mode=='map_gen':
         #################### Saliency Map #####################
         #Creating the saliency map
-        checkpoint_epoch_number=9
+        checkpoint_epoch_number=30
         #Choosing wrt which output dimension we want to calculate gradient
         map_dimension=0
         #Number of images we want to process in parallel

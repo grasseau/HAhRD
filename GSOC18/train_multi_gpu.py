@@ -335,7 +335,7 @@ def train(run_number,
 
     #Adding saver to create checkpoints for weights
     saver=tf.train.Saver(tf.global_variables(),
-                        max_to_keep=50)#default is 5, we will save all epoch
+                        max_to_keep=2)#default is 5, we will save all epoch
 
     #Adding all the varaible summary
     train_writer=tf.summary.FileWriter(train_summary_filename)
@@ -376,7 +376,7 @@ def train(run_number,
             while True:
                 try:
                     #Giving the option for manually setting up the learning rate
-                    if bno%500==0:
+                    if bno%100==0:
                         wait_time=10
                         print 'The current learning rate is: ',sess.run(learning_rate_placevalue)
                         print 'Waiting for {} sec for the learning rate:'.format(wait_time)
