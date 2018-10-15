@@ -67,14 +67,14 @@ if __name__=='__main__':
         #Specifying the run configuration
         mini_batch_size=20
         shuffle_buffer_size=mini_batch_size*2 #for shuffling the dataset files
-        epochs=31
+        epochs=50
         restore_epoch_number=None
         #Defining the log frequency dictionary (dont keep any of them same)
         #(,log summary,statistics,test,save parameters)
         log_frequency=dict(lr_tune=100,#change learning rate every x minibatch
-                        summary=110,#save the summary every x minibatch
+                        summary=30,#save the summary every x minibatch
                         statistics=None,#leaks memory(so keep None,just use while code tests)
-                        testing=5,#run validation set test ever x epoch
+                        testing=1,#run validation set test ever x epoch
                         checkpoint=1)#save the parameters every x epoch
 
         #Finally running the training
