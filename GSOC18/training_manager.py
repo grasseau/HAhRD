@@ -16,7 +16,7 @@ from inference_multi_gpu import infer
 from get_saliency_map import get_gradient
 
 ###################### RUN CONFIGURATION #####################
-run_number=47
+run_number=56
 #the regex pattern for the dataset filename
 train_filename_pattern='nopu/train_small/*'
 test_filename_pattern='nopu/valid_small/*'
@@ -69,6 +69,13 @@ if __name__=='__main__':
         shuffle_buffer_size=mini_batch_size*2 #for shuffling the dataset files
         epochs=31
         restore_epoch_number=None
+        #Defining the log frequency dictionary (dont keep any of them same)
+        #(,log summary,statistics,test,save parameters)
+        log_frequency=dict(lr_tune=100,#change learning rate every x minibatch
+                        summary=110,#save the summary every x minibatch
+                        statistics=None,#leaks memory(so keep None,just use while code tests)
+                        testing=5,#run validation set test ever x epoch
+                        checkpoint=1)#save the parameters every x epoch
 
         #Finally running the training
         train(run_number,
@@ -78,6 +85,7 @@ if __name__=='__main__':
                 epochs,mini_batch_size,shuffle_buffer_size,
                 init_learning_rate,decay_step,decay_rate,
                 train_filename_pattern,test_filename_pattern,
+                log_frequency,
                 restore_epoch_number=restore_epoch_number)
 
     ############## INFERENCE HANDLE #######################

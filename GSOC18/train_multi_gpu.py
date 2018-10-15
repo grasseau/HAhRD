@@ -251,7 +251,7 @@ def train(run_number,
             epochs,mini_batch_size,shuffle_buffer_size,
             init_learning_rate,decay_step,decay_rate,
             train_filename_list,test_filename_list,
-            restore_epoch_number=None):
+            log_frequency,restore_epoch_number=None):
     '''
     DESCRIPTION:
         This function will finally take the graph created for training
@@ -284,6 +284,19 @@ def train(run_number,
                                         tfrecords file
             test_label_filename_list  : the list of the filename having
                                         corresponding labels for the images
+            log_frequency             : a dictionary that will contain the
+                                        logging frequency for
+                                        1.lr_tune: after how many minibatch invoke
+                                                    the learning rate tuning
+                                        2.summary: how often we save summary
+                                                    of the nodes
+                                        3.statistics: how often we save run statistics
+                                                of memory consuption and timeline
+                                        4.testing: after how many epoch we run
+                                                    testing on validation set.
+                                        5.checkpoint: how often we save the weights
+                                                        as checkpoints.
+
             restore_epoch_number      : the number if given will be used for
                                         restoring the training.
         OUTPUT:
@@ -376,7 +389,7 @@ def train(run_number,
             while True:
                 try:
                     #Giving the option for manually setting up the learning rate
-                    if bno%100==0:
+                    if bno%log_frequency['lr_tune']==0:
                         wait_time=10
                         print 'The current learning rate is: ',sess.run(learning_rate_placevalue)
                         print 'Waiting for {} sec for the learning rate:'.format(wait_time)
@@ -403,7 +416,22 @@ def train(run_number,
                             print "Resuming the Learning without changes"
 
                     #Running the train op and optionally the tracer bullet
-                    if bno%300==0:
+                    if bno%log_frequency['summary']==0:
+                        #Starting the timer
+                        t0=datetime.datetime.now()
+                        #Running the op
+                        learning_rate_val=sess.run(learning_rate_placevalue)
+                        track_results=sess.run(train_track_ops,
+                                                feed_dict={is_training:True,
+                                                    learning_rate:learning_rate_val})
+                        t1=datetime.datetime.now()
+
+                        #Now the last op has the merged_summary evaluated.So, write it.
+                        train_writer.add_summary(track_results[-1],bno)
+                        print 'Training loss @epoch: ',i,' @minibatch: ',bno,track_results[1:-1],'in ',t1-t0
+
+                    #Use this only for testing. This leaks memory
+                    elif log_frequency['statistics']!=None and bno%log_frequency['statistics']==0:
                         #Adding the runtime statisctics (memory and execution time)
                         run_options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                         run_metadata=tf.RunMetadata()
@@ -419,20 +447,18 @@ def train(run_number,
                                                 run_metadata=run_metadata)
                         t1=datetime.datetime.now()
 
-                        #Writing the timeline tracer every 300th minibatch
-                        if bno%300==0:
-                            #Adding the run matedata to the tensorboard summary writer
-                            train_writer.add_run_metadata(run_metadata,'step%dbatch%d'%(i,bno))
+                        #Writing the metadata about the runs (like statistics and timeline)
+                        #Adding the run matedata to the tensorboard summary writer
+                        train_writer.add_run_metadata(run_metadata,'step%dbatch%d'%(i,bno))
 
-                            #Creating the Timeline object and saving it to the json
-                            tline=timeline.Timeline(run_metadata.step_stats)
-                            #Creating the chrome trace
-                            ctf=tline.generate_chrome_trace_format()
-                            timeline_path=timeline_filename+'timeline_step%dbatch%d.json'%(i,bno)
-                            with open(timeline_path,'w') as f:
-                                f.write(ctf)
+                        #Creating the Timeline object and saving it to the json
+                        tline=timeline.Timeline(run_metadata.step_stats)
+                        #Creating the chrome trace
+                        ctf=tline.generate_chrome_trace_format()
+                        timeline_path=timeline_filename+'timeline_step%dbatch%d.json'%(i,bno)
+                        with open(timeline_path,'w') as f:
+                            f.write(ctf)
 
-                        #Writing the summary (only every 30th iteration)
                         #Now the last op has the merged_summary evaluated.So, write it.
                         train_writer.add_summary(track_results[-1],bno)
                         print 'Training loss @epoch: ',i,' @minibatch: ',bno,track_results[1:-1],'in ',t1-t0
@@ -462,7 +488,7 @@ def train(run_number,
             #get the validation accuracy,starting the validation/test iterator
             sess.run(test_iter_init_op)
             bno=1
-            while i%10==0:
+            while i%log_frequency['testing']==0:
                 try:
                     #_,datay=sess.run(next_element)#dont use iterator now
                     #print datay
@@ -485,7 +511,7 @@ def train(run_number,
                     break
 
             #Also save the checkpoints (after two every epoch)
-            if i%10==0:
+            if i%log_frequency['checkpoint']==0:
                 #Saving the checkpoints
                 checkpoint_path=checkpoint_filename+'model.ckpt'
                 saver.save(sess,checkpoint_path,global_step=i)
