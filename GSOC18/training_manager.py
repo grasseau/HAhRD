@@ -16,12 +16,12 @@ from inference_multi_gpu import infer
 from get_saliency_map import get_gradient
 
 ###################### RUN CONFIGURATION #####################
-run_number=56
+run_number=60
 #the regex pattern for the dataset filename
-train_filename_pattern='nopu/train_small/*'
-test_filename_pattern='nopu/valid_small/*'
-test_pu_filename_pattern='test_pu/*'
-viz_filename_pattern='test_pu/*'
+train_filename_pattern='pu/train/*'
+test_filename_pattern='pu/valid/*'
+test_pu_filename_pattern='pu/valid/*'
+viz_filename_pattern='pu/valid/*'
 
 if __name__=='__main__':
 
@@ -62,17 +62,17 @@ if __name__=='__main__':
     if opt.mode=='train':
         #Specifying the Hyperparameters
         init_learning_rate=0.001
-        decay_step=200
+        decay_step=100
         decay_rate=0.95
         #Specifying the run configuration
         mini_batch_size=20
         shuffle_buffer_size=mini_batch_size*2 #for shuffling the dataset files
-        epochs=50
+        epochs=31
         restore_epoch_number=None
         #Defining the log frequency dictionary (dont keep any of them same)
         #(,log summary,statistics,test,save parameters)
-        log_frequency=dict(lr_tune=100,#change learning rate every x minibatch
-                        summary=30,#save the summary every x minibatch
+        log_frequency=dict(lr_tune=110,#change learning rate every x minibatch
+                        summary=90,#save the summary every x minibatch
                         statistics=None,#leaks memory(so keep None,just use while code tests)
                         testing=1,#run validation set test ever x epoch
                         checkpoint=1)#save the parameters every x epoch
